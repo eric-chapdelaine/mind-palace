@@ -24,7 +24,7 @@ exports.new_tag = async (res, title, dependency_names) => {
 exports.delete_tag = async (title) => {
     let tag = Tag.findOne({title : title}).populate('dependencies.tag');
     let deps = tag.dependencies;
-    var dependents = Tag.find({dependencies : title}).populate('dependencies.tag');
+    var dependents = Tag.find({dependencies : title}).populate('dependencies.tag');  // this may only hold up to 20 matches
     // sever dependencies on TAG and push TAG's parents to be parents of each of TAG's children
     dependents.forEach(function(t){
         remove_dependency(t.title, title);
