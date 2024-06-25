@@ -22,11 +22,14 @@ exports.new_tag = async (res, title, dependency_names) => {
 }
 
 exports.delete_tag = async (title) => {
-    // sever all dependencies on this tag and then delete it
-    var dependents = Tag.find({dependencies : title});
-    for (let t of dependents) {
-        remove_dependency(title, t);
-    };
+    let tag = Tag.findOne({title : title}).populate('dependencies.tag');
+    let deps = tag.dependencies;
+    var dependents = Tag.find({dependencies : title}).populate('dependencies.tag');
+    // sever dependencies on TAG and push TAG's parents to be parents of each of TAG's children
+    dependents.forEach(function(t){
+        remove_dependency(t.title, title);
+        Array.prototype.push.apply(t.dependencies, deps);
+    })
     Tag.deleteOne({title : title});
 }
 
@@ -34,5 +37,8 @@ exports.remove_dependency = async (tag_name, dependency_name) => {
     let tag = Tag.findOne({title : tag_name}).populate('dependencies.tag');
     let dep = Tag.findOne({title: dependency_name}).populate('dependencies.tag');
     let i = tag.dependencies.indexOf(dep);  // will this work as expected? I don't know how JS handles identity of database documents
+    if (i < 0) {
+        throw new Error(`${tag_name} not dependent on ${dependency_name}`);
+    };
     tag.dependencies.splice(i, 1);
 }
