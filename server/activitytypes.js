@@ -13,3 +13,7 @@ exports.new_activity_type = async (res, name) => {
     await activity_type.save();
     res.send('Created new activity type: ' + activity_type);
 }
+
+exports.delete_activity_type = async (name) => {
+    ActivityType.deleteOne({name : name});
+}
