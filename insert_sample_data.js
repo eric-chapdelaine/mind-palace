@@ -30,7 +30,7 @@ async function main() {
 }
 
 async function taskCreate(title, due_date, tags, description, activities) {
-    task_details = {title: title, description : description};
+    let task_details = {title: title, description : description};
     if (due_date != false) task_details.due_date = due_date;
     if (tags != false) task_details.tags = tags;
     if (activities != false) task_details.activities = activities;

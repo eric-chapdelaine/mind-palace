@@ -13,19 +13,22 @@ exports.get_all_activities = async () => {
 }
 
 exports.new_activity = async (res, activity_name, task_name, scheduled_time_blocks, feel_answer) => {
+    // scheduled_times should be required but possibly empty
     let scheduled_times = scheduled_time_blocks.map(function(t) {
         let time_block = await get_time_block(t[0], t[1]).exec();
-        // what should scheduled_time_blocks look like? is it an array of pairs [start, end] or a list of TimeBlock refs?
         return time_block;
     });
     let activity_id = get_activity_type(activity_name);
     let task_id = get_task(task_name);
-    let activity = Activity({
+    let activity_details = {
         activity_id : activity_id,
         task_id : task_id,
         scheduled_times : scheduled_times,
-        feel_answer : feel_answer
-    });
+    };
+    if (feel_answer != false) {
+        activity_details.feel_answer = feel_answer;
+    };
+    let activity = Activity(activity_details);
     await activity.save();
     res.send('Created new activity: ' + activity)
 }

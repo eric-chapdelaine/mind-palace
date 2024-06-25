@@ -9,6 +9,7 @@ exports.get_all_tags = async () => {
 }
 
 exports.new_tag = async (res, title, dependency_names) => {
+    // dependencies should be required but possibly empty
     let dependencies = dependency_names.map(function(t) {
         let tag = await get_tag(t).exec();
         return tag;
