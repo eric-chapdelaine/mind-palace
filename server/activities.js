@@ -28,3 +28,9 @@ exports.new_activity = async (res, activity_name, task_name, scheduled_time_bloc
     await activity.save();
     res.send('Created new activity: ' + activity)
 }
+
+exports.delete_activity = async (activity_name, task_name) => {
+    let activity_id = get_activity_type(activity_name);
+    let task_id = get_task(task_name);
+    Activity.deleteOne({activity_id : activity_id, task_id : task_id});
+}

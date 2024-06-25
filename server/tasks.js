@@ -26,3 +26,7 @@ exports.new_task = async (res, title, description, due_date, tag_names, activity
     await task.save();
     res.send('Created new task: ' + task);
 }
+
+exports.delete_task = async (title) => {
+    Task.deleteOne({title : title});
+}
