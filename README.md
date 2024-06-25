@@ -1,6 +1,6 @@
 # Test Data
 
-We can populate the collections with test data with the following command:
+By default, the MongoDB service will run on 127.0.0.1, port 27017. We can populate the collections with test data with the following command:
 
 $ node insert_sample_data.js "mongodb://127.0.0.1:27017/my_library_db"
 

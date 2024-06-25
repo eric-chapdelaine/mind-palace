@@ -14,6 +14,7 @@ exports.get_all_activities = async () => {
 
 exports.new_activity = async (res, activity_name, task_name, scheduled_time_blocks, feel_answer) => {
     // scheduled_times should be required but possibly empty
+    if (scheduled_time_blocks === "undefined") scheduled_time_blocks = [];
     let scheduled_times = scheduled_time_blocks.map(function(t) {
         let time_block = await get_time_block(t[0], t[1]).exec();
         return time_block;
