@@ -1,4 +1,4 @@
-let Tag = require('../models/tags');
+let Tag = require('./models/tags');
 
 exports.get_tag = async (title) => {
     return Tag.findOne({title: title}).populate('dependencies.tag');

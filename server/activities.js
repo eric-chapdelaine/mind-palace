@@ -1,5 +1,6 @@
-let Activity = require('../models/activities');
+let Activity = require('./models/activities');
 const { get_activity_type } = require('./activitytypes');
+const { get_task } = require('./tasks');
 
 exports.get_activity = async (activity_id, task_id) => {
     return Activity.findOne({activity_id : activity_id, task_id: task_id})

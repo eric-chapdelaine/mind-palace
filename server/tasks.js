@@ -1,4 +1,6 @@
-let Task = require('../models/tasks');
+let Task = require('./models/tasks');
+const { get_activity } = require('./activities');
+const { get_tag } = require('./tags');
 
 exports.get_task = async (title) => {
     return Task.findOne({'title': title}).populate('activities.activity').populate('tags.tag');

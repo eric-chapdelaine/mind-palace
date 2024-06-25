@@ -1,4 +1,4 @@
-let ActivityType = require('../models/activitytypes');
+let ActivityType = require('./models/activitytypes');
 
 exports.get_activity_type = async (name) => {
     return ActivityType.findOne({name: name});
