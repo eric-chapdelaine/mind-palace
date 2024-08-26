@@ -1,29 +1,32 @@
 const express = require("express");
+const app = express();
 const mongoose = require("mongoose");
-const cors = require("cors");
-// const Meal = require("./models/meal");
-// const MealEntry = require("./models/mealentry");
 
 const {MONGO_URL, port, CLIENT_URL} = require("./config");
+ 
+mongoose.connect(MONGO_URL, 
+  {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  },
+  (err) => {
+    if (err) {
+      console.log(err);
+    } else {
+      console.log("Connected to MongoDB");
+    }
+  });
 
-const app = express();
-
-mongoose.connect(MONGO_URL);
-
+//middleware
 app.use(express.json());
-
-app.use(cors({
-  credentails: true,
-  origin: [CLIENT_URL]
-}));
-
+ 
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
+});
+ 
 app.get("/", (_, res) => {
   res.send("success!");
   res.end()
 });
 
-let server = app.listen(port, () => {
-  console.log(`Server starting at localhost:${port}`);
-});
-
-module.exports = server;
+module.exports = app;
