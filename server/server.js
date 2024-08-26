@@ -1,21 +1,10 @@
 const express = require("express");
 const app = express();
-const port = 8000;
- 
-//middleware
-app.use(express.json());
- 
-app.listen(port, () => {
-  console.log("Server is running on port 3001");
-});
- 
-module.exports = app;
-
 const mongoose = require("mongoose");
-//configure mongoose
-const mongoDB = "mongodb://127.0.0.1:27017/my_library_db";
-mongoose.connect(
-  mongoDB,
+
+const {MONGO_URL, port, CLIENT_URL} = require("./config");
+ 
+mongoose.connect(MONGO_URL, 
   {
     useNewUrlParser: true,
     useUnifiedTopology: true,
@@ -26,5 +15,18 @@ mongoose.connect(
     } else {
       console.log("Connected to MongoDB");
     }
-  }
-);
+  });
+
+//middleware
+app.use(express.json());
+ 
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
+});
+ 
+app.get("/", (_, res) => {
+  res.send("success!");
+  res.end()
+});
+
+module.exports = app;
