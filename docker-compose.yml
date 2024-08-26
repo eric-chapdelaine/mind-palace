@@ -1,0 +1,22 @@
+services:
+  mongodb:
+    image: mongo
+    container_name: mongo
+    volumes:
+      - data:/data/db
+  server:
+    build: server
+    container_name: server
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./server:/usr/src/app
+  client:
+    build: client
+    container_name: client
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./client/src:/app/src
+volumes:
+  data:
