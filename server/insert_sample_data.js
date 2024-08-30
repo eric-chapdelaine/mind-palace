@@ -1,13 +1,8 @@
-console.log(
-    'Populates some sample tasks and activities. Specified database as argument - e.g.: node populatedb "mongodb://127.0.0.1:27017/my_library_db"'
-);
+const {MONGO_URL} = require("./config");
 
-// Get arguments passed on command line
-const userArgs = process.argv.slice(2);
-  
-const Task = require("./server/models/tasks");
-const Tag = require("./server/models/tags");
-const ActivityType = require("./server/models/activitytypes");
+const Task = require("./models/tasks");
+const Tag = require("./models/tags");
+const ActivityType = require("./models/activitytypes");
   
 const tasks = [];
 const tags = [];
@@ -16,14 +11,12 @@ const activitytypes = [];
 const mongoose = require("mongoose");
 mongoose.set("strictQuery", false); // Prepare for Mongoose 7
   
-const mongoDB = userArgs[0];
-  
 main().catch((err) => console.log(err));
   
 async function main() {
     console.log("Debug: About to connect");
-    await mongoose.connect(mongoDB);
-    console.log("Debug: Should be connected?");
+    await mongoose.connect(MONGO_URL);
+    console.log("Debug: Should be connected");
     await createTasks();
     console.log("Debug: Closing mongoose");
     mongoose.connection.close();
