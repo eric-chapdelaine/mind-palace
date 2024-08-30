@@ -10,7 +10,7 @@ exports.get_all_tags = async () => {
 
 exports.new_tag = async (res, title, dependency_names) => {
     if (dependency_names === "undefined") dependency_names = [];
-    let dependencies = dependency_names.map(function(t) {
+    let dependencies = dependency_names.map(async function(t) {
         let tag = await get_tag(t).exec();
         return tag;
     })

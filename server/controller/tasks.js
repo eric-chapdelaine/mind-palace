@@ -13,14 +13,14 @@ exports.get_all_tasks = async () => {
 exports.new_task = async (res, title, description, due_date, tag_names, activity_names) => {
     let task_details = {title: title};
     if (tag_names != false) {
-        let tags = tag_names.map(function(t) {
+        let tags = tag_names.map(async function(t) {
             let tag = await get_tag(t).exec();
             return tag;
         });
         task_details.tags = tags;
     };
     if (activity_names != false) {
-    let activities = activity_names.map(function(a) {
+    let activities = activity_names.map(async function(a) {
         let activity = await get_activity(a).exec();
         return activity;
     });
