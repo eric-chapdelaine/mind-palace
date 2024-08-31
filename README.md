@@ -35,11 +35,12 @@ Below is a high-level description of what is described in `./server/models/schem
     * description
     * activities
     * list of URI (either websites or links to files)
-## Activities: the thematic action to be done. 
+
+## Activity Type: the thematic action to be done. 
 * Examle: Researching, Writing, etc.
 * Has:
     * name
-* Relationship with task:
+* Relationship with task (called Activities):
     * Scheduled times (list)
     * Estimated time left
     * isDone?

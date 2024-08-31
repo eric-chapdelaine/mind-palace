@@ -10,7 +10,7 @@ const rangeValidator = {
 module.exports = new mongoose.Schema({
     activity_id: {type: mongoose.Schema.Types.ObjectId, ref: "ActivityType", required: true},
     task_id: {type: mongoose.Schema.Types.ObjectId, ref: "Task", required: true},
-    scheduled_times: [{time: {type: mongoose.Schema.Types.ObjectId, ref: "TimeBlock"}}],
+    scheduled_times: [{type: mongoose.Schema.Types.ObjectId, ref: "TimeBlock"}],
     feel_answer: {type: Number, validate: rangeValidator},
 }, {collection: "Activity"});
 // maybe: replace scheduled_times line with scheduled_times: {type: [TimeBlock], required: true, default: []} and require TimeBlock from models
