@@ -22,3 +22,13 @@ $ node remove_db.js "mongodb://127.0.0.1:27017/my_library_db".
 * POST `/activity/:id/schedule` - Updates the list of scheduled times with a new time block
     * takes in `{start_time, end_time}`
 * DELETE `/activity/:id` - Deletes the given activity
+
+### Activty Type
+
+CRUD
+
+* create - create activity type
+* read - get info on particular activity type
+* read - list all activity types
+* update - change name
+* delete - delete activity type
