@@ -69,7 +69,7 @@ router.get('/', async (req, res) => {
     try {
         const activity = await Activity.find().populate('task_id activity_id');
         // TODO: maybe populate scheduled_times too when we need to
-        if (!activity) return res.status(404).json({message: "failed to fetch activities"});
+        if (!activity) return res.status(500).json({message: "failed to fetch activities"});
         return res.status(200).json(activity);
     } catch (error) {
         res.status(500).json({message: error.message});
@@ -152,6 +152,7 @@ router.delete('/:id', async (req, res) => {
     try {
         let {id} = req.params;
         await Activity.deleteOne({_id: id});
+        res.status(200);
     } catch (error) {
         res.status(500).json({message: error.message});
     }
