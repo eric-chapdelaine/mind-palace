@@ -64,7 +64,7 @@ router.post('/:id/rename', async (req, res) => {
 router.post('/:id/add_dependency', async (req, res) => {
     try {
         // TODO: implement
-        res.status(500).json({message: "Unimplemented"});
+        res.status(501).json({message: "Unimplemented"});
     } catch (error) {
         res.status(500).json({message: error.message});
     }
@@ -74,7 +74,8 @@ router.post('/:id/add_dependency', async (req, res) => {
 router.post('/:id/remove_dependency', async (req, res) => {
     try {
         // TODO: implement
-        res.status(500).json({message: "Unimplemented"});
+        res.status(501).json({message: "Unimplemented"});
+
     } catch (error) {
         res.status(500).json({message: error.message});
     }
