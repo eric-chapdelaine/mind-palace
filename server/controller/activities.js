@@ -146,6 +146,9 @@ router.post('/:id/schedule', async (req, res) => {
     }
 });
 
+// update - delete scheduled time
+// TODO: implement
+
 // delete - delete activity
 
 router.delete('/:id', async (req, res) => {
