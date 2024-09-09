@@ -8,7 +8,7 @@ At any point, we can delete all data in the database and start afresh by using t
 
 $ node remove_db.js "mongodb://127.0.0.1:27017/my_library_db".
 
-## endpoints
+## Endpoints
 
 ### Activity
 
@@ -25,10 +25,38 @@ $ node remove_db.js "mongodb://127.0.0.1:27017/my_library_db".
 
 ### Activty Type
 
-CRUD
+* POST `/activitytype/` - Create activity type
+    * takes in `{name}`
+* GET `/activitytype/:id`  - Get info on activity type
+* GET `/activitytype/` - Get list of all activitiy types
+* POST `/activitytype/:id/rename` - Rename given activity type
+    * takes in `{name}`
+* DELETE `/activitytype/:id` - Deletes given activity
 
-* create - create activity type
-* read - get info on particular activity type
-* read - list all activity types
-* update - change name
-* delete - delete activity type
+### Tags
+
+* POST `/tags/` - Create new tag
+    * takes in `{title, dependencies}`
+* GET `/tags/:id` - Get info on tag
+* GET `/tags/` - Get info on all tags
+* POST `/tags/:id/rename` - Renames given tag
+    * takes in `{name}`
+* POST `/tags/:id/add_dependency` - Add another tag to the given tags dependency list - UNIMPLEMENTED
+    * takes in `{tag_id}`
+* POST `/tags/:id/remove_dependency` - Removes another tag from the given tags dependency list - UNIMPLEMENTED
+    * takes in `{tag_id}`
+* DELETE `/tags/:id` - Deletes the given tag
+
+### Tasks
+
+* POST `/tasks/` - Creates a new task
+    * Takes in `{title, due_date, tags, description, activities}`
+* GET `/tasks/:id` - Read info on given task
+* GET `/tasks/` - Read info on all tasks
+* POST `/tasks/:id` - Updates given task with new info
+    * Takes in `{title, due_date, tags, description, activities}`
+* POST `/tasks/:id/add_tag` - Add a tag to the given task
+    * Takes in `{tag_id}`
+* POST `/tasks/:id/add_activity` - Add a activity to the given task
+    * Takes in `{activity_id}`
+* DELETE `/tasks/:id/` - Delete given task
