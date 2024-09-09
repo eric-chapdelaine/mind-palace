@@ -57,6 +57,4 @@ $ node remove_db.js "mongodb://127.0.0.1:27017/my_library_db".
     * Takes in `{title, due_date, tags, description, activities}`
 * POST `/tasks/:id/add_tag` - Add a tag to the given task
     * Takes in `{tag_id}`
-* POST `/tasks/:id/add_activity` - Add a activity to the given task
-    * Takes in `{activity_id}`
 * DELETE `/tasks/:id/` - Delete given task

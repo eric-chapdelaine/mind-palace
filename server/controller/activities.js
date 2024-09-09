@@ -19,12 +19,11 @@ router.post('/', async (req, res) => {
 
     // ensure task exists
     const task = await Task.findOne({_id: task_id});
-    console.log(req);
     if (!task) return res.status(404).json({message: "Task not found"});
 
     // ensure activity type exists
-    const activityType = await ActivityType.findOne({_id: activity_id});
-    if (!activityType) return res.status(404).json({message: "activity type not found"});
+    const activity_type = await ActivityType.findOne({_id: activity_id});
+    if (!activity_type) return res.status(404).json({message: "activity type not found"});
 
     // create activity with params
     const activity = await Activity.create({
@@ -42,7 +41,7 @@ router.post('/', async (req, res) => {
         {new : true}
     );
 
-    res.status(200).json(activity)
+    return res.status(200).json(activity)
 
    } catch (error) {
     res.status(500).json({message: error.message});

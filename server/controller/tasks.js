@@ -1,5 +1,6 @@
 const express = required("express");
 let Task = require('../models/tasks');
+let Tag = require('../models/tags');
 
 const router = express.Router();
 
@@ -83,19 +84,21 @@ router.post('/:id', async (req, res) => {
 // update - add tag
 router.post('/:id/add_tag', async (req, res) => {
     try {
-        // TODO: implement
-        res.status(501).json({message: "Unimplemented"});
-    } catch (error) {
-        res.status(500).json({message: error.message});
-    }
-});
+        let {tag_id} = req.body;
 
-// update - add activity
-router.post('/:id/add_activity', async (req, res) => {
-    try {
-        // TODO: implement
-        res.status(501).json({message: "Unimplemented"});
+        const tag = await Tag.findOne({_id: tag_id});
+        if (!tag) return res.status(404).json({message: "Tag not found"});
 
+        const task = await Task.findOne({_id: id});
+        if (!task) return res.status(404).json({message: "Task not found"});
+
+        await Task.findOneAndUpdate(
+            {_id: id},
+            {$push: {tags: {$each: [tag._id], $position: 0}}},
+            {new: true}
+        );
+
+        return res.status(200).json(task);
     } catch (error) {
         res.status(500).json({message: error.message});
     }
