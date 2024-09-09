@@ -1,6 +1,6 @@
 const express = require("express");
 
-let ActivityType = require('../models/activitytypes');
+let ActivityType = require('../schema/activitytypes');
 
 const router = express.Router();
 

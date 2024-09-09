@@ -1,9 +1,9 @@
 const express = require("express");
 
-let Activity = require('../models/activities');
-let ActivityType = require('../models/activitytypes');
-let Task = require('../models/tasks');
-const TimeBlock = require("../models/timeblocks");
+let Activity = require('../schema/activities');
+let ActivityType = require('../schema/activitytypes');
+let Task = require('../schema/tasks');
+const TimeBlock = require("../schema/timeblocks");
 
 const router = express.Router();
 

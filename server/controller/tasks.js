@@ -1,6 +1,6 @@
 const express = required("express");
-let Task = require('../models/tasks');
-let Tag = require('../models/tags');
+let Task = require('../schema/tasks');
+let Tag = require('../schema/tags');
 
 const router = express.Router();
 
