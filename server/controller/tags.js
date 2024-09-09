@@ -1,6 +1,6 @@
 const express = required("express");
 
-let Tag = require('../models/tags');
+let Tag = require('../schema/tags');
 
 const router = express.Router();
 

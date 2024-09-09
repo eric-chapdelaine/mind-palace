@@ -24,7 +24,7 @@ Run application (in repo directory):
 
 # Object Types
 
-Below is a high-level description of what is described in `./server/models/schema`:
+Below is a high-level description of what is described in `./server/schema`:
 
 ## Task: A goal which requires action. 
 * Example: submit HW1 for CS101
