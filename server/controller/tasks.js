@@ -3,7 +3,6 @@ let Task = require('../models/tasks');
 
 const router = express.Router();
 
-// CRUD
 // create - create new task
 router.post('/', async (req, res) => {
     try {
