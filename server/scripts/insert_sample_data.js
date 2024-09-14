@@ -1,4 +1,4 @@
-const {MONGO_URL} = require("./config");
+const {MONGO_URL} = require("../config");
 
 const Task = require("./models/tasks");
 const Tag = require("./models/tags");

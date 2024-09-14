@@ -22,8 +22,14 @@ app.listen(port, () => {
 });
 
 const activityController = require("./controller/activities");
+const activityTypeController = require("./controller/activitytypes");
+const tagsController = require("./controller/tags");
+const taskController = require("./controller/tasks");
 
 app.use('/activity', activityController);
+app.use('/activity_type', activityTypeController);
+app.use('/tag', tagsController);
+app.use('/task', taskController);
  
 app.get("/", (_, res) => {
   res.send("success!");
