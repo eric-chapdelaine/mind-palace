@@ -8,7 +8,7 @@ const rangeValidator = {
 };
 
 const Activity = new mongoose.Schema({
-    activity_id: {type: mongoose.Schema.Types.ObjectId, ref: "ActivityType", required: true},
+    activity_type_id: {type: mongoose.Schema.Types.ObjectId, ref: "ActivityType", required: true},
     task_id: {type: mongoose.Schema.Types.ObjectId, ref: "Task", required: true},
     scheduled_times: [{type: mongoose.Schema.Types.ObjectId, ref: "TimeBlock"}],
     feel_answer: {type: Number, validate: rangeValidator},

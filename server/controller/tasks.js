@@ -1,4 +1,4 @@
-const express = required("express");
+const express = require("express");
 let Task = require('../schema/tasks');
 let Tag = require('../schema/tags');
 
@@ -12,14 +12,16 @@ router.post('/', async (req, res) => {
             due_date,
             tags,
             description,
-            activities
+            activities,
+            is_completed,
         } = req.body;
         const task = await Task.create({
             title,
             due_date,
             tags,
             description,
-            activities
+            activities,
+            is_completed,
         });
         res.status(200).json({task});
     } catch (error) {
@@ -61,7 +63,8 @@ router.post('/:id', async (req, res) => {
             due_date,
             tags,
             description,
-            activities
+            activities,
+            is_completed,
         } = req.body;
 
         const task = await Task.findOneAndUpdate(
@@ -71,7 +74,8 @@ router.post('/:id', async (req, res) => {
                 due_date,
                 tags,
                 description,
-                activities
+                activities,
+                is_completed,
             },
             {new: true}
         );

@@ -11,7 +11,7 @@ const router = express.Router();
 router.post('/', async (req, res) => {
     try {
     let {
-        activity_id,
+        activity_type_id,
         task_id,
         scheduled_times,
         feel_answer
@@ -22,12 +22,12 @@ router.post('/', async (req, res) => {
     if (!task) return res.status(404).json({message: "Task not found"});
 
     // ensure activity type exists
-    const activity_type = await ActivityType.findOne({_id: activity_id});
+    const activity_type = await ActivityType.findOne({_id: activity_type_id});
     if (!activity_type) return res.status(404).json({message: "activity type not found"});
 
     // create activity with params
     const activity = await Activity.create({
-        activity_id,
+        activity_type_id,
         task_id,
         scheduled_times: scheduled_times || [],
         feel_answer
@@ -94,7 +94,7 @@ router.post('/:id', async (req, res) => {
     try {
         let {id} = req.params;
         let {
-            activity_id,
+            activity_type_id,
             task_id,
             scheduled_times,
             feel_answer
@@ -103,7 +103,7 @@ router.post('/:id', async (req, res) => {
         const activity = await Activity.findOneAndUpdate(
             {_id: id},
             {
-                activity_id,
+                activity_type_id,
                 task_id,
                 scheduled_times,
                 feel_answer
