@@ -1,4 +1,5 @@
-const MONGO_URL = "mongodb://mongodb:27017/mind-palace";
+const MONGO_URL = "mongodb://mongo:27017/mind-palace";
+// const MONGO_URL = "mongodb://localhost:27017/mind-palace";
 
 const port = 8000;
 
