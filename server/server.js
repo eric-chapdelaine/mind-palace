@@ -4,18 +4,15 @@ const mongoose = require("mongoose");
 
 const {MONGO_URL, port, CLIENT_URL} = require("./config");
  
-mongoose.connect(MONGO_URL, 
-  {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  },
-  (err) => {
-    if (err) {
-      console.log(err);
-    } else {
-      console.log("Connected to MongoDB");
-    }
-  });
+mongoose.connect(MONGO_URL);
+
+mongoose.connection.on("error", err => {
+  console.error('Mongoose connection error:', err);
+});
+
+mongoose.connection.on("connected", () => {
+  console.log('Mongoose connected!');
+})
 
 //middleware
 app.use(express.json());
@@ -23,6 +20,16 @@ app.use(express.json());
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
+
+const activityController = require("./controller/activities");
+const activityTypeController = require("./controller/activitytypes");
+const tagsController = require("./controller/tags");
+const taskController = require("./controller/tasks");
+
+app.use('/activity', activityController);
+app.use('/activity_type', activityTypeController);
+app.use('/tag', tagsController);
+app.use('/task', taskController);
  
 app.get("/", (_, res) => {
   res.send("success!");

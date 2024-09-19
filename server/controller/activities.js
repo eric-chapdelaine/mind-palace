@@ -1,41 +1,163 @@
-let Activity = require('../models/activities');
-const { get_activity_type } = require('./activitytypes');
-const { get_task } = require('./tasks');
+const express = require("express");
 
-exports.get_activity = async (activity_id, task_id) => {
-    return Activity.findOne({activity_id : activity_id, task_id: task_id})
-    .populate('activity_id').populate('task_id').populate('scheduled_times.time');
-}
+let Activity = require('../schema/activities');
+let ActivityType = require('../schema/activitytypes');
+let Task = require('../schema/tasks');
+const TimeBlock = require("../schema/timeblocks");
 
-exports.get_all_activities = async () => {
-    return Activity.find({})
-    .populate('activity_id').populate('task_id').populate('scheduled_times.time');
-}
+const router = express.Router();
 
-exports.new_activity = async (res, activity_name, task_name, scheduled_time_blocks, feel_answer) => {
-    // scheduled_times should be required but possibly empty
-    if (scheduled_time_blocks === "undefined") scheduled_time_blocks = [];
-    let scheduled_times = scheduled_time_blocks.map(function(t) {
-        let time_block = await get_time_block(t[0], t[1]).exec();
-        return time_block;
+// create - create new activity with activity type and task
+router.post('/', async (req, res) => {
+    try {
+    let {
+        activity_type_id,
+        task_id,
+        scheduled_times,
+        feel_answer
+    } = req.body;
+
+    // ensure task exists
+    const task = await Task.findOne({_id: task_id});
+    if (!task) return res.status(404).json({message: "Task not found"});
+
+    // ensure activity type exists
+    const activity_type = await ActivityType.findOne({_id: activity_type_id});
+    if (!activity_type) return res.status(404).json({message: "activity type not found"});
+
+    // create activity with params
+    const activity = await Activity.create({
+        activity_type_id,
+        task_id,
+        scheduled_times: scheduled_times || [],
+        feel_answer
     });
-    let activity_id = get_activity_type(activity_name);
-    let task_id = get_task(task_name);
-    let activity_details = {
-        activity_id : activity_id,
-        task_id : task_id,
-        scheduled_times : scheduled_times,
-    };
-    if (feel_answer != false) {
-        activity_details.feel_answer = feel_answer;
-    };
-    let activity = Activity(activity_details);
-    await activity.save();
-    res.send('Created new activity: ' + activity)
-}
 
-exports.delete_activity = async (activity_name, task_name) => {
-    let activity_id = get_activity_type(activity_name);
-    let task_id = get_task(task_name);
-    Activity.deleteOne({activity_id : activity_id, task_id : task_id});
-}
+
+    // add activity to task
+    await Task.findOneAndUpdate(
+        {_id: task_id},
+        {$push: {activities: {$each: [activity._id], $position: 0}}},
+        {new : true}
+    );
+
+    return res.status(200).json(activity)
+
+   } catch (error) {
+    res.status(500).json({message: error.message});
+   }
+});
+
+// TODO: remove endpoint when done
+router.get("/test", async (req, res) => {
+    const newTask = await Task.create({
+    title: "test title",
+    tags: [],
+    description: "desc",
+    activities: []
+    });
+    await ActivityType.create({
+        name: 'Researching'
+    });
+    res.status(200).json(newTask);
+});
+
+// read - get info about all activities
+
+router.get('/', async (req, res) => {
+    try {
+        const activity = await Activity.find().populate('task_id activity_id');
+        // TODO: maybe populate scheduled_times too when we need to
+        if (!activity) return res.status(500).json({message: "failed to fetch activities"});
+        return res.status(200).json(activity);
+    } catch (error) {
+        res.status(500).json({message: error.message});
+    }
+});
+
+// read - get info about given activity (takes in activity id)
+
+router.get('/:id', async (req, res) => {
+    try {
+        let {id} = req.params;
+        const activity = await Activity.findOne({_id: id}).populate('task_id activity_id');
+        // TODO: maybe populate scheduled_times too when we need to
+        if (!activity) return res.status(404).json({message: "activity not found"});
+        return res.status(200).json(activity);
+    } catch (error) {
+        res.status(500).json({message: error.message});
+    }
+});
+
+// update - edit information (takes in acitivty id and fields to be modified)
+router.post('/:id', async (req, res) => {
+    try {
+        let {id} = req.params;
+        let {
+            activity_type_id,
+            task_id,
+            scheduled_times,
+            feel_answer
+        } = req.body;
+        // TODO: maybe eventually validate input?
+        const activity = await Activity.findOneAndUpdate(
+            {_id: id},
+            {
+                activity_type_id,
+                task_id,
+                scheduled_times,
+                feel_answer
+            },
+            {new: true}
+        );
+        if (!activity) return res.status(404).json({message: "activity not found"});
+        return res.status(200).json(activity);
+    } catch (error) {
+        res.status(500).json({message: error.message});
+    }
+});
+
+
+// update - add scheduled time to activity
+router.post('/:id/schedule', async (req, res) => {
+    try {
+        let {id} = req.params;
+        let {
+            start_time,
+            end_time
+        } = req.body;
+
+        const time = TimeBlock({start_time, end_time});
+
+        const activity = await Activity.findOneAndUpdate(
+            {_id: id},
+            {$push: {scheduled_times: {$each: [time._id], $position: 0}}},
+            {new: true}
+        );
+
+        await time.save();
+
+        if (!activity) return res.status(404).json({message: "activity not found"});
+
+        return res.status(200).json(activity);
+    } catch (error) {
+        res.status(500).json({message: error.message});
+    }
+});
+
+// update - delete scheduled time
+// TODO: implement
+
+// delete - delete activity
+
+router.delete('/:id', async (req, res) => {
+    try {
+        let {id} = req.params;
+        await Activity.deleteOne({_id: id});
+        res.status(200);
+    } catch (error) {
+        res.status(500).json({message: error.message});
+    }
+});
+
+module.exports = router;
