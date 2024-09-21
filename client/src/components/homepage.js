@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getTasks } from "../services/task";
-import TaskCard from "./TaskCard";
+import TaskList from "./TaskList";
 
 export default function Homepage() {
     const [tasks, setTasks] = useState([]);
@@ -22,12 +22,11 @@ export default function Homepage() {
     )
     return (
         <>
-        <h1>Tasks</h1>
-
-        {tasks.map((task, idx) => (
-            <TaskCard task={task} key={idx} />
-        ))}
-
+        {/* TODO: fix this when we decide on the setup of the task lists */}
+        <div style={{display: "flex"}}>
+            <TaskList title="Do Next" tasks={tasks} />
+            <TaskList title="Other Tasks" tasks={tasks} />
+        </div>
         </>
     )
 }

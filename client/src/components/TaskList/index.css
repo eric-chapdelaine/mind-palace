@@ -1,0 +1,28 @@
+.task-list-container {
+    border: 1px solid #ccc;
+    padding: 8px;
+    border-radius: 2px;
+    background-color: #f9f9f9;
+    max-width: 250px;
+    margin: 10px;
+}
+
+.task-list-title {
+    text-align: center;
+    font-size: 24px;
+    font-weight: bold;
+    margin-bottom: 16px;
+}
+
+.task-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.task-list-container .task-card {
+    border: 1px solid #ddd;
+    padding: 12px;
+    background-color: #fff;
+    border-radius: 4px;
+    box-shadow: 1px 1px 4px rgba(0, 0, 0, 0.1);
+}
