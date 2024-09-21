@@ -73,13 +73,10 @@ erDiagram
     * takes in `{activity_id, task_id, scheduled_times feel_answer}` (anything left undefined will stay the same)
 * POST `/activity/:id/schedule` - Updates the list of scheduled times with a new time block
     * takes in `{start_time, end_time}`
-<<<<<<< HEAD
-=======
 * POST `/activity/:id/log_time` - Log time entry for given activity
     * takes in `{description, start_time, end_time}`
 * DELETE `/activity/:id/schedule` - Deletes the given activity
     * takes in `{time_block_id}`
->>>>>>> implement_CRUD_operations
 * DELETE `/activity/:id` - Deletes the given activity
 
 ### Activty Type
