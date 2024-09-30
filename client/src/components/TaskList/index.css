@@ -1,4 +1,4 @@
-.task-list-container {
+.task-list {
     border: 1px solid #ccc;
     padding: 8px;
     border-radius: 2px;
@@ -14,10 +14,10 @@
     margin-bottom: 16px;
 }
 
-.task-list {
+/* .task-list {
     display: flex;
     flex-direction: column;
-}
+} */
 
 .task-list-container .task-card {
     border: 1px solid #ddd;
