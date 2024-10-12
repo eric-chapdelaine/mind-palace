@@ -7,10 +7,11 @@ const rangeValidator = {
     message: 'feel_answer must be an integer between 1 and 7'
 };
 
+// deprecated for now. If we wan't to ues feel_answer or something similar,
+// we can add activity_id to the time_blocks schema
 const Activity = new mongoose.Schema({
     activity_type_id: {type: mongoose.Schema.Types.ObjectId, ref: "ActivityType", required: true},
     task_id: {type: mongoose.Schema.Types.ObjectId, ref: "Task", required: true},
-    scheduled_times: [{type: mongoose.Schema.Types.ObjectId, ref: "TimeBlock"}],
     feel_answer: {type: Number, validate: rangeValidator},
 }, {collection: "Activity"});
 
