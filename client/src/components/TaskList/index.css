@@ -14,11 +14,6 @@
     margin-bottom: 16px;
 }
 
-/* .task-list {
-    display: flex;
-    flex-direction: column;
-} */
-
 .task-list-container .task-card {
     border: 1px solid #ddd;
     padding: 12px;

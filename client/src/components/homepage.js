@@ -24,8 +24,8 @@ export default function Homepage() {
         <>
         {/* TODO: fix this when we decide on the setup of the task lists */}
         <div style={{display: "flex"}}>
-            <TaskList title="Do Next" tasks={tasks} />
-            <TaskList title="Other Tasks" tasks={tasks} />
+            <TaskList title="Scheduled Today" tasks={tasks} />
+            <TaskList title="Up Next" tasks={tasks} />
         </div>
         </>
     )
