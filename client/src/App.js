@@ -1,8 +1,8 @@
+import Homepage from "./components/homepage";
+
 function App() {
   return (
-    <>
-    Here is the frontend! Use https://mantine.dev/ for components!
-    </>
+    <Homepage />
   );
 }
 
