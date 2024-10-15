@@ -65,49 +65,29 @@ const task3 = await api.post(`${API_URL}/task`, {
     description: "Some feature for Wayfair",
 });
 
-// Create activities
-
-const activity1 = await api.post(`${API_URL}/activity`, {
-    activity_type_id: activity_type_1.data.activity_type._id,
-    task_id: task1.data.task._id,
-});
-
-const activity2 = await api.post(`${API_URL}/activity`, {
-    activity_type_id: activity_type_2.data.activity_type._id,
-    task_id: task3.data.task._id,
-    feel_answer: 3
-});
-
-const activity3 = await api.post(`${API_URL}/activity`, {
-    activity_type_id: activity_type_3.data.activity_type._id,
-    task_id: task2.data.task._id,
-});
-
-const activity4 = await api.post(`${API_URL}/activity`, {
-    activity_type_id: activity_type_4.data.activity_type._id,
-    task_id: task2.data.task._id,
-});
-
 // Create time blocks
 
 // Plan meals
-const time_block_1 = await api.post(`${API_URL}/activity/${activity3.data._id}/schedule`, {
+const time_block_1 = await api.post(`${API_URL}/task/${task2.data.task._id}/add_scheduled_time`, {
     start_time: new Date(2024, 9, 20, 17, 0),
     end_time: new Date(2024, 9, 20, 17, 30),
+    activity_type_id: activity_type_3.data.activity_type._id
 });
 
 // Go grocery shopping
-const time_block_2 = await api.post(`${API_URL}/activity/${activity3.data._id}/schedule`, {
+const time_block_2 = await api.post(`${API_URL}/task/${task2.data.task._id}/add_scheduled_time`, {
     start_time: new Date(2024, 9, 21, 12, 0),
     end_time: new Date(2024, 9, 21, 12, 45),
+    activity_type_id: activity_type_4.data.activity_type._id
 });
 
 // Create time entry
 
 // actually went grocery shopping a bit later
 
-const time_entry_1 = await api.post(`${API_URL}/activity/${activity3.data._id}/log_time`, {
+const time_entry_1 = await api.post(`${API_URL}/task/${task2.data.task._id}/log_time`, {
     start_time: new Date(2024, 9, 21, 1, 0),
     end_time: new Date(2024, 9, 21, 1, 50),
-    description: "went grocery shopping for planned meals. total was $85"
+    description: "went grocery shopping for planned meals. total was $85",
+    activity_type_id: activity_type_4.data.activity_type._id
 });
