@@ -3,7 +3,6 @@ import {formatDate} from "../../utils";
 import { useEffect, useState } from "react";
 
 const TaskModal = ({task, open, onClose}) => {
-    if (!open) return null;
 
     const [activities, setActivities] = useState([]);
 
@@ -20,6 +19,8 @@ const TaskModal = ({task, open, onClose}) => {
         fetchActivities();
 
     }, [task.activities]);
+
+    if (!open) return null;
 
     return (
         <div className="modal" onClick={onClose}>
