@@ -21,12 +21,10 @@ app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
 
-const activityController = require("./controller/activities");
 const activityTypeController = require("./controller/activitytypes");
 const tagsController = require("./controller/tags");
 const taskController = require("./controller/tasks");
 
-app.use('/activity', activityController);
 app.use('/activity_type', activityTypeController);
 app.use('/tag', tagsController);
 app.use('/task', taskController);
