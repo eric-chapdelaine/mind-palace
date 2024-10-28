@@ -2,6 +2,7 @@ const express = require("express");
 let Task = require('../schema/tasks');
 let Tag = require('../schema/tags');
 const TimeBlock = require("../schema/timeblocks");
+const TimeEntry = require("../schema/timeentries");
 
 const router = express.Router();
 
