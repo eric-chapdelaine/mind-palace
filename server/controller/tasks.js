@@ -33,7 +33,7 @@ router.post('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
     try {
         let {id} = req.params;
-        const task = await Task.findOne({_id: id});
+        const task = await Task.findOne({_id: id}).populate('scheduled_times');
         if (!task) return res.status(404).json({message: "Task not found"});
         return res.status(200).json(task);
     } catch (error) {
@@ -44,7 +44,7 @@ router.get('/:id', async (req, res) => {
 // read - read all tasks
 router.get('/', async (req, res) => {
     try {
-        const tasks = await Task.find();
+        const tasks = await Task.find().populate('scheduled_times');
         if (!tasks) return res.status(500).json({message: "Failed to fetch tasks"});
         return res.status(200).json(tasks);
     } catch (error) {
@@ -89,6 +89,7 @@ router.post('/:id', async (req, res) => {
             {new: true}
         );
         if (!task) return res.status(404).json({message: "Task not found"});
+        return res.status(200).json(task);
     } catch (error) {
         res.status(500).json({message: error.message});
     }

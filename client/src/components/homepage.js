@@ -12,7 +12,7 @@ export default function Homepage() {
         };
 
         refreshData();
-    }, []);
+    }, [tasks]);
 
     if (error) return (
         <>
