@@ -1,17 +1,21 @@
 import "./index.css";
 import { formatDate } from "../../utils";
 import { useState } from "react";
-import { updateTask } from "../../services/task";
+import { updateTask, addScheduledTime } from "../../services/task";
 import { useTasks } from "../../TaskProvider";
 
 const TaskModal = ({ task, open, onClose }) => {
+
+    const { refreshTasks } = useTasks();
 
     const [isDescEdit, setDescEdit] = useState(false);
     const [desc, setDesc] = useState(task?.description);
 
     const [isTitleEdit, setTitleEdit] = useState(false);
     const [title, setTitle] = useState(task?.title);
-    const { refreshTasks } = useTasks();
+
+    const [startDate, setStartDate] = useState(null);
+    const [endDate, setEndDate] = useState(null);
 
     if (!open) return null;
 
@@ -61,11 +65,19 @@ const TaskModal = ({ task, open, onClose }) => {
                 <ul>
                     {task.scheduled_times.map((time) => (
                         <li>
-                            {formatDate(time.start_time)} - {formatDate(time.end_time)} ({time.activity_type_id})
-                            <button onClick={() => { }}>delete</button>
+                            {formatDate(time.start_time)} - {formatDate(time.end_time)}                             <button onClick={() => { }}>delete</button>
                         </li>
                     ))}
                 </ul>
+
+            New Scheduled Time: 
+            <input type="datetime-local" onChange={(e) => setStartDate(e.target.value + "-05:00")}/> 
+            - 
+            <input type="datetime-local" onChange={(e) => setEndDate(e.target.value + "-05:00")}/> 
+            <button onClick={() => {
+                addScheduledTime(task._id, {start_time: startDate, end_time: endDate}); 
+                refreshTasks();
+            }}>Add</button>
             </div>
         </div>
     )

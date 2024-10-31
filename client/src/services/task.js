@@ -11,3 +11,8 @@ export const updateTask = async (id, updated_task) => {
     let res = await api.post(`${TASK_API_URL}/${id}`, updated_task);
     return res.data;
 }
+
+export const addScheduledTime = async (id, time_block) => {
+    let res = await api.post(`${TASK_API_URL}/${id}/add_scheduled_time`, time_block);
+    return res.data;
+}

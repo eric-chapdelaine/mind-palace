@@ -68,14 +68,6 @@ router.post('/:id', async (req, res) => {
             scheduled_times,
         } = req.body;
 
-        // // only update the fields if they are given
-        // if (title) updated_fields.title = title;
-        // if (due_date) updated_fields.due_date = due_date;
-        // if (tags) updated_fields.tags = tags;
-        // if (description) updated_fields.description = description;
-        // if (is_completed) updated_fields.is_completed = is_completed;
-        // if (scheduled_times) updated_fields.scheduled_times = scheduled_times;
-
         const task = await Task.findOneAndUpdate(
             {_id: id},
             {

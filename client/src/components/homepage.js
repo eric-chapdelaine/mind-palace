@@ -14,6 +14,7 @@ export default function Homepage() {
             <TaskList title="Today" tasks={tasks} />
             <TaskList title="This Week" tasks={tasks} />
             <TaskList title="Eventually" tasks={tasks} />
+            <TaskList title="Completed" tasks={tasks.filter((t) => t.is_completed)} />
         </div>
         </>
     )
