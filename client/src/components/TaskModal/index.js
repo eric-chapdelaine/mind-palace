@@ -2,6 +2,7 @@ import "./index.css";
 import { formatDate } from "../../utils";
 import { useState } from "react";
 import { updateTask } from "../../services/task";
+import { useTasks } from "../../TaskProvider";
 
 const TaskModal = ({ task, open, onClose }) => {
 
@@ -10,6 +11,7 @@ const TaskModal = ({ task, open, onClose }) => {
 
     const [isTitleEdit, setTitleEdit] = useState(false);
     const [title, setTitle] = useState(task?.title);
+    const { refreshTasks } = useTasks();
 
     if (!open) return null;
 
@@ -18,11 +20,11 @@ const TaskModal = ({ task, open, onClose }) => {
         if (isTitleEdit) setTitleEdit(false);
         if (desc !== task.description) {
             await updateTask(task._id, { description: desc });
-            setDesc(task.description);
+            refreshTasks();
         }
         if (title !== task.title) {
             await updateTask(task._id, { title: title });
-            setTitle(task.title);
+            refreshTasks();
         }
     }
 
