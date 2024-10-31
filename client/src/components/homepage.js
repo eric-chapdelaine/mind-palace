@@ -1,25 +1,13 @@
-import { useEffect, useState } from "react";
-import { getTasks } from "../services/task";
 import TaskList from "./TaskList";
+import { useTasks } from "../TaskProvider";
 
 export default function Homepage() {
-    const [tasks, setTasks] = useState([]);
-    const [error, setError] = useState(null);
-
-    useEffect(() => {
-        const refreshData = async () => {
-            setTasks(await getTasks().catch(setError));
-        };
-
-        refreshData();
-    }, [tasks]);
+    const { tasks, error } = useTasks();
 
     if (error) return (
-        <>
-        Error occured:
-        {error.message}
-        </>
-    )
+        <>Error occured: {error.message}</>
+    );
+
     return (
         <>
         <div style={{display: "flex"}}>

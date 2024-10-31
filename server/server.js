@@ -3,7 +3,7 @@ const cors = require("cors");
 const app = express();
 const mongoose = require("mongoose");
 
-const {MONGO_URL, port, CLIENT_URL} = require("./config");
+const {MONGO_URL, port} = require("./config");
  
 mongoose.connect(MONGO_URL);
 

@@ -1,8 +1,11 @@
 import Homepage from "./components/homepage";
+import { TaskProvider } from "./TaskProvider";
 
 function App() {
   return (
-    <Homepage />
+    <TaskProvider>
+        <Homepage />
+    </TaskProvider>
   );
 }
 
