@@ -65,7 +65,7 @@ const TaskModal = ({ task, open, onClose }) => {
                 <h3>Scheduled Times:</h3>
                 <ul>
                     {task.scheduled_times.map((time) => (
-                        <li>
+                        <li key={time._id}>
                             {formatDate(time.start_time)} - {formatDate(time.end_time)}                             <button onClick={async () => {
                                 await deleteTimeBlock(time._id);
                                 await refreshTasks();
@@ -75,9 +75,9 @@ const TaskModal = ({ task, open, onClose }) => {
                 </ul>
 
                 New Scheduled Time:
-                <input type="datetime-local" onChange={(e) => setStartDate(e.target.value + "-04:00")} />
+                <input type="datetime-local" onChange={(e) => setStartDate(new Date(e.target.value).toISOString())} />
                 -
-                <input type="datetime-local" onChange={(e) => setEndDate(e.target.value + "-04:00")} />
+                <input type="datetime-local" onChange={(e) => setEndDate(new Date(e.target.value).toISOString())} />
                 <button onClick={async () => {
                     await addScheduledTime(task._id, { start_time: startDate, end_time: endDate });
                     await refreshTasks();

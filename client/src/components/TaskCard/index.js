@@ -54,6 +54,7 @@ const TaskCard = ({task}) => {
         <input
           type="checkbox"
           checked={task.is_completed}
+          readOnly
         />
         Completed
       </label>
