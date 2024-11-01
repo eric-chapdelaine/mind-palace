@@ -3,10 +3,16 @@ import TaskModal from "../TaskModal"
 import { formatDate } from "../../utils";
 import { getTagName } from "../../services/tag";
 import { useEffect, useState } from "react";
+import { updateTask } from "../../services/task";
+import { useTasks } from "../../TaskProvider";
 
 const TaskCard = ({task}) => {
+
+    const { refreshTasks } = useTasks();
+
     const [tags, setTags] = useState([]);
     const [open, setOpen] = useState(false);
+
 
     useEffect(() => {
         const fetchTags = async () => {
@@ -39,12 +45,15 @@ const TaskCard = ({task}) => {
         ))}
       </div>
 
-      <label className="checkbox-label">
+      <label className="checkbox-label"
+          onClick={async (e) => {
+            e.stopPropagation();
+            await updateTask(task._id, {is_completed: !task.is_completed});
+            await refreshTasks();
+          }}>
         <input
           type="checkbox"
           checked={task.is_completed}
-        //   onChange={onComplete}
-          onChange={() => {}}
         />
         Completed
       </label>

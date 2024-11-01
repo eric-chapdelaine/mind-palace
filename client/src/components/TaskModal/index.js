@@ -24,7 +24,7 @@ const TaskModal = ({ task, open, onClose }) => {
         if (isTitleEdit) setTitleEdit(false);
         if (desc !== task.description) {
             await updateTask(task._id, { description: desc });
-            refreshTasks();
+            await refreshTasks();
         }
         if (title !== task.title) {
             await updateTask(task._id, { title: title });
