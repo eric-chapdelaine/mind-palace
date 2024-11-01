@@ -14,7 +14,6 @@ mongoose.connection.on("error", err => {
 mongoose.connection.on("connected", () => {
   console.log('Mongoose connected!');
 })
-
 //middleware
 app.use(express.json());
 
@@ -29,10 +28,12 @@ app.listen(port, () => {
 const activityTypeController = require("./controller/activitytypes");
 const tagsController = require("./controller/tags");
 const taskController = require("./controller/tasks");
+const timeblockController = require("./controller/timeblocks");
 
 app.use('/activity_type', activityTypeController);
 app.use('/tag', tagsController);
 app.use('/task', taskController);
+app.use('/time_block', timeblockController);
  
 app.get("/", (_, res) => {
   res.send("success!");

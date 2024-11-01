@@ -23,9 +23,9 @@ router.post('/', async (req, res) => {
             description,
             is_completed,
         });
-        res.status(200).json({task});
+        return res.status(200).json({task});
     } catch (error) {
-        res.status(500).json({message: error.message});
+        return res.status(500).json({message: error.message});
     }
 });
 
@@ -37,7 +37,7 @@ router.get('/:id', async (req, res) => {
         if (!task) return res.status(404).json({message: "Task not found"});
         return res.status(200).json(task);
     } catch (error) {
-        res.status(500).json({message: error.message});
+        return res.status(500).json({message: error.message});
     }
 });
 
@@ -48,7 +48,7 @@ router.get('/', async (req, res) => {
         if (!tasks) return res.status(500).json({message: "Failed to fetch tasks"});
         return res.status(200).json(tasks);
     } catch (error) {
-        res.status(500).json({message: error.message});
+        return res.status(500).json({message: error.message});
     }
 });
 
@@ -138,6 +138,37 @@ router.post('/:id/add_scheduled_time', async (req, res) => {
 
         return res.status(200).json(task);
     } catch (error) {
+        return res.status(500).json({message: error.message});
+    }
+});
+
+// update - remove new scheduled time
+router.post('/:id/add_scheduled_time', async (req, res) => {
+    try {
+        let {id} = req.params;
+        let {
+            start_time,
+            end_time,
+            activity_type_id
+        } = req.body;
+
+        const new_time = await TimeBlock.create({
+            start_time,
+            end_time,
+            activity_type_id
+        })
+
+        const task = await Task.findOne({_id: id});
+        if (!task) return res.status(404).json({message: "Task not found"});
+
+        await Task.findOneAndUpdate(
+            {_id: id},
+            {$push: {scheduled_times: {$each: [new_time], $position: 0}}},
+            {new: true}
+        );
+
+        return res.status(200).json(task);
+    } catch (error) {
         res.status(500).json({message: error.message});
     }
 });
@@ -169,19 +200,6 @@ router.post('/:id/log_time', async (req, res) => {
     } catch (error) {
         res.status(500).json({message: error.message});
     }
-});
-
-// update - delete scheduled time
-router.delete('/:id/schedule', async (req, res) => {
-    try {
-        let {id} = req.params;
-        let {time_block_id} = req.body;
-        res.status(401).json("Unimplemented");
-
-    } catch (error) {
-        res.status(500).json({message: error.message});
-    }
-
 });
 
 // delete - delete task
