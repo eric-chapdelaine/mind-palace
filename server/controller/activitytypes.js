@@ -11,9 +11,9 @@ router.post('/', async (req, res) => {
         const activity_type = await ActivityType.create({
             name
         });
-        res.status(200).json({activity_type});
+        return res.status(200).json({activity_type});
     } catch (error) {
-        res.status(500).json({message: error.message});
+        return res.status(500).json({message: error.message});
     }
 });
 
@@ -25,7 +25,7 @@ router.get('/:id', async (req, res) => {
         if (!activity_type) return res.status(404).json({message: "Activity type cannot be found"});
         return res.status(200).json(activity_type);
     } catch (error) {
-        res.status(500).json({message: error.message});
+        return res.status(500).json({message: error.message});
     }
 });
 
@@ -36,7 +36,7 @@ router.get('/', async (req, res) => {
         if (!activity_types) return res.status(500).json({message: "failed to fetch activity type"});
         return res.status(200).json(activity_types);
     } catch (error) {
-        res.status(500).json({message: error.message});
+        return res.status(500).json({message: error.message});
     }
 });
 
@@ -53,7 +53,7 @@ router.post('/:id/rename', async (req, res) => {
         if (!activity_type) return res.status(404).json({message: "Activity type not found"});
         return res.status(200).json(activity_type);
     } catch (error) {
-        res.status(500).json({message: error.message});
+        return res.status(500).json({message: error.message});
     }
 });
 
@@ -62,9 +62,9 @@ router.delete('/:id', async (req, res) => {
     try {
         let {id} = req.params;
         await ActivityType.deleteOne({_id: id});
-        res.status(200);
+        return res.status(200);
     } catch (error) {
-        res.status(500).json({message: error.message});
+        return res.status(500).json({message: error.message});
     }
 });
 
