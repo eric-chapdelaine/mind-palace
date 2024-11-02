@@ -1,7 +1,7 @@
 import "./index.css";
 import { formatDate } from "../../utils";
 import { useState } from "react";
-import { updateTask, addScheduledTime } from "../../services/task";
+import { updateTask, addScheduledTime, deleteTask } from "../../services/task";
 import { deleteTimeBlock } from "../../services/time_block";
 import { useTasks } from "../../TaskProvider";
 
@@ -37,7 +37,13 @@ const TaskModal = ({ task, open, onClose }) => {
         <div className="modal" onClick={onClose}>
             <div className="modal-content" onClick={(e) => { e.stopPropagation(); update(); }}>
                 {isTitleEdit ||
-                    <h2 onClick={() => setTitleEdit(true)}>{task.title}</h2>}
+                    <h2 onClick={() => setTitleEdit(true)}>
+                    {task.title}
+                    <button onClick={async () => {
+                        onClose();
+                        await deleteTask(task._id);
+                        await refreshTasks();
+                    }}>delete</button></h2>}
 
                 {isTitleEdit &&
                     <><input onClick={(e) => { e.stopPropagation() }}
@@ -50,11 +56,23 @@ const TaskModal = ({ task, open, onClose }) => {
                 Completed:
                 <input type="checkbox"
                     checked={task.is_completed}
-                    onChange={async () => { await updateTask(task._id, { is_completed: !task.is_completed }) }} />
+                    onChange={async () => { 
+                    await updateTask(task._id, { is_completed: !task.is_completed });
+                    await refreshTasks();}} />
                 <hr />
 
                 {isDescEdit ||
-                    <><button onClick={() => setDescEdit(true)}>Edit</button> <p onClick={() => setDescEdit(true)}>{task.description}</p></>}
+                    <>
+                    <button onClick={() => setDescEdit(true)}>Edit</button> 
+                    <div onClick={() => setDescEdit(true)}>
+                    {task.description.split('\n').map((line, idx) => (
+                        <div key={idx}>
+                        {line}
+                        <br />
+                        </div>
+                    ))}
+                    </div>
+                    </>}
 
                 {isDescEdit &&
                     <textarea style={{ width: "750px", height: "250px" }}

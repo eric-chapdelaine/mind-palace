@@ -7,6 +7,11 @@ export const getTasks = async () => {
     return res.data;
 }
 
+export const deleteTask = async (id) => {
+    let res = await api.delete(`${TASK_API_URL}/${id}`);
+    return res.data;
+}
+
 export const createTask = async (task) => {
     let res = await api.post(TASK_API_URL, task);
     return res.data;

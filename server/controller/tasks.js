@@ -83,7 +83,7 @@ router.post('/:id', async (req, res) => {
         if (!task) return res.status(404).json({message: "Task not found"});
         return res.status(200).json(task);
     } catch (error) {
-        res.status(500).json({message: error.message});
+        return res.status(500).json({message: error.message});
     }
 });
 
@@ -169,7 +169,7 @@ router.post('/:id/add_scheduled_time', async (req, res) => {
 
         return res.status(200).json(task);
     } catch (error) {
-        res.status(500).json({message: error.message});
+        return res.status(500).json({message: error.message});
     }
 });
 
@@ -198,7 +198,7 @@ router.post('/:id/log_time', async (req, res) => {
 
         return res.status(200).json(time_entry);
     } catch (error) {
-        res.status(500).json({message: error.message});
+        return res.status(500).json({message: error.message});
     }
 });
 
@@ -206,10 +206,16 @@ router.post('/:id/log_time', async (req, res) => {
 router.delete('/:id', async (req, res) => {
     try {
         let {id} = req.params;
+        const task = await Task.findOne({_id: id});
+        task.scheduled_times.forEach(async (time) => {
+           console.log("deleting " + JSON.stringify(time));
+           await TimeBlock.deleteOne({_id: time._id});
+        });
+
         await Task.deleteOne({_id: id});
-        res.status(200);
+        return res.status(200).json({message: "success"});
     } catch (error) {
-        res.status(500).json({message: error.message});
+        return res.status(500).json({message: error.message});
     }
 });
 
