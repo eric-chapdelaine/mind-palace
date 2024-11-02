@@ -1,6 +1,6 @@
 import _axios from "axios";
 
-const REACT_APP_API_URL = "http://localhost:8000";
+const REACT_APP_API_URL = "/api";
 
 const api = _axios.create();
 

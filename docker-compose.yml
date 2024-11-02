@@ -18,5 +18,13 @@ services:
       - "3000:3000"
     volumes:
       - ./client/src:/app/src
+  proxy:
+    build: ./proxy
+    container_name: proxy
+    ports:
+      - "80:80" 
+    depends_on:
+      - client
+      
 volumes:
   data:
