@@ -1,8 +1,11 @@
+import Homepage from "./components/homepage";
+import { TaskProvider } from "./TaskProvider";
+
 function App() {
   return (
-    <>
-    Here is the frontend! Use https://mantine.dev/ for components!
-    </>
+    <TaskProvider>
+        <Homepage />
+    </TaskProvider>
   );
 }
 

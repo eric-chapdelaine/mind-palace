@@ -12,9 +12,9 @@ router.post('/', async (req, res) => {
             title,
             dependencies
         });
-        res.status(200).json({tag});
+        return res.status(200).json({tag});
     } catch (error) {
-        res.status(500).json({message: error.message});
+        return res.status(500).json({message: error.message});
     }
 });
 
@@ -26,7 +26,7 @@ router.get('/:id', async (req, res) => {
         if (!tag) return res.status(404).json({message: "Tag cannot be found"});
         return res.status(200).json(tag);
     } catch (error) {
-        res.status(500).json({message: error.message});
+        return res.status(500).json({message: error.message});
     }
 });
 
@@ -39,7 +39,7 @@ router.get('/', async (req, res) => {
         if (!tags) return res.status(500).json({message: "failed to fetch tags"});
         return res.status(200).json(tags);
     } catch (error) {
-        res.status(500).json({message: error.message});
+        return res.status(500).json({message: error.message});
     }
 });
 
@@ -56,7 +56,7 @@ router.post('/:id/rename', async (req, res) => {
         if (!tag) return res.status(404).json({message: "Tag not found"});
         return res.status(200).json(tag);
     } catch (error) {
-        res.status(500).json({message: error.message});
+        return res.status(500).json({message: error.message});
     }
 });
 
@@ -64,9 +64,9 @@ router.post('/:id/rename', async (req, res) => {
 router.post('/:id/add_dependency', async (req, res) => {
     try {
         // TODO: implement
-        res.status(501).json({message: "Unimplemented"});
+        return res.status(501).json({message: "Unimplemented"});
     } catch (error) {
-        res.status(500).json({message: error.message});
+        return res.status(500).json({message: error.message});
     }
 });
 
@@ -74,10 +74,9 @@ router.post('/:id/add_dependency', async (req, res) => {
 router.post('/:id/remove_dependency', async (req, res) => {
     try {
         // TODO: implement
-        res.status(501).json({message: "Unimplemented"});
-
+        return res.status(501).json({message: "Unimplemented"});
     } catch (error) {
-        res.status(500).json({message: error.message});
+        return res.status(500).json({message: error.message});
     }
 });
 
@@ -86,9 +85,9 @@ router.delete('/:id', async (req, res) => {
     try {
         let {id} = req.params;
         await Tag.deleteOne({_id: id});
-        res.status(200);
+        return res.status(200);
     } catch (error) {
-        res.status(500).json({message: error.message});
+        return res.status(500).json({message: error.message});
     }
 });
 

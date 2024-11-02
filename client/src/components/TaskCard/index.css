@@ -1,0 +1,49 @@
+.task-card {
+  background-color: #ffffff;
+  max-width: 200px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+
+.task-card:hover {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transform: translateY(-1px);
+}
+
+.task-title {
+  font-size: 1.2em;
+  margin: 0 0 8px 0;
+  overflow: hidden;
+}
+
+.due-date {
+  color: #666;
+  margin: 0 0 12px 0;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+}
+
+.tags {
+  margin: 8px 0;
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.tag {
+  display: inline-block;
+  color: #fff;
+  background-color: #2c3e50;
+  border: 1px solid #b0b0b0;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.85em;
+  margin-right: 5px;
+  margin-bottom: 5px;
+}
