@@ -1,5 +1,19 @@
 # Mind Palace!
 
+# TODO
+
+- [ ] Figure out a more robust way to display tasks (maybe based on tags?)
+- [ ] add tags
+  * finish dependency logic in server
+  * add tag input in new task modal
+  * display tags in task modal
+  * have some visual difference between dependent tags and primary tags
+- [ ] Have the schedule displayed
+  * Google Calendar integration
+- [ ] Add time logging implementation
+- [ ] Improve frontend look/feel
+- [ ] add markdown/latex support for description
+
 # Installation
 
 Clone repo into local directory:
