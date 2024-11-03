@@ -6,6 +6,7 @@
   * add the ability to reorder tasks in a task list
 - [ ] add markdown/latex support for description
 - [ ] Add time logging implementation
+  * add activities attached to scheduled times
 - [ ] add tags
   * finish dependency logic in server
   * add tag input in new task modal
