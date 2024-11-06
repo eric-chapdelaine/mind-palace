@@ -1,5 +1,6 @@
 import TaskList from "./TaskList";
 import NewTaskModal from "./NewTaskModal";
+import Calendar from "./Calendar";
 import { useTasks } from "../TaskProvider";
 import { useState } from "react";
 import { anyScheduledTimesToday, anyScheduledTimesThisWeek, anyScheduledTimesEventually } from "../utils";
@@ -22,6 +23,10 @@ export default function Homepage() {
             <TaskList title="Completed" tasks={tasks.filter((t) => t.is_completed)} />
         </div>
         <NewTaskModal open={newTaskOpen} onClose={() => setNewTaskOpen(false)} />
+        <Calendar />
         </>
     )
+    //return (
+    //    <Calendar />
+    //);
 }
