@@ -38,6 +38,42 @@ export const anyScheduledTimesEventually = (task) => {
 
     return !task.is_completed && (task.scheduled_times.length === 0 || task.scheduled_times.some((time_block) => {
         const start_time = new Date(time_block.start_time).getTime(); 
-        return start_time > sunday.getTime();
+        return start_time >= sunday.getTime();
+    }) || task.scheduled_times.every((time_block) => {
+        const start_date = new Date(time_block.start_time).getDate(); 
+        return start_date < today.getDate();
     }));
+}
+
+export const isDueToday = (task) => {
+    const due_date = new Date(task.due_date);
+    if (due_date) {
+        return !task.is_completed && due_date.getDate() === new Date().getDate();
+    } else {
+        return false;
+    }
+}
+
+export const isDueThisWeek = (task) => {
+    const due_date = new Date(task.due_date);
+    const today = new Date();
+    const daysUntilSunday = (7 - today.getDay()) % 7;
+    const sunday = new Date();
+    sunday.setDate(today.getDate() + daysUntilSunday);
+    sunday.setHours(23, 59, 0, 0);
+    today.setHours(23, 59, 0, 0);
+
+    return !task.is_completed && due_date && due_date.getTime() > today.getTime() && due_date.getTime() < sunday.getTime();
+}
+
+export const displayToday = (task) => {
+    return anyScheduledTimesToday(task) || isDueToday(task);
+}
+
+export const displayThisWeek = (task) => {
+    return (anyScheduledTimesThisWeek(task) && !isDueToday(task)) || (isDueThisWeek(task) && !anyScheduledTimesToday(task));
+}
+
+export const displayEventually = (task) => {
+    return anyScheduledTimesEventually(task) && !isDueToday(task) && !isDueThisWeek(task);
 }
