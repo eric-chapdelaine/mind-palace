@@ -1,5 +1,5 @@
 import "./index.css";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTasks } from "../../TaskProvider";
 import { createTask } from "../../services/task";
 
@@ -12,7 +12,18 @@ const NewTaskModal = ({ open, onClose }) => {
     const [desc, setDesc] = useState("");
     const [dueDate, setDueDate] = useState(undefined);
 
+    useEffect(() => {
+        setTitle("");
+        setDesc("");
+        setDueDate(undefined);
+        console.log(JSON.stringify({
+            title,
+            desc,
+            dueDate}));
+    }, [open]);
+
     if (!open) return null;
+
 
     return (
         <div className="modal" onClick={onClose}>
