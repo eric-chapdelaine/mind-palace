@@ -37,7 +37,6 @@
   position: relative;
   display: grid;
   grid-template-columns: 80px repeat(7, 1fr);
-  --slot-width: calc((100% - 80px)/7)
 }
 
 .time-slot {
@@ -74,7 +73,6 @@
   border-radius: 4px;
   text-align: center;
   z-index: 2;
-  width: var(--slot-width);
 }
 
 .current-time-line {

@@ -66,7 +66,7 @@ const Calendar = () => {
               className="event"
               style={{
                 ...getEventStyle(event.startHour, event.startMinute, event.duration),
-                gridColumn: daysOfWeek.indexOf(event.day) + 2,
+                gridColumn: `${daysOfWeek.indexOf(event.day) + 2} / span 1`
               }}
             >
               {event.title}
