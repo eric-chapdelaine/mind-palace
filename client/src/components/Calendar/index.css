@@ -59,6 +59,7 @@
 
 .slot {
   border: 1px solid #eee;
+  box-sizing: border-box;
   height: 60px;
   position: relative;
   cursor: pointer;

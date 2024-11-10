@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import './index.css';
 
-const Calendar = () => {
+const Calendar = ({tasks}) => {
   const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const timeSlots = generateTimeSlots();
   
@@ -22,12 +22,12 @@ const Calendar = () => {
     return () => clearInterval(timer);
   }, []);
 
+
   const calculateCurrentTimePosition = () => {
     const hours = currentTime.getHours();
     const minutes = currentTime.getMinutes();
-    // TODO: make this a constant
     const slotHeight = 60; // Height of each hour slot in pixels
-    return (hours * slotHeight) + (minutes / 60) * slotHeight;
+    return (hours * slotHeight) + (minutes / 60) * slotHeight + slotHeight;
   };
 
   const currentTimeTop = calculateCurrentTimePosition();

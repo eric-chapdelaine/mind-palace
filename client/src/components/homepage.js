@@ -65,7 +65,7 @@ export default function Homepage() {
             </div>
         <div className="divider" onMouseDown={handleMouseDown}> </div>
             <div className="right-panel" style={{ flexBasis: `calc(100% - ${leftWidth} - 5px` }}>
-                <Calendar />
+                <Calendar tasks={tasks} />
             </div>
         </div>
     )
