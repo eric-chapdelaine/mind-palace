@@ -1,6 +1,7 @@
 .calendar-week-container {
   position: relative;
-  height: 800px; /* TODO: maybe change */
+  height: 100vh;
+  min-width: 500px;
   overflow: auto;
   border: 1px solid #ddd;
 }
@@ -31,6 +32,8 @@
 .day-header {
   font-weight: bold;
   padding: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .grid {
