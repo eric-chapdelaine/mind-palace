@@ -54,9 +54,9 @@ export default function Homepage() {
     return (
         <div className="homepage" ref={homepageRef}>
             <div className="left-panel" style={{ flexBasis: leftWidth }}>
-                <button onClick={() => setNewTaskOpen(true)}> New Task </button>
+                <button style={{ position: "fixed" }} onClick={() => setNewTaskOpen(true)}> New Task </button>
                 <NewTaskModal open={newTaskOpen} onClose={() => setNewTaskOpen(false)} />
-                <div style={{display: "flex"}}>
+                <div style={{display: "flex", marginTop: "25px"}}>
                     <TaskList title="Today" tasks={tasks.filter(displayToday)} />
                     <TaskList title="This Week" tasks={tasks.filter(displayThisWeek)} />
                     <TaskList title="Eventually" tasks={tasks.filter(displayEventually)} />
