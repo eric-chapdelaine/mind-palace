@@ -1,0 +1,31 @@
+.homepage {
+    display: flex;
+    overflow: hidden;
+}
+
+.left-panel {
+    flex: 1;
+    overflow: auto;
+}
+
+/* mobile */
+@media (max-width: 500px) {
+    .right-panel {
+        display: none;
+    }
+}
+
+/* desktop */
+@media (min-width: 501px) {
+    .right-panel {
+        flex: 1;
+        overflow: auto;
+    }
+    .divider {
+        width: 5px;
+        background-color: #333;
+        cursor: col-resize;
+    }
+}
+
+

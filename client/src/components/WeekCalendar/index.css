@@ -1,0 +1,88 @@
+.calendar-week-container {
+  position: relative;
+  height: 100vh;
+  min-width: 500px;
+  overflow: auto;
+  border: 1px solid #ddd;
+}
+
+.calendar-week {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  font-family: Arial, sans-serif;
+}
+
+.header {
+  display: grid;
+  grid-template-columns: 80px repeat(7, 1fr);
+  text-align: center;
+  background-color: #f3f3f3;
+  padding: 10px 0;
+  border-bottom: 1px solid #ccc;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.time-slot-header {
+  border: none;
+}
+
+.day-header {
+  font-weight: bold;
+  padding: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: 80px repeat(7, 1fr);
+}
+
+.time-slot {
+  display: contents;
+}
+
+.time-label {
+  grid-column: 1 / 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85em;
+  padding: 4px;
+  border-right: 1px solid #ccc;
+  background-color: #fafafa;
+}
+
+.slot {
+  border: 1px solid #eee;
+  box-sizing: border-box;
+  height: 60px;
+  position: relative;
+  cursor: pointer;
+}
+
+.event {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  background-color: #a3d2ff;
+  color: #333;
+  font-size: 0.8em;
+  border-radius: 4px;
+  text-align: center;
+  z-index: 2;
+}
+
+.current-time-line {
+  position: absolute;
+  left: 80px;
+  right: 0;
+  height: 2px;
+  background-color: red;
+  z-index: 5;
+  pointer-events: none;
+}
