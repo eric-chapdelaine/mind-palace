@@ -22,7 +22,14 @@ const WeekCalendar = ({ tasks }) => {
         .filter((displayEvent) => {
             const start_time = new Date(displayEvent.scheduled_time.start_time).getTime();
             return start_time > previousSunday.getTime() && start_time < nextSunday.getTime();
-    });
+        });
+
+    const dueDatesThisWeek = tasks
+        .filter((event) => {
+            const due_date = new Date(event.due_date).getTime();
+            return due_date > previousSunday.getTime() && due_date < nextSunday.getTime(); 
+        });
+    console.log(dueDatesThisWeek);
 
     const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -44,13 +51,31 @@ const WeekCalendar = ({ tasks }) => {
 
     const currentTimeTop = calculateCurrentTimePosition();
 
-    const getEventStyle = (event) => {
-        const start_time = new Date(event.scheduled_time.start_time);
-        const end_time = new Date(event.scheduled_time.end_time);
+    const getScheduledTaskStyle = (scheduled_time) => {
+        const start_time = new Date(scheduled_time.start_time);
+        const end_time = new Date(scheduled_time.end_time);
         const slotHeight = 60;
         const top = (start_time.getHours() * slotHeight) + (start_time.getMinutes() / 60) * slotHeight;
         const height = ((end_time.getTime() - start_time.getTime())/ 3600000) * slotHeight;
-        return { top: `${top}px`, height: `${height}px` };
+        return { 
+            top: `${top}px`, 
+            height: `${height}px`,
+            backgroundColor: '#a3d2ff'
+        };
+    };
+
+    // TODO: abstract these functions later
+    const getDueDateStyle = (task) => {
+        const start_time = new Date(task.due_date);
+        const end_time = new Date(start_time.getTime() + 15*60000);
+        const slotHeight = 60;
+        const top = (start_time.getHours() * slotHeight) + (start_time.getMinutes() / 60) * slotHeight;
+        const height = ((end_time.getTime() - start_time.getTime())/ 3600000) * slotHeight;
+        return { 
+            top: `${top}px`, 
+            height: `${height}px`,
+            backgroundColor: '#fab0a0'
+        };
     };
 
     return (
@@ -73,7 +98,6 @@ const WeekCalendar = ({ tasks }) => {
                         </div>
                     ))}
 
-                    {/* Render events */}
                     {/* Render scheduled times*/}
         
                      {scheduledTasksThisWeek.map((event, index) => (
@@ -81,15 +105,28 @@ const WeekCalendar = ({ tasks }) => {
                              key={index}
                              className="event"
                              style={{
-                                 ...getEventStyle(event),
+                                 ...getScheduledTaskStyle(event.scheduled_time),
                                  gridColumn: `${new Date(event.scheduled_time.start_time).getDay() + 2} / span 1`
                              }}
                          >
                              {event.task.title}
                          </div>
                      ))}
+
+                    {/* Render due dates*/}
+                     {dueDatesThisWeek.map((task, index) => (
+                         <div
+                             key={index}
+                             className="event"
+                             style={{
+                                 ...getDueDateStyle(task),
+                                 gridColumn: `${new Date(task.due_date).getDay() + 2} / span 1`
+                             }}
+                         >
+                             {task.title}
+                         </div>
+                     ))}
                 </div>
-                {/* Render due dates*/}
 
                 {/* Current Time Line */}
                 <div
