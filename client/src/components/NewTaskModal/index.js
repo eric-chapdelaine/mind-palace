@@ -16,10 +16,6 @@ const NewTaskModal = ({ open, onClose }) => {
         setTitle("");
         setDesc("");
         setDueDate(undefined);
-        console.log(JSON.stringify({
-            title,
-            desc,
-            dueDate}));
     }, [open]);
 
     if (!open) return null;
