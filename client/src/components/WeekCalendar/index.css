@@ -67,10 +67,8 @@
 
 .event {
   position: absolute;
-  left: 0;
-  right: 0;
-  margin: 2px 4px;
-  padding: 4px;
+  left: 2px;
+  right: 2px;
   background-color: #a3d2ff;
   color: #333;
   font-size: 0.8em;

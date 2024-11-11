@@ -1,6 +1,6 @@
 import TaskList from "./TaskList";
 import NewTaskModal from "./NewTaskModal";
-import Calendar from "./Calendar";
+import WeekCalendar from "./WeekCalendar";
 import { useTasks } from "../TaskProvider";
 import { useState, useRef, useEffect } from "react";
 import { displayToday, displayThisWeek, displayEventually } from "../utils";
@@ -65,7 +65,7 @@ export default function Homepage() {
             </div>
         <div className="divider" onMouseDown={handleMouseDown}> </div>
             <div className="right-panel" style={{ flexBasis: `calc(100% - ${leftWidth} - 5px` }}>
-                <Calendar tasks={tasks} />
+                <WeekCalendar tasks={tasks} />
             </div>
         </div>
     )
