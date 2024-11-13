@@ -1,3 +1,5 @@
+import { createTag } from "./services/tag"
+
 export const formatDate = (dateString) => {
   if (!dateString) return null;
   const date = new Date(dateString);
@@ -76,4 +78,15 @@ export const displayThisWeek = (task) => {
 
 export const displayEventually = (task) => {
     return anyScheduledTimesEventually(task) && !displayToday(task) && !displayThisWeek(task);
+}
+
+export const createTagsFromCSV = (tags) => {
+    const tag_array = tags.split(', ');
+    const result = tag_array.map(async (title) => {
+        const tag = await createTag({title: title});
+        return tag;
+    });
+    return Promise.all(result).then((values) => {
+        return values;
+    });
 }
