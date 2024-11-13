@@ -2,6 +2,7 @@ import "./index.css";
 import { useState, useEffect } from "react";
 import { useTasks } from "../../TaskProvider";
 import { createTask } from "../../services/task";
+import { createTagsFromCSV } from "../../utils";
 
 // TODO: remove code duplication between this and TaskModal
 const NewTaskModal = ({ open, onClose }) => {
@@ -11,11 +12,13 @@ const NewTaskModal = ({ open, onClose }) => {
     const [title, setTitle] = useState("");
     const [desc, setDesc] = useState("");
     const [dueDate, setDueDate] = useState(undefined);
+    const [tags, setTags] = useState("");
 
     useEffect(() => {
         setTitle("");
         setDesc("");
         setDueDate(undefined);
+        setTags("");
     }, [open]);
 
     if (!open) return null;
@@ -28,6 +31,9 @@ const NewTaskModal = ({ open, onClose }) => {
             <label>Title: </label>
             <input type="text" onChange={(e) => setTitle(e.target.value)} />
             <br />
+            <label>Tags: </label>
+            <input type="text" onChange={(e) => setTags(e.target.value)} />
+            <br />
             <label>Description: </label>
             <input type="text" onChange={(e) => setDesc(e.target.value)} />
             <br />
@@ -37,10 +43,12 @@ const NewTaskModal = ({ open, onClose }) => {
             } />
             <br />
             <button onClick={async () => {
+                let tag_array = await createTagsFromCSV(tags);
                 await createTask({
                     title: title,
                     description: desc,
-                    due_date: dueDate
+                    due_date: dueDate,
+                    tags: tag_array
                 });
                 await refreshTasks();
                 onClose();
