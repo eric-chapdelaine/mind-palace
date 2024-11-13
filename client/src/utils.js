@@ -81,9 +81,11 @@ export const displayEventually = (task) => {
 }
 
 export const createTagsFromCSV = (tags) => {
+    if (!tags || tags === "") return [];
     const tag_array = tags.split(', ');
     const result = tag_array.map(async (title) => {
         const tag = await createTag({title: title});
+        console.log(tag);
         return tag;
     });
     return Promise.all(result).then((values) => {
