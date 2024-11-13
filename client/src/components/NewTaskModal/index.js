@@ -43,13 +43,22 @@ const NewTaskModal = ({ open, onClose }) => {
             } />
             <br />
             <button onClick={async () => {
-                let tag_array = await createTagsFromCSV(tags);
-                await createTask({
-                    title: title,
-                    description: desc,
-                    due_date: dueDate,
-                    tags: tag_array
-                });
+                if (tags) {
+                    let tag_array = await createTagsFromCSV(tags);
+                    await createTask({
+                        title: title,
+                        description: desc,
+                        due_date: dueDate,
+                        tags: tag_array
+                    });
+                }
+                else {
+                    await createTask({
+                        title: title,
+                        description: desc,
+                        due_date: dueDate,
+                    });
+                };
                 await refreshTasks();
                 onClose();
             }}>Create</button>
