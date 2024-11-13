@@ -5,19 +5,18 @@ let Tag = require('../schema/tags');
 const router = express.Router();
 
 // create - create new tag
-// TODO: should actually check whether there is an existing tag of the same name and return it if so
 router.post('/', async (req, res) => {
     try {
         let {title, dependencies} = req.body;
-        let existing_tag = await Tag.findOne({title: title});
+        const existing_tag = await Tag.findOne({title: title});
         if (!existing_tag) {
-        const tag = await Tag.create({
-            title,
-            dependencies
-        });
-        return res.status(200).json({tag});
+            const tag = await Tag.create({
+                title,
+                dependencies
+            });
+            return res.status(200).json(tag);
         }
-        else return res.status(200).json({existing_tag});
+        else return res.status(200).json(existing_tag);
     } catch (error) {
         return res.status(500).json({message: error.message});
     }
