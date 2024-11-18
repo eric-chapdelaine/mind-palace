@@ -4,6 +4,11 @@ import { useState } from "react";
 import { updateTask, addScheduledTime, deleteTask } from "../../services/task";
 import { deleteTimeBlock } from "../../services/time_block";
 import { useTasks } from "../../TaskProvider";
+import Markdown from 'react-markdown'
+import rehypeKatex from 'rehype-katex'
+import remarkMath from 'remark-math'
+import 'katex/dist/katex.min.css'
+import remarkGfm from "remark-gfm";
 
 const dateToDisplay = (date) => {
     console.log(date);
@@ -72,12 +77,9 @@ const TaskModal = ({ task, open, onClose }) => {
                     <>
                         <button onClick={() => setDescEdit(true)}>Edit</button>
                         <div onClick={() => setDescEdit(true)}>
-                            {task.description.split('\n').map((line, idx) => (
-                                <div key={idx}>
-                                    {line}
-                                    <br />
-                                </div>
-                            ))}
+                            <Markdown remarkPlugins={[remarkMath, remarkGfm]} rehypePlugins={[rehypeKatex]}>
+                                {task.description}
+                            </Markdown>
                         </div>
                     </>}
 
