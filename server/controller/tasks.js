@@ -15,6 +15,7 @@ router.post('/', async (req, res) => {
             tags,
             description,
             is_completed,
+            date_completed
         } = req.body;
         const task = await Task.create({
             title,
@@ -22,6 +23,7 @@ router.post('/', async (req, res) => {
             tags,
             description,
             is_completed,
+            date_completed
         });
         return res.status(200).json({task});
     } catch (error) {
@@ -77,6 +79,7 @@ router.post('/:id', async (req, res) => {
               description,
               is_completed,
               scheduled_times,
+              date_completed: is_completed ? new Date() : undefined
             },
             {new: true}
         );

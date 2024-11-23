@@ -29,7 +29,6 @@ const WeekCalendar = ({ tasks }) => {
             const due_date = new Date(event.due_date).getTime();
             return due_date > previousSunday.getTime() && due_date < nextSunday.getTime(); 
         });
-    console.log(dueDatesThisWeek);
 
     const [currentTime, setCurrentTime] = useState(new Date());
 

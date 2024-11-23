@@ -11,7 +11,6 @@ import 'katex/dist/katex.min.css'
 import remarkGfm from "remark-gfm";
 
 const dateToDisplay = (date) => {
-    console.log(date);
     const newDate = new Date(new Date(date) - 5 * 60 * 60 * 1000);
     return newDate.toISOString().slice(0, 16);
 }
