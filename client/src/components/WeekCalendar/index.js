@@ -1,36 +1,22 @@
 import { useState, useEffect } from 'react';
+import { formatDate } from '../../utils';
 import './index.css';
+
+const getDayFromLastSunday = (offset) => {
+    const result = new Date();
+    result.setHours(0, 0, 0, 0);
+    result.setDate(result.getDate() - result.getDay() + offset);
+    return result;
+}
 
 // TODO: have it take in week as well
 const WeekCalendar = ({ tasks }) => {
     const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const timeSlots = generateTimeSlots();
 
-    const previousSunday = new Date();
-    previousSunday.setHours(0, 0, 0, 0);
-    previousSunday.setDate(previousSunday.getDate() - previousSunday.getDay());
-
-    const daysUntilSunday = (7 - previousSunday.getDay());
-    const nextSunday = new Date();
-    nextSunday.setDate(previousSunday.getDate() + daysUntilSunday);
-    nextSunday.setHours(23, 59, 0, 0);
-
-    const scheduledTasksThisWeek = tasks
-        .flatMap((task) =>
-            task.scheduled_times.map((st) => ({ scheduled_time: st, task: task }))
-        )
-        .filter((displayEvent) => {
-            const start_time = new Date(displayEvent.scheduled_time.start_time).getTime();
-            return start_time > previousSunday.getTime() && start_time < nextSunday.getTime();
-        });
-
-    const dueDatesThisWeek = tasks
-        .filter((event) => {
-            const due_date = new Date(event.due_date).getTime();
-            return due_date > previousSunday.getTime() && due_date < nextSunday.getTime(); 
-        });
-
     const [currentTime, setCurrentTime] = useState(new Date());
+    const [currentSunday, setCurrentSunday] = useState(getDayFromLastSunday(0));
+    const [nextSunday, setNextSunday] = useState(getDayFromLastSunday(7));
 
     useEffect(() => {
         const timer = setInterval(() => {
@@ -39,6 +25,27 @@ const WeekCalendar = ({ tasks }) => {
 
         return () => clearInterval(timer);
     }, []);
+
+    useEffect(() => {
+        const next = new Date(currentSunday);
+        next.setDate(next.getDate() + 7);
+        setNextSunday(next);
+    }, [currentSunday]);
+
+    const scheduledTasksThisWeek = tasks
+        .flatMap((task) =>
+            task.scheduled_times.map((st) => ({ scheduled_time: st, task: task }))
+        )
+        .filter((displayEvent) => {
+            const start_time = new Date(displayEvent.scheduled_time.start_time).getTime();
+            return start_time > currentSunday.getTime() && start_time < nextSunday.getTime();
+        });
+
+    const dueDatesThisWeek = tasks
+        .filter((event) => {
+            const due_date = new Date(event.due_date).getTime();
+            return due_date > currentSunday.getTime() && due_date < nextSunday.getTime(); 
+        });
 
 
     const calculateCurrentTimePosition = () => {
@@ -81,7 +88,21 @@ const WeekCalendar = ({ tasks }) => {
         <div className="calendar-week-container">
             <div className="calendar-week">
                 <div className="header">
-                    <div className="time-slot-header"></div>
+                    <div className="time-slot-header">
+                        <button onClick={() => {
+                            const newSunday = new Date(currentSunday);
+                            newSunday.setDate(currentSunday.getDate() - 7);
+                            setCurrentSunday(newSunday);
+                        }}>&lt;</button>
+                        <button onClick={() => {
+                            setCurrentSunday(getDayFromLastSunday(0));
+                        }}>Reset</button>
+                        <button onClick={() => {
+                            const newSunday = new Date(currentSunday);
+                            newSunday.setDate(currentSunday.getDate() + 7);
+                            setCurrentSunday(newSunday);
+                        }}>&gt;</button>
+                    </div>
                     {daysOfWeek.map(day => (
                         <div key={day} className="day-header">{day}</div>
                     ))}
