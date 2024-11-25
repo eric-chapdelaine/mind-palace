@@ -3,7 +3,7 @@ import NewTaskModal from "./NewTaskModal";
 import WeekCalendar from "./WeekCalendar";
 import { useTasks } from "../TaskProvider";
 import { useState, useRef, useEffect } from "react";
-import { displayToday, displayThisWeek, displayEventually } from "../utils";
+import { displayToday, displayThisWeek, displayEventually, sortByDateCompleted } from "../utils";
 import "./homepage.css";
 
 export default function Homepage() {
@@ -23,7 +23,6 @@ export default function Homepage() {
 
     const containerRect = homepageRef.current.getBoundingClientRect();
     const newLeftWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100;
-        console.log(newLeftWidth);
 
     // Set a minimum and maximum width for the panels
     if (newLeftWidth > 10 && newLeftWidth < 90) {
@@ -60,7 +59,7 @@ export default function Homepage() {
                     <TaskList title="Today" tasks={tasks.filter(displayToday)} />
                     <TaskList title="This Week" tasks={tasks.filter(displayThisWeek)} />
                     <TaskList title="Eventually" tasks={tasks.filter(displayEventually)} />
-                    <TaskList title="Completed" tasks={tasks.filter((t) => t.is_completed)} />
+                    <TaskList title="Completed" tasks={tasks.filter((t) => t.is_completed).sort(sortByDateCompleted)} />
                 </div>
             </div>
         <div className="divider" onMouseDown={handleMouseDown}> </div>
