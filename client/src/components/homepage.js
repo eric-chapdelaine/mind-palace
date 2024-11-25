@@ -23,7 +23,6 @@ export default function Homepage() {
 
     const containerRect = homepageRef.current.getBoundingClientRect();
     const newLeftWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100;
-        console.log(newLeftWidth);
 
     // Set a minimum and maximum width for the panels
     if (newLeftWidth > 10 && newLeftWidth < 90) {
