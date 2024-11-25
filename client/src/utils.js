@@ -92,3 +92,10 @@ export const createTagsFromCSV = (tags) => {
         return values;
     });
 }
+
+export const sortByDateCompleted = (a, b) => {
+    // TODO: delete these two undefined checks once all database objects have date_completed
+    if (!a.date_completed) return b;
+    if (!b.date_completed) return a;
+    return new Date(b.date_completed).getTime() - new Date(a.date_completed).getTime();
+}

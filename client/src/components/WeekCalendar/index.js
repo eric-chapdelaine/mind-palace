@@ -1,37 +1,43 @@
 import { useState, useEffect } from 'react';
 import './index.css';
 
-// TODO: have it take in week as well
+const getDateString = (date) => {
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${month}/${day}`;
+}
+
+const getDayFromLastSunday = (offset) => {
+    const result = new Date();
+    result.setHours(0, 0, 0, 0);
+    result.setDate(result.getDate() - result.getDay() + offset);
+    return result;
+}
+
+const getDayFromGiven = (day, offset) => {
+    const result = new Date(day);
+    result.setDate(result.getDate() + offset);
+    return result;
+}
+
+// Generate time slots for each hour from 12:00 AM to 11:00 PM
+const generateTimeSlots = () => {
+    const slots = [];
+    for (let hour = 0; hour < 24; hour++) {
+        const timeString = `${hour % 12 === 0 ? 12 : hour % 12}:00 ${hour < 12 ? 'AM' : 'PM'}`;
+        slots.push(timeString);
+    }
+    return slots;
+};
+
+
 const WeekCalendar = ({ tasks }) => {
     const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const timeSlots = generateTimeSlots();
 
-    const previousSunday = new Date();
-    previousSunday.setHours(0, 0, 0, 0);
-    previousSunday.setDate(previousSunday.getDate() - previousSunday.getDay());
-
-    const daysUntilSunday = (7 - previousSunday.getDay());
-    const nextSunday = new Date();
-    nextSunday.setDate(previousSunday.getDate() + daysUntilSunday);
-    nextSunday.setHours(23, 59, 0, 0);
-
-    const scheduledTasksThisWeek = tasks
-        .flatMap((task) =>
-            task.scheduled_times.map((st) => ({ scheduled_time: st, task: task }))
-        )
-        .filter((displayEvent) => {
-            const start_time = new Date(displayEvent.scheduled_time.start_time).getTime();
-            return start_time > previousSunday.getTime() && start_time < nextSunday.getTime();
-        });
-
-    const dueDatesThisWeek = tasks
-        .filter((event) => {
-            const due_date = new Date(event.due_date).getTime();
-            return due_date > previousSunday.getTime() && due_date < nextSunday.getTime(); 
-        });
-    console.log(dueDatesThisWeek);
-
     const [currentTime, setCurrentTime] = useState(new Date());
+    const [currentSunday, setCurrentSunday] = useState(getDayFromLastSunday(0));
+    const [nextSunday, setNextSunday] = useState(getDayFromLastSunday(7));
 
     useEffect(() => {
         const timer = setInterval(() => {
@@ -40,6 +46,27 @@ const WeekCalendar = ({ tasks }) => {
 
         return () => clearInterval(timer);
     }, []);
+
+    useEffect(() => {
+        const next = new Date(currentSunday);
+        next.setDate(next.getDate() + 7);
+        setNextSunday(next);
+    }, [currentSunday]);
+
+    const scheduledTasksThisWeek = tasks
+        .flatMap((task) =>
+            task.scheduled_times.map((st) => ({ scheduled_time: st, task: task }))
+        )
+        .filter((displayEvent) => {
+            const start_time = new Date(displayEvent.scheduled_time.start_time).getTime();
+            return start_time > currentSunday.getTime() && start_time < nextSunday.getTime();
+        });
+
+    const dueDatesThisWeek = tasks
+        .filter((event) => {
+            const due_date = new Date(event.due_date).getTime();
+            return due_date > currentSunday.getTime() && due_date < nextSunday.getTime(); 
+        });
 
 
     const calculateCurrentTimePosition = () => {
@@ -82,9 +109,26 @@ const WeekCalendar = ({ tasks }) => {
         <div className="calendar-week-container">
             <div className="calendar-week">
                 <div className="header">
-                    <div className="time-slot-header"></div>
-                    {daysOfWeek.map(day => (
-                        <div key={day} className="day-header">{day}</div>
+                    <div className="time-slot-header">
+                        <button onClick={() => {
+                            const newSunday = new Date(currentSunday);
+                            newSunday.setDate(currentSunday.getDate() - 7);
+                            setCurrentSunday(newSunday);
+                        }}>&lt;</button>
+                        <button onClick={() => {
+                            setCurrentSunday(getDayFromLastSunday(0));
+                        }}>Reset</button>
+                        <button onClick={() => {
+                            const newSunday = new Date(currentSunday);
+                            newSunday.setDate(currentSunday.getDate() + 7);
+                            setCurrentSunday(newSunday);
+                        }}>&gt;</button>
+                    </div>
+                    {daysOfWeek.map((day, index) => (
+                        <div key={day} className="day-header">{day}
+                        <br />
+                        {getDateString(getDayFromGiven(currentSunday, index))}
+                        </div>
                     ))}
                 </div>
 
@@ -92,7 +136,7 @@ const WeekCalendar = ({ tasks }) => {
                     {timeSlots.map((time, index) => (
                         <div key={index} className="time-slot">
                             <div className="time-label">{time}</div>
-                            {daysOfWeek.map((day, dayIndex) => (
+                            {daysOfWeek.map((day, index) => (
                                 <div key={`${day}-${index}`} className="slot"></div>
                             ))}
                         </div>
@@ -107,8 +151,7 @@ const WeekCalendar = ({ tasks }) => {
                              style={{
                                  ...getScheduledTaskStyle(event.scheduled_time),
                                  gridColumn: `${new Date(event.scheduled_time.start_time).getDay() + 2} / span 1`
-                             }}
-                         >
+                             }}>
                              {event.task.title}
                          </div>
                      ))}
@@ -121,8 +164,7 @@ const WeekCalendar = ({ tasks }) => {
                              style={{
                                  ...getDueDateStyle(task),
                                  gridColumn: `${new Date(task.due_date).getDay() + 2} / span 1`
-                             }}
-                         >
+                             }}>
                              {task.title}
                          </div>
                      ))}
@@ -136,16 +178,6 @@ const WeekCalendar = ({ tasks }) => {
             </div>
         </div>
     );
-};
-
-// Generate time slots for each hour from 12:00 AM to 11:00 PM
-const generateTimeSlots = () => {
-    const slots = [];
-    for (let hour = 0; hour < 24; hour++) {
-        const timeString = `${hour % 12 === 0 ? 12 : hour % 12}:00 ${hour < 12 ? 'AM' : 'PM'}`;
-        slots.push(timeString);
-    }
-    return slots;
 };
 
 export default WeekCalendar;
