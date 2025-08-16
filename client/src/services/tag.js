@@ -9,5 +9,5 @@ export const getTagName = async (id) => {
 
 export const createTag = async (tag) => {
     let res = await api.post(TAG_API_URL, tag);
-    return res.data.tag._id;
+    return res.data._id ?? res.data.tag._id;
 }
