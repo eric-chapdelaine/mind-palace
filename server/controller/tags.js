@@ -8,11 +8,15 @@ const router = express.Router();
 router.post('/', async (req, res) => {
     try {
         let {title, dependencies} = req.body;
-        const tag = await Tag.create({
-            title,
-            dependencies
-        });
-        return res.status(200).json({tag});
+        const existing_tag = await Tag.findOne({title: title});
+        if (!existing_tag) {
+            const tag = await Tag.create({
+                title,
+                dependencies
+            });
+            return res.status(200).json(tag);
+        }
+        else return res.status(200).json(existing_tag);
     } catch (error) {
         return res.status(500).json({message: error.message});
     }
@@ -86,6 +90,30 @@ router.delete('/:id', async (req, res) => {
         let {id} = req.params;
         await Tag.deleteOne({_id: id});
         return res.status(200);
+    } catch (error) {
+        return res.status(500).json({message: error.message});
+    }
+});
+
+// read - get parent tags
+router.get('/:id/get_parents', async (req, res) => {
+    try {
+        let {id} = req.params;
+        const tag = await Tag.findOne({_id: id});
+        if (!tag) return res.status(404).json({message: "Tag cannot be found"});
+        return res.status(200).json(tag.dependencies.populate());
+    } catch (error) {
+        return res.status(500).json({message: error.message});
+    }
+});
+
+// read - get child tags
+router.get('/:id/get_children', async (req, res) => {
+    try {
+        let {id} = req.params;
+        const tags = await Tag.findOne({dependencies : id});  // finds all tags with the given tag in their list of dependencies
+        if (!tags) return res.status(404).json({message: "Tags cannot be found"});
+        return res.status(200).json(tags);
     } catch (error) {
         return res.status(500).json({message: error.message});
     }

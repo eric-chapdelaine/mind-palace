@@ -6,3 +6,8 @@ export const getTagName = async (id) => {
     let res = await api.get(`${TAG_API_URL}/${id}`);
     return res.data.title;
 }
+
+export const createTag = async (tag) => {
+    let res = await api.post(TAG_API_URL, tag);
+    return res.data._id ?? res.data.tag._id;
+}

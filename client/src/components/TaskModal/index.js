@@ -1,7 +1,8 @@
 import "./index.css";
 import { formatDate } from "../../utils";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { updateTask, addScheduledTime, deleteTask } from "../../services/task";
+import { getTagName } from "../../services/tag";
 import { deleteTimeBlock } from "../../services/time_block";
 import { useTasks } from "../../TaskProvider";
 import Markdown from 'react-markdown'
@@ -27,6 +28,20 @@ const TaskModal = ({ task, open, onClose }) => {
 
     const [startDate, setStartDate] = useState(new Date());
     const [endDate, setEndDate] = useState(new Date());
+
+    const [tags, setTags] = useState([]);
+
+    // TODO: remove code duplication between this and TaskCard
+    useEffect(() => {
+      const fetchTagNames = async () => {
+        if (!task?.tags) return;
+        const resolvedTags = await Promise.all(
+          task.tags.map((tag) => getTagName(tag))
+        );
+        setTags(resolvedTags);
+      };
+      fetchTagNames();
+    }, [task]);
 
     if (!open) return null;
 
@@ -62,6 +77,11 @@ const TaskModal = ({ task, open, onClose }) => {
                     /><br /></>}
 
                 {task.due_date && (<><span>Due: {formatDate(task.due_date)}</span> <br /></>)}
+                <div className="tags">
+                  {tags.map((tag, index) => (
+                    <span key={index} className="tag">{tag}</span>
+                  ))}
+                </div>
 
                 Completed:
                 <input type="checkbox"
