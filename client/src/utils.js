@@ -77,7 +77,7 @@ export const displayThisWeek = (task) => {
 }
 
 export const displayEventually = (task) => {
-    return anyScheduledTimesEventually(task) && !displayToday(task) && !displayThisWeek(task);
+    return !displayToday(task) && !displayThisWeek(task) && !task.is_completed;
 }
 
 export const createTagsFromCSV = (tags) => {
