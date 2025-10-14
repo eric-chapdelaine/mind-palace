@@ -73,7 +73,7 @@ export const displayToday = (task) => {
 }
 
 export const displayThisWeek = (task) => {
-    return (anyScheduledTimesThisWeek(task) && !isDueToday(task)) || (isDueThisWeek(task) && !anyScheduledTimesToday(task));
+    return (anyScheduledTimesThisWeek(task) || isDueThisWeek(task)) && !displayToday(task);
 }
 
 export const displayEventually = (task) => {
