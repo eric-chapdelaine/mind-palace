@@ -4,9 +4,11 @@ import { useTasks } from "../TaskProvider";
 import { useState, useRef, useEffect } from "react";
 import { displayToday, displayThisWeek, displayEventually, formatDate } from "../utils";
 import "./homepage.css";
+import TaskModal from "./TaskModal";
 
 // TODO: below component is for testing, once completed, write in the TaskList file
 const TaskList = ({title, tasks}) => {
+  const [open, setOpen] = useState(false);
   if (!tasks || tasks.length === 0) {
     return;
   }
@@ -21,21 +23,27 @@ const TaskList = ({title, tasks}) => {
           <th>Due Date</th>
         </tr>
         {tasks.map((task) => (
-          <tr>
-            <td>{task.title}</td>
-            <td>
-              <input 
-                type="checkbox" 
-                checked={task.is_completed} 
-                readOnly />
-            </td>
-            <td>
-              {formatDate(task.due_date)}
-            </td>
-          </tr>
+          <>
+            <tr onClick={() => {setOpen(true)}}>
+              <td>{task.title}</td>
+              <td>
+                <input 
+                  type="checkbox" 
+                  checked={task.is_completed} 
+                  readOnly />
+              </td>
+              <td>
+                {formatDate(task.due_date)}
+              </td>
+            </tr>
+            <TaskModal
+              task={task}
+              open={open}
+              onClose={() => {setOpen(false)}} />
+          </>
         ))}
       </table>
-      </>
+    </>
   )
 }
 
