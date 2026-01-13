@@ -1,3 +1,3 @@
-# Mind Palace!
+# mind palace
 
-Development branch 
+dev branch
