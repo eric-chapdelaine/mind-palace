@@ -18,14 +18,22 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_TITLE,
     version=settings.APP_VERSION,
-    description="",
+    description="Central hub connecting open-source life-management tools.",
     lifespan=lifespan,
 )
 
-# --- Register routers ---
+# --- Static files (must be mounted on app, not a router) ---
+app.mount("/static", ui.static_files, name="static")
+
+# --- Routers ---
 app.include_router(ui.router)
 app.include_router(todos.router)
 app.include_router(groceries.router)
+
+# Future routers drop in here:
+# app.include_router(calendar.router)
+# app.include_router(finance.router)
+# app.include_router(health.router)
 
 
 @app.get("/health", tags=["meta"])
