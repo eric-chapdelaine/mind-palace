@@ -27,6 +27,7 @@ function parseDate(s) { return s ? new Date(s) : null; }
 
 function fmtDate(d) {
   if (!d) return '';
+  console.log(d);
   const now  = new Date();
   const diff = d - now;
   const days = Math.round(Math.abs(diff) / 86400000);
