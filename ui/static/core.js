@@ -23,7 +23,11 @@ function endOfWeek(d) {
   r.setHours(23,59,59,999);
   return r;
 }
-function parseDate(s) { return s ? new Date(s) : null; }
+function parseDate(s) { 
+  if (s == null || s === '' || s === '0001-01-01T00:00:00Z') return null; 
+  const d = new Date(s); 
+  return isNaN(d.getTime()) ? null : d; 
+}
 
 function fmtDate(d) {
   if (!d) return '';
@@ -69,10 +73,95 @@ async function fetchGroceries() {
   return cachedFetch('groceries', '/groceries/');
 }
 
+async function fetchTodo(todoId) {
+  const res = await fetch(`/todos/vikunja/${todoId}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function updateTodo(todoId, fields) {
+  const res = await fetch(`/todos/vikunja/${todoId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(fields),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function createTodo(title, description, dueDate) {
+  const body = { title };
+  if (description) body.notes = description;
+  if (dueDate) body.due_date = dueDate;
+  const res = await fetch(`/todos/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function deleteTodo(todoId) {
+  const res = await fetch(`/todos/vikunja/${todoId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
+// ── Modal System ───────────────────────────────────────────────
+let _modalCallback = null;
+let _onModalClose = null;
+
+function openModal(renderFn, onAction, onClose) {
+  const existing = document.getElementById('modal-overlay');
+  if (existing) existing.remove();
+
+  _modalCallback = onAction;
+  _onModalClose = onClose;
+  const overlay = document.createElement('div');
+  overlay.id = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-backdrop"></div>
+    <div class="modal" id="modal"></div>`;
+  document.body.appendChild(overlay);
+
+  const modal = document.getElementById('modal');
+  modal.innerHTML = renderFn();
+
+  document.querySelector('.modal-backdrop').addEventListener('click', closeModal);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+}
+
+function closeModal() {
+  if (window.flatpickrInstances && window.flatpickrInstances.some(fp => fp.isOpen)) {
+    return;
+  }
+  const overlay = document.getElementById('modal-overlay');
+  if (overlay) overlay.remove();
+  _modalCallback = null;
+  if (_onModalClose) {
+    _onModalClose();
+    _onModalClose = null;
+  }
+}
+
+function refreshModal(renderFn) {
+  const modal = document.getElementById('modal');
+  if (modal) modal.innerHTML = renderFn();
+}
+
+function getModalCallback() {
+  return _modalCallback;
+}
+
 // ── Renderer ─────────────────────────────────────────────────
-async function renderWidget(widget, container) {
+let _isFirstRender = true;
+
+async function renderWidget(widget, container, animate = false) {
   const el = document.createElement('div');
   el.className = 'widget';
+  if (animate) el.classList.add('animate-in');
   el.id = `widget-${widget.id}`;
   el.innerHTML = `
     <div class="widget-header">
@@ -99,6 +188,37 @@ async function renderWidget(widget, container) {
 
 async function renderAll() {
   const content = document.getElementById('content');
+  const isFirst = _isFirstRender;
+  _isFirstRender = false;
+
+  // On subsequent renders, don't clear - just update existing widgets
+  if (!isFirst) {
+    const widgets = WIDGETS.map(w => w.id);
+    for (const id of widgets) {
+      const widget = WIDGETS.find(w => w.id === id);
+      if (widget) {
+        const container = document.getElementById(`widget-${id}`);
+        if (container) {
+          try {
+            const data = await widget.data();
+            const countEl = container.querySelector(`#count-${widget.id}`);
+            const listEl = container.querySelector(`#list-${widget.id}`);
+            if (countEl) {
+              countEl.textContent = data.length;
+              countEl.className = `widget-count ${data.length > 0 ? 'has-items' : ''}`;
+            }
+            if (listEl) listEl.innerHTML = widget.render(data);
+          } catch (e) {
+            const listEl = container.querySelector(`#list-${widget.id}`);
+            if (listEl) listEl.innerHTML = `<span class="error-state">error: ${esc(e.message)}</span>`;
+          }
+        }
+      }
+    }
+    return;
+  }
+
+  // First render - create everything from scratch
   content.innerHTML = '';
   bustCache();
 
@@ -111,7 +231,7 @@ async function renderAll() {
   }
 
   // Render widgets in parallel — each fails independently
-  WIDGETS.forEach(w => renderWidget(w, content));
+  WIDGETS.forEach(w => renderWidget(w, content, true));
 }
 
 // ── Clock ────────────────────────────────────────────────────

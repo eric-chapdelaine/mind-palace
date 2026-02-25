@@ -141,3 +141,76 @@ async def list_vikunja_tasks(
         return await vikunja.get_tasks(project_id=project_id)
     except VikunjaError as e:
         raise HTTPException(status_code=e.status_code, detail=str(e))
+
+
+@router.get("/by-vikunja/{vikunja_id}", response_model=TodoRead)
+def get_todo_by_vikunja(
+    vikunja_id: int,
+    db: Session = Depends(get_session),
+):
+    """Get a todo by its Vikunja ID for modal display."""
+    item = db.exec(select(TodoItem).where(TodoItem.vikunja_id == vikunja_id)).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Todo not found")
+    return item
+
+
+@router.get("/{todo_id}", response_model=TodoRead)
+def get_todo(
+    todo_id: int,
+    db: Session = Depends(get_session),
+):
+    """Get a specific todo by local ID for modal display."""
+    item = db.get(TodoItem, todo_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Todo not found")
+    return item
+
+
+@router.get("/vikunja/{vikunja_task_id}", response_model=dict)
+async def get_vikunja_task(
+    vikunja_task_id: int,
+    vikunja: VikunjaClient = Depends(get_vikunja_client),
+):
+    """Get a specific task directly from Vikunja by its Vikunja ID."""
+    try:
+        return await vikunja.get_task(vikunja_task_id)
+    except VikunjaError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+
+
+@router.patch("/vikunja/{vikunja_task_id}", response_model=dict)
+async def update_task(
+    vikunja_task_id: int,
+    fields: dict,
+    vikunja: VikunjaClient = Depends(get_vikunja_client),
+):
+    """
+    Update a Vikunja task with the given fields.
+    
+    This endpoint is generic and accepts any valid Vikunja task fields.
+    Common fields include:
+        - title: str
+        - description: str
+        - due_date: str (ISO 8601)
+        - done: bool
+        - priority: int (0-5)
+    
+    The request body should be a JSON object with the fields to update.
+    """
+    try:
+        return await vikunja.update_task(vikunja_task_id, **fields)
+    except VikunjaError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+
+
+@router.delete("/vikunja/{vikunja_task_id}", status_code=204)
+async def delete_task(
+    vikunja_task_id: int,
+    vikunja: VikunjaClient = Depends(get_vikunja_client),
+):
+    """Delete a task from Vikunja."""
+    try:
+        await vikunja.delete_task(vikunja_task_id)
+    except VikunjaError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))

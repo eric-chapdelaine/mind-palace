@@ -266,6 +266,21 @@ async def create_todo(
     """
 ```
 
+### Key Patterns
+
+1. **Offline resilience**: Store locally first, sync later when external services unavailable
+2. **Graceful degradation**: Don't fail requests if external APIs are down
+3. **Dependency injection**: Use FastAPI's `Depends()` for DB sessions, clients, etc.
+4. **Separation of concerns**: Keep DB models, schemas, and routes separate
+
+## Frontend Development
+
+### Tech Stack
+
+- **Vanilla JavaScript** - No build step, no package.json
+- **No framework** - Lightweight for Raspberry Pi deployment
+- **marked.js** via CDN for markdown rendering
+
 ### File Structure
 
 ```
@@ -278,16 +293,50 @@ mind-palace/
 │   └── items.py               # SQLModel table definitions
 ├── integrations/
 │   └── vikunja.py             # External API clients
-└── api/
-    └── routers/
-        ├── todos.py           # REST endpoints
-        ├── groceries.py
-        └── ui.py              # Static files
+├── api/
+│   └── routers/
+│       ├── todos.py           # REST endpoints
+│       ├── groceries.py
+│       └── ui.py              # Static files
+└── ui/
+    ├── templates/
+    │   └── dashboard.html    # Main HTML template
+    └── static/
+        ├── core.js            # Data fetching, utilities
+        ├── widgets.js         # Widget definitions & rendering
+        └── style.css          # Styles
 ```
 
-### Key Patterns
+### Adding Dependencies
 
-1. **Offline resilience**: Store locally first, sync later when external services unavailable
-2. **Graceful degradation**: Don't fail requests if external APIs are down
-3. **Dependency injection**: Use FastAPI's `Depends()` for DB sessions, clients, etc.
-4. **Separation of concerns**: Keep DB models, schemas, and routes separate
+Since there's no package.json, external JS libraries are loaded via CDN in `ui/templates/dashboard.html`:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+```
+
+### UI Rendering
+
+- **widgets.js** - Contains `registerWidget()` calls that define each widget
+- **core.js** - Provides `fetchVikunja()`, `fetchGroceries()`, date utilities, etc.
+- Task descriptions from Vikunja are rendered as markdown using `marked.parse()`
+
+### CSS Variables
+
+The UI uses CSS custom properties defined in `ui/static/style.css`:
+
+```css
+:root {
+  --bg:        #0e0e0e;
+  --surface:   #161616;
+  --border:    #2a2a2a;
+  --muted:     #555;
+  --text:      #d4d4d4;
+  --bright:    #f0f0f0;
+  --accent:    #e8ff5a;
+  --danger:    #ff5f5f;
+  --warn:      #ffaa44;
+  --mono:      'IBM Plex Mono', monospace;
+  --sans:      'IBM Plex Sans', sans-serif;
+}
+```
