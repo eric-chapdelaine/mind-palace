@@ -70,6 +70,60 @@ class VikunjaClient:
 
         return resp.json()
 
+    async def get_task(self, task_id: int) -> dict:
+        async with httpx.AsyncClient(timeout=10) as client:
+            try:
+                resp = await client.get(
+                    f"{self.base_url}/tasks/{task_id}",
+                    headers=self.headers,
+                )
+            except httpx.RequestError as e:
+                raise VikunjaError(f"Could not reach Vikunja: {e}", status_code=503)
+
+        if resp.status_code != 200:
+            raise VikunjaError(f"Vikunja error: {resp.text}", status_code=resp.status_code)
+
+        return resp.json()
+
+    async def update_task(self, task_id: int, **fields) -> dict:
+        """Update a task with the given fields.
+        
+        Args:
+            task_id: The Vikunja task ID to update
+            **fields: Any fields to update (e.g., title, description, due_date)
+        
+        Returns:
+            The updated task dict from Vikunja
+        """
+        async with httpx.AsyncClient(timeout=10) as client:
+            try:
+                resp = await client.post(
+                    f"{self.base_url}/tasks/{task_id}",
+                    json=fields,
+                    headers=self.headers,
+                )
+            except httpx.RequestError as e:
+                raise VikunjaError(f"Could not reach Vikunja: {e}", status_code=503)
+
+        if resp.status_code not in (200, 201):
+            raise VikunjaError(f"Vikunja error: {resp.text}", status_code=resp.status_code)
+
+        return resp.json()
+
+    async def delete_task(self, task_id: int) -> None:
+        """Delete a task by its ID."""
+        async with httpx.AsyncClient(timeout=10) as client:
+            try:
+                resp = await client.delete(
+                    f"{self.base_url}/tasks/{task_id}",
+                    headers=self.headers,
+                )
+            except httpx.RequestError as e:
+                raise VikunjaError(f"Could not reach Vikunja: {e}", status_code=503)
+
+        if resp.status_code not in (200, 204):
+            raise VikunjaError(f"Vikunja error: {resp.text}", status_code=resp.status_code)
+
 
 # Module-level singleton — instantiated lazily so missing token doesn't crash startup
 _client: Optional[VikunjaClient] = None
