@@ -272,6 +272,7 @@ async def create_todo(
 2. **Graceful degradation**: Don't fail requests if external APIs are down
 3. **Dependency injection**: Use FastAPI's `Depends()` for DB sessions, clients, etc.
 4. **Separation of concerns**: Keep DB models, schemas, and routes separate
+5. **Generic endpoints**: Make endpoints flexible for future expansion (e.g., PATCH accepts dict for any fields)
 
 ## Frontend Development
 
@@ -280,6 +281,7 @@ async def create_todo(
 - **Vanilla JavaScript** - No build step, no package.json
 - **No framework** - Lightweight for Raspberry Pi deployment
 - **marked.js** via CDN for markdown rendering
+- **flatpickr** via CDN for date/time picking
 
 ### File Structure
 
@@ -292,7 +294,7 @@ mind-palace/
 ├── models/
 │   └── items.py               # SQLModel table definitions
 ├── integrations/
-│   └── vikunja.py             # External API clients
+│   └── vikunja.py            # External API clients
 ├── api/
 │   └── routers/
 │       ├── todos.py           # REST endpoints
@@ -302,7 +304,7 @@ mind-palace/
     ├── templates/
     │   └── dashboard.html    # Main HTML template
     └── static/
-        ├── core.js            # Data fetching, utilities
+        ├── core.js            # Data fetching, utilities, modal system
         ├── widgets.js         # Widget definitions & rendering
         └── style.css          # Styles
 ```
@@ -313,13 +315,63 @@ Since there's no package.json, external JS libraries are loaded via CDN in `ui/t
 
 ```html
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 ```
 
 ### UI Rendering
 
 - **widgets.js** - Contains `registerWidget()` calls that define each widget
-- **core.js** - Provides `fetchVikunja()`, `fetchGroceries()`, date utilities, etc.
+- **core.js** - Provides `fetchVikunja()`, `fetchGroceries()`, `fetchTodo()`, `updateTodo()`, `createTodo()`, `deleteTodo()`, date utilities, modal system
 - Task descriptions from Vikunja are rendered as markdown using `marked.parse()`
+
+### Modal System (core.js)
+
+The modal system uses callbacks for close actions:
+
+```javascript
+openModal(renderFn, onAction, onClose);
+
+// Example: open task modal and refresh widgets on close
+openModal(
+  () => renderTodoModal(todo),
+  null,  // action callback (not used)
+  () => renderAll()  // called when modal closes
+);
+```
+
+To prevent modal from closing when a picker is open (e.g., flatpickr):
+
+```javascript
+window.flatpickrInstances = [];  // track open pickers
+// In closeModal, check if any flatpickr is open before closing
+```
+
+### Widget System (widgets.js)
+
+Register widgets with `registerWidget()`:
+
+```javascript
+registerWidget({
+  id: 'tasks-today',
+  title: 'Today & Overdue',
+  async data() { return fetchVikunja(); },
+  render(tasks) { return tasks.map(t => taskRow(t)).join(''); },
+});
+```
+
+Task rows should include a checkbox for status toggle:
+
+```javascript
+function taskRow(task) {
+  return `
+    <div class="task-item ${task.done ? 'completed' : ''}">
+      <input type="checkbox" ${task.done ? 'checked' : ''} 
+        onclick="event.stopPropagation();toggleTaskStatus(${task.id}, ${!task.done})">
+      <span class="task-title" onclick="openTaskModal(${task.id})">${esc(task.title)}</span>
+    </div>`;
+}
+```
 
 ### CSS Variables
 
@@ -340,3 +392,60 @@ The UI uses CSS custom properties defined in `ui/static/style.css`:
   --sans:      'IBM Plex Sans', sans-serif;
 }
 ```
+
+### Date Handling
+
+Use `parseDate()` and handle Vikunja's empty date sentinel:
+
+```javascript
+function parseDate(s) { 
+  // Handle null, empty string, and Vikunja's default date
+  if (s == null || s === '' || s === '0001-01-01T00:00:00Z') return null; 
+  const d = new Date(s); 
+  return isNaN(d.getTime()) ? null : d; 
+}
+```
+
+### Animations
+
+Only animate on first render to avoid flicker on updates:
+
+```javascript
+let _isFirstRender = true;
+
+async function renderAll() {
+  const animate = _isFirstRender;
+  _isFirstRender = false;
+  
+  WIDGETS.forEach(w => renderWidget(w, container, animate));
+}
+```
+
+CSS uses `.animate-in` class for animations, not the default `.widget` class.
+
+## Vikunja API Integration
+
+### VikunjaClient Methods (integrations/vikunja.py)
+
+The client provides methods for task operations:
+
+- `create_task(title, project_id, notes, due_date)` - Create a new task
+- `get_tasks(project_id)` - List tasks in a project
+- `get_task(task_id)` - Get a single task
+- `update_task(task_id, **fields)` - Update any task fields (generic, uses POST)
+- `delete_task(task_id)` - Delete a task
+
+### API Endpoints (api/routers/todos.py)
+
+- `POST /todos/` - Create a new task
+- `GET /todos/` - List local tasks
+- `GET /todos/vikunja` - List Vikunja tasks (proxy)
+- `GET /todos/vikunja/{id}` - Get Vikunja task by ID
+- `PATCH /todos/vikunja/{id}` - Update Vikunja task (generic, accepts any fields)
+- `DELETE /todos/vikunja/{id}` - Delete Vikunja task
+
+### Task Status
+
+Vikunja uses `done: boolean` for task completion. The frontend uses:
+- `TODO` - not completed
+- `Completed` - completed (shows strikethrough)
