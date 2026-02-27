@@ -16,5 +16,14 @@ class Settings:
     VIKUNJA_TOKEN: str | None = os.getenv("VIKUNJA_TOKEN")
     VIKUNJA_INBOX_PROJECT_ID: int = int(os.getenv("VIKUNJA_INBOX_PROJECT_ID", "1"))
 
+    # Google Calendar (OAuth2)
+    GOOGLE_CLIENT_ID: str | None = os.getenv("GOOGLE_CLIENT_ID")
+    GOOGLE_CLIENT_SECRET: str | None = os.getenv("GOOGLE_CLIENT_SECRET")
+    GOOGLE_REFRESH_TOKEN: str | None = os.getenv("GOOGLE_REFRESH_TOKEN")
+    GOOGLE_CALENDAR_ID: str | None = os.getenv("GOOGLE_CALENDAR_ID")
+    
+    # App URL for OAuth callbacks
+    APP_URL: str = os.getenv("APP_URL", "http://localhost:8000")
+
 
 settings = Settings()

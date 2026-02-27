@@ -15,6 +15,7 @@ from sqlmodel import Session, select
 
 from core.database import get_session
 from integrations.vikunja import VikunjaClient, VikunjaError, get_vikunja_client
+from integrations.google_calendar import GoogleCalendarClient, GoogleCalendarError, get_google_calendar_client
 from models.items import TodoItem
 
 router = APIRouter(prefix="/todos", tags=["todos"])
@@ -214,3 +215,59 @@ async def delete_task(
         await vikunja.delete_task(vikunja_task_id)
     except VikunjaError as e:
         raise HTTPException(status_code=e.status_code, detail=str(e))
+
+
+@router.post("/sync-to-google", status_code=200)
+async def sync_to_google_calendar(
+    project_id: Optional[int] = Query(default=None, description="Filter by Vikunja project ID"),
+    vikunja: VikunjaClient = Depends(get_vikunja_client),
+    gcal: GoogleCalendarClient = Depends(get_google_calendar_client),
+):
+    """
+    Sync Vikunja tasks with due dates to Google Calendar.
+    
+    Creates, updates, or deletes events in Google Calendar to match Vikunja tasks.
+    Events are tagged with the Vikunja task ID for tracking.
+    """
+    try:
+        tasks = await vikunja.get_tasks(project_id=project_id)
+    except VikunjaError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+
+    tasks_with_dates = [
+        t for t in tasks
+        if t.get("due_date") and t.get("due_date") != "0001-01-01T00:00:00Z"
+    ]
+
+    try:
+        gcal_events = await gcal.list_events()
+    except GoogleCalendarError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
+
+    gcal_event_map = {
+        (ep.get("extendedProperties", {}).get("private", {}).get("vikunja_task_id")): eid
+        for eid, ep in ((e.get("id"), e) for e in gcal_events if e.get("id"))
+        if ep.get("extendedProperties", {}).get("private", {}).get("vikunja_task_id")
+    }
+
+    synced = 0
+    errors = []
+
+    for task in tasks_with_dates:
+        task_id = str(task.get("id"))
+        event_id = gcal_event_map.get(task_id)
+
+        try:
+            if event_id:
+                await gcal.update_event(event_id, task)
+            else:
+                await gcal.create_event(task)
+            synced += 1
+        except GoogleCalendarError as e:
+            errors.append(f"Task {task_id}: {e}")
+
+    return {
+        "synced": synced,
+        "total_tasks": len(tasks_with_dates),
+        "errors": errors,
+    }
