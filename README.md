@@ -13,12 +13,14 @@ mind-palace/
 ├── models/
 │   └── items.py               # SQLModel table definitions
 ├── integrations/
-│   └── vikunja.py             # Vikunja API client
+│   ├── vikunja.py             # Vikunja API client
+│   └── google_calendar.py     # Google Calendar API client
 └── api/
     └── routers/
         ├── capture.py         # Simple intake (Shortcuts/IoT)
         ├── todos.py           # Full todo CRUD + Vikunja sync
-        └── groceries.py       # Grocery list
+        ├── groceries.py       # Grocery list
+        └── auth.py           # OAuth authentication
 ```
 
 Adding a new integration = add a file to `integrations/`, a router to `api/routers/`, and one line in `main.py`.
@@ -46,6 +48,7 @@ POST /capture
 | `GET` | `/todos/` | List local todos (`?synced=false` for pending) |
 | `POST` | `/todos/sync` | Push all unsynced local items to Vikunja |
 | `GET` | `/todos/vikunja` | Live fetch from Vikunja (`?project_id=2`) |
+| `POST` | `/todos/sync-to-google` | Sync tasks with due dates to Google Calendar |
 
 **Create todo body:**
 ```json
@@ -72,6 +75,14 @@ GET /health      → {"status": "ok", ...}
 GET /docs        → Interactive API docs (Swagger UI)
 ```
 
+### Authentication (Google Calendar)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/auth/google` | Start OAuth flow → redirects to Google |
+| `GET` | `/auth/google/callback` | OAuth callback → returns refresh token |
+| `GET` | `/auth/google/status` | Check if Google Calendar is configured |
+
 ## Setup
 
 ```bash
@@ -79,6 +90,99 @@ pip install -r requirements.txt
 cp .env.example .env   # fill in VIKUNJA_TOKEN
 python main.py
 ```
+
+## Google Calendar Integration
+
+Mind Palace can sync your Vikunja tasks with due dates to Google Calendar automatically.
+
+### Prerequisites
+
+1. A **Google Cloud project** with Calendar API enabled
+2. An **OAuth client ID** with web application type
+3. A **Google Calendar** (can be your primary or a dedicated one)
+
+### Step 1: Get OAuth Credentials
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select existing
+3. Search for **"Google Calendar API"** → Enable it
+4. Go to **Credentials** → **Create Credentials** → **OAuth client ID**
+5. If prompted, configure OAuth consent screen:
+   - User Type: **External**
+   - App name: "Mind Palace"
+   - Add yourself as a test user
+6. Back to **Credentials**:
+   - Application type: **Web application**
+   - Add **Authorized redirect URI**: `http://localhost:8000/auth/google/callback` (or your deployed URL)
+   - Copy **Client ID** and **Client Secret**
+
+### Step 2: Create or Use a Google Calendar
+
+1. Open [Google Calendar](https://calendar.google.com/)
+2. Create a new calendar (optional, or use your primary)
+3. Copy the **Calendar ID** from Settings → Integrate calendar
+
+### Step 3: Configure Environment Variables
+
+Add to your `.env` file:
+
+```env
+# Required
+GOOGLE_CLIENT_ID=your_client_id_from_google_cloud
+GOOGLE_CLIENT_SECRET=your_client_secret_from_google_cloud
+GOOGLE_CALENDAR_ID=your_calendar_id@group.calendar.google.com
+APP_URL=http://localhost:8000
+
+# You will get this after authorizing (see Step 4)
+# GOOGLE_REFRESH_TOKEN=will_be_added_later
+```
+
+### Step 4: Authorize
+
+Restart your app, then visit:
+
+```bash
+# In browser or curl:
+curl -L http://localhost:8000/auth/google
+```
+
+This redirects to Google. After you authorize, you'll receive a **refresh token** in the response.
+
+Add the refresh token to your `.env`:
+
+```env
+GOOGLE_REFRESH_TOKEN=your_refresh_token_here
+```
+
+Restart the app.
+
+### Step 5: Sync
+
+**Manual sync:**
+```bash
+curl -X POST http://localhost:8000/todos/sync-to-google
+```
+
+**Auto-sync with cron:**
+```bash
+# Sync every hour
+echo "0 * * * * curl -X POST http://localhost:8000/todos/sync-to-google" | crontab -
+```
+
+### How It Works
+
+- Only tasks with **due dates** are synced
+- Tasks are linked via `extendedProperties` (Vikunja task ID stored in Google event)
+- Updates are one-way: Vikunja → Google Calendar
+- Completing a task in Vikunja marks it completed in Google Calendar
+
+### Check Auth Status
+
+```bash
+curl http://localhost:8000/auth/google/status
+```
+
+Shows which OAuth credentials are configured.
 
 ## iPhone Shortcut
 
