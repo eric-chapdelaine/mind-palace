@@ -16,20 +16,23 @@ router = APIRouter(prefix="/sync", tags=["sync"])
 async def sync_to_google(
     project_id: Optional[int] = Query(default=None, description="Filter by Vikunja project ID"),
     include_sleep: bool = Query(default=True, description="Include Garmin sleep data"),
+    include_activities: bool = Query(default=True, description="Include Garmin activities"),
     vikunja: VikunjaClient = Depends(get_vikunja_client),
     gcal: GoogleCalendarClient = Depends(get_google_calendar_client),
 ):
     """
-    Sync Vikunja tasks and Garmin sleep data to Google Calendar.
+    Sync Vikunja tasks and Garmin data to Google Calendar.
     
     - Syncs Vikunja tasks with due dates as calendar events
     - Optionally syncs Garmin sleep data as "Sleep" events
+    - Optionally syncs Garmin activities as calendar events
     
     Events are tagged with source IDs for tracking.
     """
     results = {
         "tasks": {"synced": 0, "total": 0, "errors": []},
         "sleep": {"synced": 0, "total": 0, "errors": []},
+        "activities": {"synced": 0, "total": 0, "errors": []},
     }
 
     # Sync Vikunja tasks
@@ -69,6 +72,7 @@ async def sync_to_google(
             results["tasks"]["errors"].append(f"Task {task_id}: {e}")
 
     # Sync Garmin sleep data
+    garmin = None
     if include_sleep:
         try:
             garmin = get_garmin_client()
@@ -104,5 +108,44 @@ async def sync_to_google(
                         results["sleep"]["synced"] += 1
                     except GoogleCalendarError as e:
                         results["sleep"]["errors"].append(f"Sleep {sleep_date_str}: {e}")
+
+    # Sync Garmin activities
+    if include_activities:
+        if not garmin:
+            try:
+                garmin = get_garmin_client()
+            except GarminError as e:
+                results["activities"]["errors"].append(f"Garmin unavailable: {e}")
+
+        if garmin:
+            try:
+                activities = garmin.get_activities()
+            except GarminError as e:
+                results["activities"]["errors"].append(f"Failed to get activities: {e}")
+            else:
+                results["activities"]["total"] = len(activities)
+
+                activity_event_map = {
+                    ep.get("extendedProperties", {}).get("private", {}).get("garmin_activity_id"): eid
+                    for eid, ep in ((e.get("id"), e) for e in gcal_events if e.get("id"))
+                    if ep.get("extendedProperties", {}).get("private", {}).get("garmin_activity_id")
+                }
+
+                for activity in activities:
+                    if not activity.end_time:
+                        continue
+
+                    activity_id = str(activity.activity_id)
+                    event_id = activity_event_map.get(activity_id)
+
+                    try:
+                        event = activity.to_calendar_event()
+                        if event_id:
+                            await gcal.update_activity_event(event_id, event)
+                        else:
+                            await gcal.create_activity_event(event)
+                        results["activities"]["synced"] += 1
+                    except GoogleCalendarError as e:
+                        results["activities"]["errors"].append(f"Activity {activity_id}: {e}")
 
     return results

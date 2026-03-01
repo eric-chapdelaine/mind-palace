@@ -497,18 +497,20 @@ bed_time_start = datetime.fromtimestamp(
 
 ### Endpoint (api/routers/sync.py)
 
-- `POST /sync/to-google` - Sync Vikunja tasks and Garmin sleep to Google Calendar
+- `POST /sync/to-google` - Sync Vikunja tasks, Garmin sleep, and activities to Google Calendar
 
 Query parameters:
 - `project_id` - Filter Vikunja tasks by project
 - `include_sleep` - Include Garmin sleep data (default: true)
+- `include_activities` - Include Garmin activities (default: true)
 
 ### Response Format
 
 ```json
 {
   "tasks": {"synced": 0, "total": 0, "errors": []},
-  "sleep": {"synced": 0, "total": 0, "errors": []}
+  "sleep": {"synced": 0, "total": 0, "errors": []},
+  "activities": {"synced": 0, "total": 0, "errors": []}
 }
 ```
 
@@ -516,5 +518,6 @@ Query parameters:
 
 - **Tasks**: Tagged with `vikunja_task_id` in extendedProperties
 - **Sleep**: Tagged with `garmin_sleep_date` in extendedProperties
+- **Activities**: Tagged with `garmin_activity_id` in extendedProperties
 
 Both are updated in place if already exists in calendar.
