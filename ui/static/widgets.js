@@ -24,7 +24,14 @@ function taskRow(task, metaClass = '') {
 
 async function toggleTaskStatus(taskId, done) {
   try {
-    await updateTodo(taskId, { done });
+    const task = await fetchTodo(taskId);
+    const dueDateRaw = task.due_date;
+    const hasValidDueDate = dueDateRaw && dueDateRaw !== '0001-01-01T00:00:00Z';
+    const updateFields = { done };
+    if (hasValidDueDate) {
+      updateFields.due_date = dueDateRaw;
+    }
+    await updateTodo(taskId, updateFields);
     bustCache();
     renderAll();
   } catch (e) {
@@ -84,7 +91,7 @@ function initNewTaskDatePicker() {
     defaultDate: null,
     minDate: 'today',
     onClose: (dates, dateStr, instance) => {
-      _newTaskDueDate = dateStr ? new Date(dateStr).toISOString() : null;
+      _newTaskDueDate = dates[0] ? dates[0].toISOString() : null;
     }
   });
 }
@@ -128,8 +135,10 @@ async function openTaskModal(taskId) {
 
 function renderTodoModal(todo) {
   const d = todo.due_date ? parseDate(todo.due_date) : null;
+  const hasTime = d && (d.getHours() || d.getMinutes() || d.getSeconds());
   const dueDateDisplay = d 
-    ? d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+    ? d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) +
+      (hasTime ? ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '')
     : '<span class="muted">Click to set due date...</span>';
   const descriptionHtml = todo.description 
     ? marked.parse(todo.description, { breaks: true }) 
@@ -220,7 +229,7 @@ function enableDueDateEdit() {
       onClose: (dates, dateStr, instance) => {
         _flatpickrInstance = null;
         window.flatpickrInstances = window.flatpickrInstances.filter(fp => fp !== instance);
-        saveDueDate(dateStr);
+        saveDueDate(dates[0]);
       },
       onOpen: () => {
         window.flatpickrInstances.push(_flatpickrInstance);
@@ -231,20 +240,22 @@ function enableDueDateEdit() {
   }
 }
 
-function saveDueDate(dateStr) {
+function saveDueDate(date) {
   const edit = document.getElementById('duedate-edit');
   const view = document.getElementById('duedate-view');
   if (!edit || !_currentTaskId) return;
   
-  const due_date = dateStr ? new Date(dateStr).toISOString() : null;
+  const due_date = date ? date.toISOString() : null;
   
   async function doSave() {
     try {
       await updateTodo(_currentTaskId, { due_date });
       const updated = await fetchTodo(_currentTaskId);
       const d = updated.due_date ? parseDate(updated.due_date) : null;
+      const hasTime = d && (d.getHours() || d.getMinutes() || d.getSeconds());
       const display = d 
-        ? d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+        ? d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) + 
+          (hasTime ? ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '')
         : '<span class="muted">Click to set due date...</span>';
       if (view) {
         view.innerHTML = display;
@@ -310,9 +321,15 @@ registerWidget({
   async data() {
     const tasks = await fetchVikunja();
     const eod = endOfDay(new Date());
-    return tasks.filter(t => {
+    const filtered = tasks.filter(t => {
       const d = parseDate(t.due_date);
       return d && d <= eod;
+    });
+    return filtered.sort((a, b) => {
+      const da = parseDate(a.due_date);
+      const db = parseDate(b.due_date);
+      if (!da || !db) return da ? -1 : 1;
+      return da - db;
     });
   },
   render(tasks) {
@@ -330,10 +347,16 @@ registerWidget({
   async data() {
     const tasks = await fetchVikunja();
     const now = new Date();
-    return tasks.filter(t => {
+    const filtered = tasks.filter(t => {
       if (!t.due_date) return false;
       const d = parseDate(t.due_date);
       return d > endOfDay(now) && d <= endOfWeek(now);
+    });
+    return filtered.sort((a, b) => {
+      const da = parseDate(a.due_date);
+      const db = parseDate(b.due_date);
+      if (!da || !db) return da ? -1 : 1;
+      return da - db;
     });
   },
   render(tasks) {
@@ -348,9 +371,15 @@ registerWidget({
   async data() {
     const tasks = await fetchVikunja();
     const eow = endOfWeek(new Date());
-    return tasks.filter(t => {
+    const filtered = tasks.filter(t => {
       const d = parseDate(t.due_date);
       return !d || d > eow;
+    });
+    return filtered.sort((a, b) => {
+      const da = parseDate(a.due_date);
+      const db = parseDate(b.due_date);
+      if (!da || !db) return da ? -1 : 1;
+      return da - db;
     });
   },
   render(tasks) {
