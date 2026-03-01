@@ -4,11 +4,14 @@ This file provides guidance for AI agents working on the Mind Palace codebase.
 
 ## Project Overview
 
-Mind Palace is a FastAPI-based central hub that connects open-source life-management tools and exposes a unified API for iPhone Shortcuts, IoT devices, and automations. It uses SQLite with SQLModel for persistence and integrates with Vikunja for task management.
+Mind Palace is a FastAPI-based central hub that connects open-source life-management tools and exposes a unified API for iPhone Shortcuts, IoT devices, and automations. It uses SQLite with SQLModel for persistence and integrates with Vikunja for task management and Garmin for health data.
 
 ## Running the Application
 
 ```bash
+# Using virtual environment
+source .venv/bin/activate
+
 # Development server with auto-reload
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
@@ -294,15 +297,18 @@ mind-palace/
 ├── models/
 │   └── items.py               # SQLModel table definitions
 ├── integrations/
-│   └── vikunja.py            # External API clients
+│   ├── vikunja.py             # Vikunja API client
+│   ├── google_calendar.py     # Google Calendar API client
+│   └── garmin.py              # Garmin Connect API client
 ├── api/
 │   └── routers/
-│       ├── todos.py           # REST endpoints
-│       ├── groceries.py
-│       └── ui.py              # Static files
+│       ├── todos.py            # Todo CRUD + Vikunja sync
+│       ├── groceries.py        # Grocery list
+│       ├── auth.py            # OAuth authentication
+│       └── sync.py            # Sync between integrations
 └── ui/
     ├── templates/
-    │   └── dashboard.html    # Main HTML template
+    │   └── dashboard.html     # Main HTML template
     └── static/
         ├── core.js            # Data fetching, utilities, modal system
         ├── widgets.js         # Widget definitions & rendering
@@ -449,3 +455,66 @@ The client provides methods for task operations:
 Vikunja uses `done: boolean` for task completion. The frontend uses:
 - `TODO` - not completed
 - `Completed` - completed (shows strikethrough)
+
+## Garmin Integration
+
+### Setup
+
+Garmin Connect authentication uses the `garth` library:
+
+```bash
+# Authenticate (opens browser for OAuth login)
+python -c "import garth; garth.login(); garth.save('~/.garth')"
+```
+
+Tokens last approximately 1 year.
+
+### GarminClient (integrations/garmin.py)
+
+- `get_sleep_records(start_date, end_date)` - Fetch sleep data for date range
+- `get_latest_sleep()` - Get most recent sleep record
+
+### SleepRecord Fields
+
+- `date` - Date of sleep
+- `bed_time_start` / `bed_time_end` - Bed times (timezone-aware datetime)
+- `sleep_quality` - Overall sleep score (0-100)
+- `total_sleep_duration` - Total sleep in minutes
+- `deep_sleep_duration`, `light_sleep_duration`, `rem_sleep_duration`, `awake_duration` - Sleep stages in minutes
+- `to_calendar_event()` - Convert to Google Calendar event format
+
+### Timezone Handling
+
+Garmin provides both GMT and local timestamps. Use GMT timestamps with `datetime.fromtimestamp().astimezone()` to convert to local timezone:
+
+```python
+bed_time_start = datetime.fromtimestamp(
+    dto.sleep_start_timestamp_gmt / 1000
+).astimezone()
+```
+
+## Sync Router
+
+### Endpoint (api/routers/sync.py)
+
+- `POST /sync/to-google` - Sync Vikunja tasks and Garmin sleep to Google Calendar
+
+Query parameters:
+- `project_id` - Filter Vikunja tasks by project
+- `include_sleep` - Include Garmin sleep data (default: true)
+
+### Response Format
+
+```json
+{
+  "tasks": {"synced": 0, "total": 0, "errors": []},
+  "sleep": {"synced": 0, "total": 0, "errors": []}
+}
+```
+
+### Google Calendar Events
+
+- **Tasks**: Tagged with `vikunja_task_id` in extendedProperties
+- **Sleep**: Tagged with `garmin_sleep_date` in extendedProperties
+
+Both are updated in place if already exists in calendar.

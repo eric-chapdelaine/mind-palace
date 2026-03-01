@@ -142,6 +142,55 @@ class GoogleCalendarClient:
         if resp.status_code not in (200, 204):
             raise GoogleCalendarError(f"Google Calendar error: {resp.text}", status_code=resp.status_code)
 
+    async def create_sleep_event(self, sleep_event: dict) -> dict:
+        """Create a sleep event in Google Calendar.
+        
+        Args:
+            sleep_event: Event dict with summary, description, start, end, extendedProperties
+            
+        Returns:
+            Created event dict from Google Calendar
+        """
+        async with httpx.AsyncClient(timeout=10) as client:
+            try:
+                resp = await client.post(
+                    self._get_url("events"),
+                    json=sleep_event,
+                    headers=await self._headers(),
+                )
+            except httpx.RequestError as e:
+                raise GoogleCalendarError(f"Could not reach Google: {e}", status_code=503)
+
+        if resp.status_code not in (200, 201):
+            raise GoogleCalendarError(f"Google Calendar error: {resp.text}", status_code=resp.status_code)
+
+        return resp.json()
+
+    async def update_sleep_event(self, event_id: str, sleep_event: dict) -> dict:
+        """Update an existing sleep event in Google Calendar.
+        
+        Args:
+            event_id: The Google Calendar event ID to update
+            sleep_event: Event dict with fields to update
+            
+        Returns:
+            Updated event dict from Google Calendar
+        """
+        async with httpx.AsyncClient(timeout=10) as client:
+            try:
+                resp = await client.patch(
+                    f"{self._get_url('events')}/{event_id}",
+                    json=sleep_event,
+                    headers=await self._headers(),
+                )
+            except httpx.RequestError as e:
+                raise GoogleCalendarError(f"Could not reach Google: {e}", status_code=503)
+
+        if resp.status_code not in (200, 201):
+            raise GoogleCalendarError(f"Google Calendar error: {resp.text}", status_code=resp.status_code)
+
+        return resp.json()
+
     async def list_events(self) -> list[dict]:
         async with httpx.AsyncClient(timeout=10) as client:
             try:

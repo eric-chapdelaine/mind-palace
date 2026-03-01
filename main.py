@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from api.routers import auth, groceries, todos, ui
+from api.routers import auth, groceries, sync, todos, ui
 from core.config import settings
 from core.database import init_db
 
@@ -30,6 +30,7 @@ app.include_router(ui.router)
 app.include_router(todos.router)
 app.include_router(groceries.router)
 app.include_router(auth.router)
+app.include_router(sync.router)
 
 # Future routers drop in here:
 # app.include_router(calendar.router)
