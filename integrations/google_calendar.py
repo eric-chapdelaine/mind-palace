@@ -105,7 +105,7 @@ class GoogleCalendarClient:
         done = task.get("done", False)
         due_date = task.get("due_date")
 
-        event = {"summary": title, "description": description, "colorId": "6"}  # Tangerine
+        event = {"summary": title, "description": description}
 
         if done:
             event["status"] = "completed"
@@ -114,6 +114,9 @@ class GoogleCalendarClient:
             dt = datetime.fromisoformat(due_date.replace("Z", "+00:00"))
             event["start"] = {"date": dt.strftime("%Y-%m-%d")}
             event["end"] = {"date": dt.strftime("%Y-%m-%d")}
+
+        # Always set color to Tangerine (6)
+        event["colorId"] = "6"
 
         async with httpx.AsyncClient(timeout=10) as client:
             try:
