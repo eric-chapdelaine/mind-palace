@@ -3,7 +3,7 @@ Garmin integration using garth library.
 Requires: pip install garth
 Authentication: garth.login() then garth.save("~/.garth")
 """
-from datetime import datetime, timedelta, timezone, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from core.config import settings
@@ -78,8 +78,72 @@ class SleepRecord:
             "end": {
                 "dateTime": self.bed_time_end.isoformat(),
             },
+            "colorId": "3",  # Grape (purple)
             "extendedProperties": {
                 "private": {"garmin_sleep_date": self.date.strftime("%Y-%m-%d")}
+            },
+        }
+
+
+class ActivityRecord:
+    """Represents a single activity from Garmin."""
+    def __init__(
+        self,
+        activity_id: int,
+        name: str,
+        activity_type: str,
+        start_time: datetime,
+        end_time: Optional[datetime],
+        elapsed_duration: float,
+        moving_duration: float,
+        distance: Optional[float],
+        calories: Optional[int],
+        average_hr: Optional[int],
+    ):
+        self.activity_id = activity_id
+        self.name = name
+        self.activity_type = activity_type
+        self.start_time = start_time
+        self.end_time = end_time
+        self.elapsed_duration = elapsed_duration
+        self.moving_duration = moving_duration
+        self.distance = distance
+        self.calories = calories
+        self.average_hr = average_hr
+
+    def to_calendar_event(self) -> dict:
+        """Convert to Google Calendar event format."""
+        if not self.end_time:
+            raise GarminError(f"No end time for activity {self.name}")
+
+        description_parts = []
+        if self.distance:
+            description_parts.append(f"Distance: {self.distance:.2f} km")
+        if self.moving_duration:
+            hours = int(self.moving_duration // 3600)
+            mins = int((self.moving_duration % 3600) // 60)
+            description_parts.append(f"Moving: {hours}h {mins}m")
+        if self.elapsed_duration:
+            hours = int(self.elapsed_duration // 3600)
+            mins = int((self.elapsed_duration % 3600) // 60)
+            description_parts.append(f"Elapsed: {hours}h {mins}m")
+        if self.calories:
+            description_parts.append(f"Calories: {self.calories}")
+        if self.average_hr:
+            description_parts.append(f"Avg HR: {self.average_hr} bpm")
+
+        return {
+            "summary": self.name,
+            "description": "\n".join(description_parts),
+            "start": {
+                "dateTime": self.start_time.isoformat(),
+            },
+            "end": {
+                "dateTime": self.end_time.isoformat(),
+            },
+            "colorId": "9",  # Blueberry (blue)
+            "extendedProperties": {
+                "private": {"garmin_activity_id": str(self.activity_id)}
             },
         }
 
@@ -186,6 +250,89 @@ class GarminClient:
         """Get the most recent sleep record."""
         records = self.get_sleep_records()
         return records[0] if records else None
+
+    def get_activities(
+        self,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        limit: int = 50,
+    ) -> list[ActivityRecord]:
+        """Fetch activities from Garmin Connect.
+
+        Args:
+            start_date: Optional start date filter (defaults to 7 days ago)
+            end_date: Optional end date filter (defaults to today)
+            limit: Maximum number of activities to fetch
+
+        Returns:
+            List of ActivityRecord objects
+        """
+        import garth
+
+        self._ensure_client()
+
+        if not start_date:
+            start_date = datetime.now() - timedelta(days=7)
+        if not end_date:
+            end_date = datetime.now()
+
+        # Get activities via garminconnect with garth auth
+        garth.resume("~/.garth")
+
+        try:
+            from garminconnect import Garmin
+            g = Garmin()
+            g.garth = garth
+            activities = g.get_activities(0, limit)
+            type_map = {t["typeId"]: t["typeKey"] for t in g.get_activity_types()}
+        except Exception as e:
+            print(f"⚠️  Could not get activities: {e}")
+            return []
+
+        records = []
+        for a in activities:
+            start_time_str = a.get("startTimeLocal")
+            if not start_time_str:
+                continue
+
+            try:
+                start_time = datetime.fromisoformat(start_time_str).astimezone()
+            except Exception:
+                continue
+
+            # Calculate end time from elapsed duration (includes paused time)
+            elapsed = a.get("elapsedDuration", 0) or 0
+            end_time = None
+            if elapsed:
+                end_time = start_time + timedelta(seconds=elapsed)
+
+            # Also get moving duration for display
+            moving = a.get("movingDuration", 0) or 0
+
+            activity_type_id = a.get("activityType", {}).get("typeId", 0) if isinstance(a.get("activityType"), dict) else 0
+            activity_type = type_map.get(activity_type_id, "unknown")
+
+            # Get distance (might be a dict with 'value' or just a number)
+            distance_val = a.get("distance")
+            if isinstance(distance_val, dict):
+                distance = distance_val.get("value")
+            else:
+                distance = distance_val
+
+            records.append(ActivityRecord(
+                activity_id=a.get("activityId", 0) or 0,
+                name=a.get("activityName") or activity_type.replace("_", " ").title(),
+                activity_type=activity_type,
+                start_time=start_time,
+                end_time=end_time,
+                elapsed_duration=elapsed,
+                moving_duration=moving,
+                distance=distance,
+                calories=a.get("calories"),
+                average_hr=a.get("averageHR"),
+            ))
+
+        return records
 
 
 _client: Optional[GarminClient] = None

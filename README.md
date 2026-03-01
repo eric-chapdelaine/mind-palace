@@ -65,11 +65,12 @@ POST /capture
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/sync/to-google` | Sync Vikunja tasks + Garmin sleep to Google Calendar |
+| `POST` | `/sync/to-google` | Sync Vikunja tasks + Garmin sleep + activities to Google Calendar |
 
 Options:
 - `?project_id=2` - Filter Vikunja tasks by project
 - `?include_sleep=false` - Skip Garmin sleep data
+- `?include_activities=false` - Skip Garmin activities
 
 ### Groceries
 
@@ -189,8 +190,10 @@ echo "0 * * * * curl -X POST http://localhost:8000/sync/to-google" | crontab -
 
 - **Tasks**: Only tasks with **due dates** are synced
 - **Sleep**: Garmin sleep data is synced as "Sleep" events with start/end times and quality score
+- **Activities**: Garmin activities are synced with activity name, duration, distance, calories, and average HR
 - Tasks are linked via `extendedProperties` (Vikunja task ID stored in Google event)
 - Sleep events are linked by date
+- Activities are linked by Garmin activity ID
 - Updates are one-way: Vikunja/Garmin → Google Calendar
 - Completing a task in Vikunja marks it completed in Google Calendar
 
