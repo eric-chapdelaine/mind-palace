@@ -14,13 +14,15 @@ mind-palace/
 │   └── items.py               # SQLModel table definitions
 ├── integrations/
 │   ├── vikunja.py             # Vikunja API client
-│   └── google_calendar.py     # Google Calendar API client
+│   ├── google_calendar.py     # Google Calendar API client
+│   └── garmin.py              # Garmin Connect API client
 └── api/
     └── routers/
-        ├── capture.py         # Simple intake (Shortcuts/IoT)
-        ├── todos.py           # Full todo CRUD + Vikunja sync
-        ├── groceries.py       # Grocery list
-        └── auth.py           # OAuth authentication
+        ├── capture.py          # Simple intake (Shortcuts/IoT)
+        ├── todos.py            # Full todo CRUD + Vikunja sync
+        ├── groceries.py        # Grocery list
+        ├── auth.py             # OAuth authentication
+        └── sync.py             # Sync between integrations
 ```
 
 Adding a new integration = add a file to `integrations/`, a router to `api/routers/`, and one line in `main.py`.
@@ -48,7 +50,6 @@ POST /capture
 | `GET` | `/todos/` | List local todos (`?synced=false` for pending) |
 | `POST` | `/todos/sync` | Push all unsynced local items to Vikunja |
 | `GET` | `/todos/vikunja` | Live fetch from Vikunja (`?project_id=2`) |
-| `POST` | `/todos/sync-to-google` | Sync tasks with due dates to Google Calendar |
 
 **Create todo body:**
 ```json
@@ -59,6 +60,16 @@ POST /capture
   "project_id": 1
 }
 ```
+
+### Sync
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/sync/to-google` | Sync Vikunja tasks + Garmin sleep to Google Calendar |
+
+Options:
+- `?project_id=2` - Filter Vikunja tasks by project
+- `?include_sleep=false` - Skip Garmin sleep data
 
 ### Groceries
 
@@ -93,7 +104,7 @@ python main.py
 
 ## Google Calendar Integration
 
-Mind Palace can sync your Vikunja tasks with due dates to Google Calendar automatically.
+Mind Palace can sync your Vikunja tasks with due dates and Garmin sleep data to Google Calendar automatically.
 
 ### Prerequisites
 
@@ -160,20 +171,27 @@ Restart the app.
 
 **Manual sync:**
 ```bash
-curl -X POST http://localhost:8000/todos/sync-to-google
+curl -X POST http://localhost:8000/sync/to-google
+```
+
+**Sync without sleep data:**
+```bash
+curl -X POST "http://localhost:8000/sync/to-google?include_sleep=false"
 ```
 
 **Auto-sync with cron:**
 ```bash
 # Sync every hour
-echo "0 * * * * curl -X POST http://localhost:8000/todos/sync-to-google" | crontab -
+echo "0 * * * * curl -X POST http://localhost:8000/sync/to-google" | crontab -
 ```
 
 ### How It Works
 
-- Only tasks with **due dates** are synced
+- **Tasks**: Only tasks with **due dates** are synced
+- **Sleep**: Garmin sleep data is synced as "Sleep" events with start/end times and quality score
 - Tasks are linked via `extendedProperties` (Vikunja task ID stored in Google event)
-- Updates are one-way: Vikunja → Google Calendar
+- Sleep events are linked by date
+- Updates are one-way: Vikunja/Garmin → Google Calendar
 - Completing a task in Vikunja marks it completed in Google Calendar
 
 ### Check Auth Status
@@ -183,6 +201,29 @@ curl http://localhost:8000/auth/google/status
 ```
 
 Shows which OAuth credentials are configured.
+
+## Garmin Integration
+
+Mind Palace can fetch your sleep data from Garmin Connect and sync it to Google Calendar.
+
+### Setup
+
+1. Install garth library (included in requirements.txt)
+2. Authenticate with Garmin Connect:
+
+```bash
+python -c "import garth; garth.login(); garth.save('~/.garth')"
+```
+
+This opens a browser for OAuth login. Tokens last ~1 year.
+
+### Usage
+
+Sleep data is automatically included when syncing to Google Calendar. Each night's sleep appears as a "Sleep" event with:
+- Start time (when you went to bed)
+- End time (when you woke up)
+- Quality score
+- Sleep stage breakdown (deep, light, REM, awake)
 
 ## iPhone Shortcut
 

@@ -22,6 +22,9 @@ class Settings:
     GOOGLE_REFRESH_TOKEN: str | None = os.getenv("GOOGLE_REFRESH_TOKEN")
     GOOGLE_CALENDAR_ID: str | None = os.getenv("GOOGLE_CALENDAR_ID")
     
+    # Garmin (reads from GarminDB SQLite database)
+    GARMIN_DB_PATH: str = os.getenv("GARMIN_DB_PATH", "./garmin.db")
+    
     # App URL for OAuth callbacks
     APP_URL: str = os.getenv("APP_URL", "http://localhost:8000")
 
