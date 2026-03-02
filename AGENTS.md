@@ -4,7 +4,7 @@ This file provides guidance for AI agents working on the Mind Palace codebase.
 
 ## Project Overview
 
-Mind Palace is a FastAPI-based central hub that connects open-source life-management tools and exposes a unified API for iPhone Shortcuts, IoT devices, and automations. It uses SQLite with SQLModel for persistence and integrates with Vikunja for task management and Garmin for health data.
+Mind Palace is a FastAPI-based central hub that connects open-source life-management tools and exposes a unified API for iPhone Shortcuts, IoT devices, and automations. It uses SQLite with SQLModel for persistence and integrates with Vikunja for task management, Garmin for health/fitness data, and includes a built-in fitness/nutrition tracking system.
 
 ## Running the Application
 
@@ -290,29 +290,38 @@ async def create_todo(
 
 ```
 mind-palace/
-├── main.py                    # App entry point, router registration
+├── main.py                    # App entry point, router registration, APScheduler
 ├── core/
 │   ├── config.py              # Settings via env vars
-│   └── database.py            # SQLModel engine + session dep
+│   └── database.py            # SQLModel engine + session dep, seeding
 ├── models/
-│   └── items.py               # SQLModel table definitions
+│   ├── items.py               # SQLModel tables: TodoItem, GroceryItem
+│   ├── fitness.py             # Fitness tables: Exercise, WorkoutTemplate, ScheduledDay, etc.
+│   └── nutrition.py           # Nutrition tables: Recipe, MealPlan, GroceryList, etc.
+├── services/
+│   ├── progression.py         # Lift progression logic
+│   ├── scheduler.py           # Weekly workout schedule generator
+│   ├── meal_planner.py        # Deterministic meal planning algorithm
+│   └── garmin_sync.py         # Garmin Connect sync service
 ├── integrations/
 │   ├── vikunja.py             # Vikunja API client
 │   ├── google_calendar.py     # Google Calendar API client
-│   └── garmin.py              # Garmin Connect API client
-├── api/
-│   └── routers/
-│       ├── todos.py            # Todo CRUD + Vikunja sync
-│       ├── groceries.py        # Grocery list
-│       ├── auth.py            # OAuth authentication
-│       └── sync.py            # Sync between integrations
+│   └── garmin_fitness.py     # Garmin Connect API (optional)
+├── api/routers/
+│   ├── todos.py               # Todo CRUD + Vikunja sync
+│   ├── groceries.py          # Grocery list
+│   ├── fitness.py             # Workout tracking, scheduling, Garmin sync
+│   ├── nutrition.py           # Meal planning, grocery generation
+│   ├── auth.py               # OAuth authentication
+│   └── sync.py               # Sync between integrations
 └── ui/
     ├── templates/
     │   └── dashboard.html     # Main HTML template
     └── static/
-        ├── core.js            # Data fetching, utilities, modal system
-        ├── widgets.js         # Widget definitions & rendering
-        └── style.css          # Styles
+        ├── core.js           # Data fetching, widget system, modal system
+        ├── widgets.js        # Widget definitions & rendering
+        ├── fitness_widgets.js # Fitness/nutrition widgets
+        └── style.css         # Styles
 ```
 
 ### Adding Dependencies
@@ -328,7 +337,8 @@ Since there's no package.json, external JS libraries are loaded via CDN in `ui/t
 ### UI Rendering
 
 - **widgets.js** - Contains `registerWidget()` calls that define each widget
-- **core.js** - Provides `fetchVikunja()`, `fetchGroceries()`, `fetchTodo()`, `updateTodo()`, `createTodo()`, `deleteTodo()`, date utilities, modal system
+- **fitness_widgets.js** - Fitness and nutrition widgets (today-workout, week-overview, nutrition-today, meal-plan, grocery-list)
+- **core.js** - Provides `fetchVikunja()`, `fetchGroceries()`, `fetchTodo()`, `updateTodo()`, `createTodo()`, `deleteTodo()`, `fetchFitness()`, `fetchNutrition()`, date utilities, modal system
 - Task descriptions from Vikunja are rendered as markdown using `marked.parse()`
 
 ### Modal System (core.js)
@@ -521,3 +531,134 @@ Query parameters:
 - **Activities**: Tagged with `garmin_activity_id` in extendedProperties
 
 Both are updated in place if already exists in calendar.
+
+## Fitness Module
+
+### Models (models/fitness.py)
+
+- **Exercise** - Master exercise list with name, category, equipment, increment_lbs
+- **WorkoutTemplate** - Named session definitions (e.g., "Full Body A")
+- **TemplateExercise** - Exercises within a template with prescribed sets/reps
+- **ScheduledDay** - Scheduled workout days with date, session_type, status
+- **ExerciseState** - Current weight and last verdict for each exercise
+- **ExerciseHistory** - Historical record of weights and verdicts
+- **WorkoutLog** - Completed workout records linked to scheduled days
+- **SetLog** - Individual set completion records
+- **GarminActivity** - Synced Garmin activities
+- **DailyStats** - Daily weight, calories burned, calorie target
+
+### Scheduler (services/scheduler.py)
+
+Generates weekly workout schedules:
+
+```python
+def generate_week_schedule(templates, last_template_sort, week_start):
+    # LIFTS_PER_WEEK = 3 (configurable via env var)
+    # NO_LIFT_DAY = 2 (Tuesday)
+    # Cycles through templates: A → B → C → A → ...
+```
+
+- `get_this_monday()` - Returns current week's Monday
+- `get_next_monday()` - Returns next week's Monday
+
+### Progression Engine (services/progression.py)
+
+Evaluates workout completion and adjusts weights:
+
+- **PASS** - All sets completed at prescribed weight → increase weight
+- **CLOSE** - Within 1 rep of target → weight stays same
+- **FAIL** - Missed 2+ reps → decrease weight by 10%
+- **DELOAD** - 3+ consecutive fails → decrease by 20%, reset streak
+
+### API Endpoints (api/routers/fitness.py)
+
+- `GET /fitness/widgets/today-workout` - Today's workout with exercises
+- `GET /fitness/widgets/week-overview` - This week's schedule
+- `GET /fitness/schedule/this-week` - Generate/retrieve current week
+- `GET /fitness/schedule/{date}` - Get day details with exercises
+- `POST /fitness/sync/garmin` - Match Garmin activities to scheduled days
+- `PATCH /fitness/scheduled-days/{day_id}/skip` - Skip a workout
+- `GET /fitness/exercises/{id}/history` - Exercise progress history
+
+### JavaScript Widgets (ui/static/fitness_widgets.js)
+
+- **today-workout** - Shows today's workout with prescribed vs actual sets
+- **week-overview** - 7-day grid, clickable to open day details
+- **nutrition-today** - Calorie tracking for the day
+- **meal-plan** - This week's meal plan
+- **grocery-list** - Current grocery list
+
+### Garmin Integration
+
+**Note:** The `garth` library has compatibility issues with Python 3.14. Set `GARMIN_ENABLED=false` in `.env` to disable Garmin integration if running on Python 3.14+.
+
+## Nutrition Module
+
+### Models (models/nutrition.py)
+
+- **Ingredient** - Master ingredient list with name, category, unit
+- **Recipe** - Recipes with name, instructions, prep time, servings
+- **RecipeIngredient** - Ingredients in a recipe with quantities
+- **MealPlan** - Weekly meal plan with start date
+- **PlannedMeal** - Individual meals in a plan (breakfast/lunch/dinner)
+- **PantryItem** - Items in pantry (what you have)
+- **GroceryList** - Generated grocery lists
+- **GroceryItem** - Items in a grocery list
+
+### Meal Planning Algorithm (services/meal_planner.py)
+
+Deterministic algorithm (no AI):
+1. Get all batch cook recipes
+2. Get all regular recipes
+3. Alternate breakfast/lunch/dinner slots
+4. Prioritize batch cook recipes (cook once, eat multiple times)
+5. Avoid repeating same meals within the week
+6. Target configured calorie/macro goals
+
+### API Endpoints (api/routers/nutrition.py)
+
+- `GET /nutrition/widgets/today` - Today's nutrition summary
+- `GET /nutrition/widgets/meal-plan` - This week's meal plan
+- `POST /nutrition/meal-plans/generate` - Generate meal plan for week
+- `GET /nutrition/grocery-lists/latest` - Get current grocery list
+- `POST /nutrition/grocery-lists/generate` - Generate from meal plan
+- `GET /nutrition/recipes/` - List all recipes
+- `POST /nutrition/pantry/` - Add pantry item
+- `PATCH /nutrition/pantry/{id}` - Update pantry item
+
+### Calorie/Macro Targets
+
+- `get_calorie_target(calories_burned)` - TDEE + exercise calories - 500 (for weight loss)
+- `get_macro_targets(calorie_target)` - Protein: 0.8g/lb, Fat: 0.3g/lb, Carbs: remainder
+
+## Data Files
+
+- `data/program_templates.json` - Beginner workout program (seed data)
+- `data/recipes.json` - 20 recipes for meal planning (seed data)
+
+## Environment Variables
+
+```env
+# Required
+VIKUNJA_TOKEN=your_vikunja_token
+
+# Optional - Google Calendar
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_CALENDAR_ID=...
+GOOGLE_REFRESH_TOKEN=...
+
+# Optional - Fitness
+LIFTS_PER_WEEK=3
+
+# Optional - Garmin (set to false on Python 3.14+)
+GARMIN_ENABLED=true
+```
+
+## Key Patterns
+
+1. **Offline resilience**: Store locally first, sync later when external services unavailable
+2. **Graceful degradation**: Don't fail requests if external APIs are down
+3. **Dependency injection**: Use FastAPI's `Depends()` for DB sessions, clients, etc.
+4. **Separation of concerns**: Keep DB models, schemas, and routes separate
+5. **Date fields**: Use `day_date` instead of `date` to avoid conflict with Python's built-in
