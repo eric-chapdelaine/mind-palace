@@ -6,26 +6,59 @@ Central hub running on a Raspberry Pi that connects open-source life-management 
 
 ```
 mind-palace/
-├── main.py                    # App entry point, router registration
+├── main.py                    # App entry point, router registration, scheduler
 ├── core/
 │   ├── config.py              # All settings via env vars
-│   └── database.py            # SQLite engine + session dep
+│   └── database.py            # SQLite engine + session dep, seeding
 ├── models/
-│   └── items.py               # SQLModel table definitions
+│   ├── items.py               # SQLModel tables: TodoItem, GroceryItem, etc.
+│   ├── fitness.py             # Fitness tables: Exercise, WorkoutTemplate, ScheduledDay, etc.
+│   └── nutrition.py           # Nutrition tables: Recipe, MealPlan, GroceryList, etc.
+├── services/
+│   ├── progression.py         # Lift progression logic (PASS/CLOSE/FAIL/DELOAD)
+│   ├── scheduler.py           # Weekly workout schedule generator
+│   ├── meal_planner.py        # Deterministic meal planning algorithm
+│   └── garmin_sync.py        # Garmin Connect sync service
 ├── integrations/
 │   ├── vikunja.py             # Vikunja API client
 │   ├── google_calendar.py     # Google Calendar API client
-│   └── garmin.py              # Garmin Connect API client
-└── api/
-    └── routers/
-        ├── capture.py          # Simple intake (Shortcuts/IoT)
-        ├── todos.py            # Full todo CRUD + Vikunja sync
-        ├── groceries.py        # Grocery list
-        ├── auth.py             # OAuth authentication
-        └── sync.py             # Sync between integrations
+│   └── garmin_fitness.py     # Garmin Connect API (optional - requires Python <3.14)
+├── api/routers/
+│   ├── todos.py               # Full todo CRUD + Vikunja sync
+│   ├── groceries.py          # Grocery list
+│   ├── fitness.py             # Workout tracking, scheduling, Garmin sync
+│   ├── nutrition.py           # Meal planning, grocery generation
+│   ├── auth.py                # OAuth authentication
+│   └── sync.py                # Sync between integrations
+└── ui/
+    ├── templates/
+    │   └── dashboard.html     # Main dashboard template
+    └── static/
+        ├── core.js            # Data fetching, widget system, modal system
+        ├── widgets.js         # Widget definitions & rendering
+        └── fitness_widgets.js # Fitness/nutrition dashboard widgets
 ```
 
-Adding a new integration = add a file to `integrations/`, a router to `api/routers/`, and one line in `main.py`.
+## Running the Application
+
+```bash
+# Using virtual environment
+source .venv/bin/activate
+
+# Development server with auto-reload
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+# Or directly
+python main.py
+```
+
+## Setup
+
+```bash
+pip install -r requirements.txt
+cp .env.example .env   # fill in VIKUNJA_TOKEN, etc.
+python main.py
+```
 
 ## API Reference
 
@@ -51,15 +84,33 @@ POST /capture
 | `POST` | `/todos/sync` | Push all unsynced local items to Vikunja |
 | `GET` | `/todos/vikunja` | Live fetch from Vikunja (`?project_id=2`) |
 
-**Create todo body:**
-```json
-{
-  "title": "Call dentist",
-  "notes": "Ask about cleaning",
-  "due_date": "2025-07-01T10:00:00",
-  "project_id": 1
-}
-```
+### Fitness
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/fitness/widgets/today-workout` | Today's scheduled workout with exercises |
+| `GET` | `/fitness/widgets/week-overview` | This week's schedule (Mon-Sun) |
+| `GET` | `/fitness/schedule/this-week` | Generate/retrieve current week's schedule |
+| `GET` | `/fitness/schedule/{date}` | Get workout details for a specific date |
+| `POST` | `/fitness/sync/garmin` | Sync Garmin activities with scheduled workouts |
+| `PATCH` | `/fitness/scheduled-days/{day_id}/skip` | Skip a scheduled workout |
+| `GET` | `/fitness/exercises/{exercise_id}/history` | Get exercise progress history |
+
+**Scheduler Configuration** (environment variables):
+- `LIFTS_PER_WEEK` - Number of strength workouts per week (default: 3)
+
+### Nutrition
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/nutrition/widgets/today` | Today's nutrition summary (calories, macros) |
+| `GET` | `/nutrition/widgets/meal-plan` | This week's meal plan |
+| `POST` | `/nutrition/meal-plans/generate` | Generate meal plan for the week |
+| `GET` | `/nutrition/grocery-lists/latest` | Get latest grocery list |
+| `POST` | `/nutrition/grocery-lists/generate` | Generate grocery list from meal plan |
+| `GET` | `/nutrition/recipes/` | List all recipes |
+| `POST` | `/nutrition/pantry/` | Add item to pantry |
+| `PATCH` | `/nutrition/pantry/{id}` | Update pantry item |
 
 ### Sync
 
@@ -72,7 +123,7 @@ Options:
 - `?include_sleep=false` - Skip Garmin sleep data
 - `?include_activities=false` - Skip Garmin activities
 
-### Groceries
+### Groceries (Legacy)
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -94,14 +145,6 @@ GET /docs        → Interactive API docs (Swagger UI)
 | `GET` | `/auth/google` | Start OAuth flow → redirects to Google |
 | `GET` | `/auth/google/callback` | OAuth callback → returns refresh token |
 | `GET` | `/auth/google/status` | Check if Google Calendar is configured |
-
-## Setup
-
-```bash
-pip install -r requirements.txt
-cp .env.example .env   # fill in VIKUNJA_TOKEN
-python main.py
-```
 
 ## Google Calendar Integration
 
@@ -205,28 +248,74 @@ curl http://localhost:8000/auth/google/status
 
 Shows which OAuth credentials are configured.
 
-## Garmin Integration
+## Fitness Module
 
-Mind Palace can fetch your sleep data from Garmin Connect and sync it to Google Calendar.
+### Workout Scheduling
+
+The scheduler generates weekly workout schedules based on:
+- `LIFTS_PER_WEEK` environment variable (default: 3)
+- Available workout templates in the database
+- Automatic rotation through templates (Full Body A → B → C → ...)
+
+**Endpoints:**
+- `GET /fitness/schedule/this-week` - Generate/retrieve current week's schedule (Mon-Sun)
+- Click on any day in the week overview widget to see exercises
+
+### Progression System
+
+After completing a workout, the system evaluates each exercise:
+
+- **PASS** (all sets completed at prescribed weight): Weight increases by exercise's increment
+- **CLOSE** (within 1 rep of target): Weight stays same
+- **FAIL** (missed 2+ reps): Weight decreases by 10%
+- **DELOAD** (3+ consecutive fails): Reduce weight by 20%, reset fail streak
+
+### Garmin Sync
+
+The system matches Garmin workout activities to scheduled workouts by:
+1. Looking for activities on scheduled workout days
+2. Matching by session type (lift, run, cycle)
+3. Marking matched days as "completed" with Garmin data (duration, calories)
+
+**Note:** Garmin integration requires Python <3.14 due to library compatibility. Set `GARMIN_ENABLED=false` in `.env` to disable.
 
 ### Setup
 
-1. Install garth library (included in requirements.txt)
-2. Authenticate with Garmin Connect:
-
+1. Configure Garmin (optional - set `GARMIN_ENABLED=false` if on Python 3.14+):
 ```bash
 python -c "import garth; garth.login(); garth.save('~/.garth')"
 ```
 
-This opens a browser for OAuth login. Tokens last ~1 year.
+## Nutrition Module
 
-### Usage
+### Meal Planning
 
-Sleep data is automatically included when syncing to Google Calendar. Each night's sleep appears as a "Sleep" event with:
-- Start time (when you went to bed)
-- End time (when you woke up)
-- Quality score
-- Sleep stage breakdown (deep, light, REM, awake)
+The meal planner generates weekly meal plans using a deterministic algorithm:
+- Alternates between breakfast, lunch, dinner slots
+- Prioritizes batch cook recipes to reduce cooking frequency
+- Avoids repeating same meals within the week
+- Targets configured calorie and macro goals
+
+**Endpoints:**
+- `POST /nutrition/meal-plans/generate` - Generate meal plan for current week
+- `GET /nutrition/widgets/meal-plan` - View this week's meal plan
+
+### Grocery Lists
+
+Automatically generates grocery lists from meal plans:
+- Aggregates ingredients across all meals
+- Combines quantities for common ingredients
+- Marks items as purchased as you shop
+
+**Endpoints:**
+- `POST /nutrition/grocery-lists/generate` - Generate from current meal plan
+- `GET /nutrition/grocery-lists/latest` - View current grocery list
+
+### Recipes & Pantry
+
+- `GET /nutrition/recipes/` - Browse all recipes
+- `POST /nutrition/pantry/` - Add items to pantry (what you have on hand)
+- Pantry items are considered when generating grocery lists
 
 ## iPhone Shortcut
 
