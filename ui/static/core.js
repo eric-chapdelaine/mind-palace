@@ -180,8 +180,9 @@ async function renderWidget(widget, container, animate = false) {
         const data = await widget.data();
         const countEl = document.getElementById(`count-${widget.id}`);
         const listEl = document.getElementById(`list-${widget.id}`);
-        countEl.textContent = data.length;
-        countEl.className = `widget-count ${data.length > 0 ? 'has-items' : ''}`;
+        const hasData = data != null && typeof data === 'object' && 'length' in data;
+        countEl.textContent = hasData ? data.length : '—';
+        countEl.className = `widget-count ${hasData && data.length > 0 ? 'has-items' : ''}`;
         listEl.innerHTML = widget.render(data);
     } catch (e) {
         const listEl = document.getElementById(`list-${widget.id}`);

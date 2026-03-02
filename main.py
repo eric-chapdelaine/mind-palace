@@ -1,17 +1,35 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from api.routers import auth, groceries, sync, todos, ui
+from api.routers import fitness, nutrition
 from core.config import settings
 from core.database import init_db
+
+
+scheduler = AsyncIOScheduler()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
     print(f"🚀 {settings.APP_TITLE} v{settings.APP_VERSION}: Database initialized.")
+    
+    scheduler.add_job(
+        sync_garmin,
+        'interval',
+        minutes=30,
+        id='garmin_sync',
+        replace_existing=True
+    )
+    scheduler.start()
+    print(f"📅 APScheduler started with garmin_sync job")
+    
     yield
+    
+    scheduler.shutdown()
     print(f"🔌 {settings.APP_TITLE}: Shutting down gracefully.")
 
 
@@ -31,6 +49,8 @@ app.include_router(todos.router)
 app.include_router(groceries.router)
 app.include_router(auth.router)
 app.include_router(sync.router)
+app.include_router(fitness.router)
+app.include_router(nutrition.router)
 
 # Future routers drop in here:
 # app.include_router(calendar.router)
@@ -41,6 +61,14 @@ app.include_router(sync.router)
 @app.get("/health", tags=["meta"])
 def health_check():
     return {"status": "ok", "app": settings.APP_TITLE, "version": settings.APP_VERSION}
+
+
+def sync_garmin():
+    try:
+        from services.garmin_sync import sync_garmin as _sync
+        _sync()
+    except Exception as e:
+        print(f"⚠️  Garmin sync failed: {e}")
 
 
 if __name__ == "__main__":
