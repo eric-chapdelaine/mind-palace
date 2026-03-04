@@ -597,7 +597,7 @@ Evaluates workout completion and adjusts weights:
 ### Models (models/nutrition.py)
 
 - **Ingredient** - Master ingredient list with name, category, unit
-- **Recipe** - Recipes with name, instructions, prep time, servings
+- **Recipe** - Recipes with name, description, prep time, servings, nutrition info
 - **RecipeIngredient** - Ingredients in a recipe with quantities
 - **MealPlan** - Weekly meal plan with start date
 - **PlannedMeal** - Individual meals in a plan (breakfast/lunch/dinner)
@@ -620,9 +620,13 @@ Deterministic algorithm (no AI):
 - `GET /nutrition/widgets/today` - Today's nutrition summary
 - `GET /nutrition/widgets/meal-plan` - This week's meal plan
 - `POST /nutrition/meal-plans/generate` - Generate meal plan for week
+- `PATCH /nutrition/planned-meals/{id}/override?recipe_id=X` - Replace meal with specific recipe
+- `DELETE /nutrition/planned-meals/{id}` - Delete a planned meal
+- `POST /nutrition/meal-plans/{plan_id}/meals` - Add a meal to plan
 - `GET /nutrition/grocery-lists/latest` - Get current grocery list
 - `POST /nutrition/grocery-lists/generate` - Generate from meal plan
-- `GET /nutrition/recipes/` - List all recipes
+- `GET /nutrition/recipes` - List all recipes
+- `GET /nutrition/recipes/{id}` - Get recipe details with ingredients
 - `POST /nutrition/pantry/` - Add pantry item
 - `PATCH /nutrition/pantry/{id}` - Update pantry item
 
@@ -634,7 +638,7 @@ Deterministic algorithm (no AI):
 ## Data Files
 
 - `data/program_templates.json` - Beginner workout program (seed data)
-- `data/recipes.json` - 20 recipes for meal planning (seed data)
+- `data/recipes.json` - 20 recipes with descriptions for meal planning (seed data)
 
 ## Environment Variables
 

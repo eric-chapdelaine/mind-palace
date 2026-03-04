@@ -106,9 +106,13 @@ POST /capture
 | `GET` | `/nutrition/widgets/today` | Today's nutrition summary (calories, macros) |
 | `GET` | `/nutrition/widgets/meal-plan` | This week's meal plan |
 | `POST` | `/nutrition/meal-plans/generate` | Generate meal plan for the week |
+| `PATCH` | `/nutrition/planned-meals/{id}/override?recipe_id=X` | Replace meal with specific recipe |
+| `DELETE` | `/nutrition/planned-meals/{id}` | Delete a planned meal |
+| `POST` | `/nutrition/meal-plans/{plan_id}/meals` | Add a meal to plan |
 | `GET` | `/nutrition/grocery-lists/latest` | Get latest grocery list |
 | `POST` | `/nutrition/grocery-lists/generate` | Generate grocery list from meal plan |
-| `GET` | `/nutrition/recipes/` | List all recipes |
+| `GET` | `/nutrition/recipes` | List all recipes |
+| `GET` | `/nutrition/recipes/{id}` | Get recipe details with ingredients |
 | `POST` | `/nutrition/pantry/` | Add item to pantry |
 | `PATCH` | `/nutrition/pantry/{id}` | Update pantry item |
 
@@ -300,6 +304,14 @@ The meal planner generates weekly meal plans using a deterministic algorithm:
 - `POST /nutrition/meal-plans/generate` - Generate meal plan for current week
 - `GET /nutrition/widgets/meal-plan` - View this week's meal plan
 
+### Managing Meals
+
+In the meal plan UI:
+- Click on any dinner to view recipe details (description, ingredients, nutrition)
+- Use "Replace" to swap a meal with a different recipe
+- Use "Delete" to remove a meal from the plan
+- Empty slots show "+ Add" to add a new meal
+
 ### Grocery Lists
 
 Automatically generates grocery lists from meal plans:
@@ -313,7 +325,8 @@ Automatically generates grocery lists from meal plans:
 
 ### Recipes & Pantry
 
-- `GET /nutrition/recipes/` - Browse all recipes
+- `GET /nutrition/recipes` - Browse all recipes
+- `GET /nutrition/recipes/{id}` - View recipe details with ingredients
 - `POST /nutrition/pantry/` - Add items to pantry (what you have on hand)
 - Pantry items are considered when generating grocery lists
 
