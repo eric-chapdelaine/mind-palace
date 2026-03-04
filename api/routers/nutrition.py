@@ -47,6 +47,25 @@ def get_today_nutrition(db: Session = Depends(get_session)):
         select(MealPlan).where(MealPlan.week_start_date == week_start)
     ).first()
     
+    macros_target = macros
+    
+    macros_current = {"protein_g": 0, "carbs_g": 0, "fat_g": 0}
+    
+    if meal_plan:
+        todays_meals = db.exec(
+            select(PlannedMeal).where(
+                PlannedMeal.plan_id == meal_plan.id,
+                PlannedMeal.meal_date == today
+            )
+        ).all()
+        
+        for meal in todays_meals:
+            recipe = db.get(Recipe, meal.recipe_id)
+            if recipe:
+                macros_current["protein_g"] += recipe.protein_per_serving or 0
+                macros_current["carbs_g"] += recipe.carbs_per_serving or 0
+                macros_current["fat_g"] += recipe.fat_per_serving or 0
+    
     dinner = None
     lunch = None
     
@@ -63,6 +82,8 @@ def get_today_nutrition(db: Session = Depends(get_session)):
             recipe = db.get(Recipe, today_dinner.recipe_id)
             if recipe:
                 dinner = {
+                    "meal_id": today_dinner.id,
+                    "recipe_id": recipe.id,
                     "recipe_name": recipe.name,
                     "calories_per_serving": recipe.calories_per_serving,
                     "protein_per_serving": recipe.protein_per_serving
@@ -89,7 +110,8 @@ def get_today_nutrition(db: Session = Depends(get_session)):
         "date": today.isoformat(),
         "calories_target": calories_target,
         "calories_burned_garmin": calories_burned,
-        "macros": macros,
+        "macros_target": macros_target,
+        "macros_current": macros_current,
         "dinner": dinner,
         "lunch": lunch
     }
@@ -153,6 +175,7 @@ def get_meal_plan_widget(week: Optional[str] = None, db: Session = Depends(get_s
     
     return {
         "week_start_date": week_start.isoformat(),
+        "plan_id": meal_plan.id,
         "meals": result
     }
 
@@ -291,54 +314,28 @@ def get_grocery_list(plan_id: Optional[int] = None, db: Session = Depends(get_se
     if not plan:
         raise HTTPException(status_code=404, detail="No meal plan found")
     
-    meals = db.exec(
-        select(PlannedMeal).where(PlannedMeal.plan_id == plan.id)
+    grocery_list = db.exec(
+        select(GroceryList).where(GroceryList.plan_id == plan.id)
+    ).first()
+    
+    if not grocery_list:
+        return {
+            "plan_id": plan.id,
+            "week_start_date": plan.week_start_date.isoformat(),
+            "sections": []
+        }
+    
+    grocery_items = db.exec(
+        select(GroceryItem).where(GroceryItem.list_id == grocery_list.id)
     ).all()
-    
-    recipe_ingredients = {}
-    for meal in meals:
-        ingredients = db.exec(
-            select(RecipeIngredient).where(RecipeIngredient.recipe_id == meal.recipe_id)
-        ).all()
-        
-        recipe_ingredients[meal.recipe_id] = [
-            {
-                "ingredient_id": i.ingredient_id,
-                "quantity_per_serving": i.quantity_per_serving,
-                "unit": i.unit
-            }
-            for i in ingredients
-        ]
-    
-    pantry = db.exec(select(PantryItem)).all()
-    pantry_dict = {p.ingredient_id: p.quantity for p in pantry}
-    
-    recipe_data = {}
-    for meal in meals:
-        recipe = db.get(Recipe, meal.recipe_id)
-        if recipe:
-            recipe_data[meal.recipe_id] = RecipeData(
-                id=recipe.id,
-                name=recipe.name,
-                calories_per_serving=recipe.calories_per_serving or 0,
-                protein_per_serving=recipe.protein_per_serving or 0,
-                carbs_per_serving=recipe.carbs_per_serving or 0,
-                fat_per_serving=recipe.fat_per_serving or 0,
-                tags=json.loads(recipe.tags) if recipe.tags else [],
-                is_batch_cook=recipe.is_batch_cook
-            )
-    
-    schedule = [(m.meal_date, recipe_data.get(m.recipe_id)) for m in meals if m.meal_date]
-    
-    grocery_totals = _generate_grocery_list(schedule, recipe_ingredients, pantry_dict)
     
     ingredient_map = {i.id: i for i in db.exec(select(Ingredient)).all()}
     
     sections = {}
     section_order = ["protein", "produce", "dairy", "grains", "frozen", "pantry"]
     
-    for ing_id, data in grocery_totals.items():
-        ing = ingredient_map.get(ing_id)
+    for item in grocery_items:
+        ing = ingredient_map.get(item.ingredient_id)
         if not ing:
             continue
         
@@ -347,10 +344,12 @@ def get_grocery_list(plan_id: Optional[int] = None, db: Session = Depends(get_se
             sections[section] = []
         
         sections[section].append({
-            "id": ing_id,
+            "id": item.id,
+            "ingredient_id": item.ingredient_id,
             "name": ing.name,
-            "quantity_needed": round(data["quantity_needed"], 1),
-            "unit": data["unit"]
+            "quantity_needed": round(item.quantity_needed, 1),
+            "unit": item.unit,
+            "checked": item.checked
         })
     
     result = []
@@ -464,6 +463,127 @@ def toggle_grocery_item(item_id: int, db: Session = Depends(get_session)):
     db.commit()
     
     return {"status": "success", "checked": item.checked}
+
+
+@router.get("/recipes")
+def list_recipes(db: Session = Depends(get_session)):
+    recipes = db.exec(select(Recipe)).all()
+    return [
+        {
+            "id": r.id,
+            "name": r.name,
+            "description": r.description,
+            "calories_per_serving": r.calories_per_serving,
+            "protein_per_serving": r.protein_per_serving,
+            "carbs_per_serving": r.carbs_per_serving,
+            "fat_per_serving": r.fat_per_serving,
+            "prep_minutes": r.prep_minutes,
+            "cook_minutes": r.cook_minutes,
+            "tags": json.loads(r.tags) if r.tags else [],
+            "is_batch_cook": r.is_batch_cook
+        }
+        for r in recipes
+    ]
+
+
+@router.get("/recipes/{recipe_id}")
+def get_recipe_details(recipe_id: int, db: Session = Depends(get_session)):
+    recipe = db.get(Recipe, recipe_id)
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    
+    recipe_ingredients = db.exec(
+        select(RecipeIngredient).where(RecipeIngredient.recipe_id == recipe_id)
+    ).all()
+    
+    ingredient_map = {i.id: i for i in db.exec(select(Ingredient)).all()}
+    
+    ingredients = []
+    for ri in recipe_ingredients:
+        ing = ingredient_map.get(ri.ingredient_id)
+        if ing:
+            ingredients.append({
+                "id": ing.id,
+                "name": ing.name,
+                "quantity_per_serving": ri.quantity_per_serving,
+                "unit": ri.unit,
+                "store_section": ing.store_section
+            })
+    
+    return {
+        "id": recipe.id,
+        "name": recipe.name,
+        "description": recipe.description,
+        "base_servings": recipe.base_servings,
+        "calories_per_serving": recipe.calories_per_serving,
+        "protein_per_serving": recipe.protein_per_serving,
+        "carbs_per_serving": recipe.carbs_per_serving,
+        "fat_per_serving": recipe.fat_per_serving,
+        "prep_minutes": recipe.prep_minutes,
+        "cook_minutes": recipe.cook_minutes,
+        "tags": json.loads(recipe.tags) if recipe.tags else [],
+        "is_batch_cook": recipe.is_batch_cook,
+        "ingredients": ingredients
+    }
+
+
+@router.patch("/planned-meals/{meal_id}/override")
+def override_meal(meal_id: int, recipe_id: int, db: Session = Depends(get_session)):
+    meal = db.get(PlannedMeal, meal_id)
+    if not meal:
+        raise HTTPException(status_code=404, detail="Planned meal not found")
+    
+    recipe = db.get(Recipe, recipe_id)
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    
+    meal.recipe_id = recipe_id
+    db.add(meal)
+    db.commit()
+    
+    return {"status": "success", "new_recipe_id": recipe_id, "new_recipe_name": recipe.name}
+
+
+@router.delete("/planned-meals/{meal_id}")
+def delete_planned_meal(meal_id: int, db: Session = Depends(get_session)):
+    meal = db.get(PlannedMeal, meal_id)
+    if not meal:
+        raise HTTPException(status_code=404, detail="Planned meal not found")
+    
+    db.delete(meal)
+    db.commit()
+    
+    return {"status": "success"}
+
+
+@router.post("/meal-plans/{plan_id}/meals")
+def add_planned_meal(
+    plan_id: int,
+    recipe_id: int,
+    meal_date: str,
+    slot: str = "dinner",
+    servings: float = 2.0,
+    db: Session = Depends(get_session)
+):
+    plan = db.get(MealPlan, plan_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="Meal plan not found")
+    
+    recipe = db.get(Recipe, recipe_id)
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    
+    meal = PlannedMeal(
+        plan_id=plan_id,
+        recipe_id=recipe_id,
+        meal_date=date.fromisoformat(meal_date),
+        slot=slot,
+        servings=servings
+    )
+    db.add(meal)
+    db.commit()
+    
+    return {"status": "success", "meal_id": meal.id}
 
 
 @router.get("/pantry")

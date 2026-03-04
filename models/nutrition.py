@@ -23,6 +23,7 @@ class Recipe(SQLModel, table=True):
     
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(unique=True)
+    description: Optional[str] = None
     base_servings: int = 4
     calories_per_serving: Optional[float] = None
     protein_per_serving: Optional[float] = None

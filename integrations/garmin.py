@@ -3,10 +3,9 @@ Garmin integration using garth library.
 Requires: pip install garth
 Authentication: garth.login() then garth.save("~/.garth")
 """
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Optional
 
-from core.config import settings
 
 
 class GarminError(Exception):
