@@ -8,15 +8,6 @@ engine = create_engine(settings.DATABASE_URL, echo=False)
 
 
 def init_db():
-    from models.fitness import (
-        Exercise, WorkoutTemplate, TemplateExercise, ExerciseState,
-        ScheduledDay, GarminActivity, WorkoutLog, SetLog,
-        ExerciseHistory, DailyStats
-    )
-    from models.nutrition import (
-        Ingredient, Recipe, RecipeIngredient, MealPlan,
-        PlannedMeal, PantryItem, GroceryList, GroceryItem
-    )
     
     SQLModel.metadata.create_all(engine)
     
@@ -25,7 +16,6 @@ def init_db():
 
 def seed_if_empty():
     from models.fitness import Exercise
-    from models.nutrition import Ingredient, Recipe
     
     with Session(engine) as session:
         existing = session.exec(select(Exercise)).first()
@@ -115,6 +105,7 @@ def seed_recipes(session: Session):
     for recipe_data in data["recipes"]:
         recipe = Recipe(
             name=recipe_data["name"],
+            description=recipe_data.get("description"),
             base_servings=recipe_data.get("base_servings", 4),
             calories_per_serving=recipe_data.get("calories_per_serving"),
             protein_per_serving=recipe_data.get("protein_per_serving"),

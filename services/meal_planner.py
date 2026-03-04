@@ -1,8 +1,6 @@
 import os
-import json
 from datetime import date, timedelta
 from dataclasses import dataclass
-from typing import Optional
 
 
 CALORIE_SURPLUS = 300
@@ -66,12 +64,19 @@ def generate_meal_plan(
     for i in range(7):
         day_date = week_start + timedelta(days=i)
         
-        candidates = [r for r in recipes if r.is_batch_cook and r.id not in recent_days[-4:] if r.id not in recent_days]
+        # find all batch cooked meals that haven't been used recently
+        candidates = [r for r in recipes if r.is_batch_cook and r.id not in recent_days]
+
+        # if none found, find all batch cooked meals not used in the past 4 days
+        if not candidates:
+            candidates = [r for r in recipes if r.is_batch_cook and r.id not in recent_days[-4:]]
         
+        # if none found, find all batch cooked meals
         if not candidates:
             candidates = [r for r in recipes if r.is_batch_cook]
         
         scored = []
+        # ranking system for a given meal to be in the week
         for recipe in candidates:
             score = 0
             
@@ -89,6 +94,7 @@ def generate_meal_plan(
             
             scored.append((score, recipe.id, recipe))
         
+        # sort by score and then recipe ID (to be deterministic)
         scored.sort(key=lambda x: (x[0], -x[1]), reverse=True)
         
         if scored:

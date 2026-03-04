@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
         replace_existing=True
     )
     scheduler.start()
-    print(f"📅 APScheduler started with garmin_sync job")
+    print("📅 APScheduler started with garmin_sync job")
     
     yield
     

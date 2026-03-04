@@ -112,7 +112,8 @@
 
       const target = data.calories_target || 0;
       const burned = data.calories_burned_garmin || 0;
-      const macros = data.macros || { protein_g: 0, carbs_g: 0, fat_g: 0 };
+      const macrosCurrent = data.macros_current || { protein_g: 0, carbs_g: 0, fat_g: 0 };
+      const macrosTarget = data.macros_target || { protein_g: 0, carbs_g: 0, fat_g: 0 };
 
       let html = `<div style="display:flex;justify-content:space-between;margin-bottom:12px;font-size:13px;">
         <span>Target: ${target} cal</span>
@@ -120,9 +121,9 @@
       </div>`;
 
       const macroBars = [
-        { label: 'Protein', current: macros.protein_g, target: Math.round(target * 0.35 / 4) },
-        { label: 'Carbs', current: macros.carbs_g, target: Math.round(target * 0.40 / 4) },
-        { label: 'Fat', current: macros.fat_g, target: Math.round(target * 0.25 / 9) }
+        { label: 'Protein', current: macrosCurrent.protein_g, target: macrosTarget.protein_g },
+        { label: 'Carbs', current: macrosCurrent.carbs_g, target: macrosTarget.carbs_g },
+        { label: 'Fat', current: macrosCurrent.fat_g, target: macrosTarget.fat_g }
       ];
 
       for (const m of macroBars) {
@@ -149,7 +150,7 @@
       if (data.dinner) {
         html += `<div style="margin-top:8px;padding:8px;background:var(--surface);border-radius:4px;">
           <div style="font-size:11px;color:var(--muted);">Dinner</div>
-          <div style="font-size:12px;">${esc(data.dinner.recipe_name)}</div>
+          <div style="font-size:12px;cursor:pointer;color:var(--accent);" onclick="openTodaysDinnerModal()">${esc(data.dinner.recipe_name)}</div>
           <div style="font-size:10px;color:var(--muted);">${data.dinner.calories_per_serving} cal · ${data.dinner.protein_per_serving}g protein</div>
         </div>`;
       }
@@ -175,19 +176,21 @@
 
       let html = '<table style="width:100%;font-size:12px;border-collapse:collapse;"><thead><tr style="border-bottom:1px solid var(--border);"><th style="text-align:left;padding:4px;">Day</th><th style="text-align:left;padding:4px;">Lunch</th><th style="text-align:left;padding:4px;">Dinner</th><th></th></tr></thead><tbody>';
 
+      window._currentMealPlanData = data;
+      
       for (let i = 0; i < data.meals.length; i++) {
         const m = data.meals[i];
         const dateObj = new Date(m.date);
         const dayName = DAY_NAMES[dateObj.getDay()];
 
         const lunch = m.lunch ? `<span>${esc(m.lunch.recipe_name)}</span>` : '<span style="color:var(--muted)">—</span>';
-        const dinner = m.dinner ? `<span>${esc(m.dinner.recipe_name)}</span>` : '<span style="color:var(--muted)">—</span>';
+        const dinner = m.dinner ? `<span style="cursor:pointer;color:var(--accent);" onclick="openMealModal(${m.dinner.id}, '${m.date}')">${esc(m.dinner.recipe_name)}</span>` : `<button onclick="openAddMealModal('${m.date}')" style="background:transparent;border:none;padding:0;cursor:pointer;color:var(--accent);font-size:12px;">+ Add</button>`;
 
         html += `<tr style="border-bottom:1px solid var(--border);">
           <td style="padding:6px 4px;">${dayName}</td>
           <td style="padding:6px 4px;">${lunch}</td>
           <td style="padding:6px 4px;">${dinner}</td>
-          <td style="padding:6px 4px;text-align:right;">${m.dinner ? `<button onclick="swapMeal(${m.dinner.id})" style="background:transparent;border:1px solid var(--border);padding:2px 6px;cursor:pointer;font-size:10px;color:var(--muted);">Swap</button>` : ''}</td>
+          <td style="padding:6px 4px;text-align:right;">${m.dinner ? `<button onclick="openMealModal(${m.dinner.id}, '${m.date}')" style="background:transparent;border:1px solid var(--border);padding:2px 6px;cursor:pointer;font-size:10px;color:var(--muted);">Edit</button>` : `<button onclick="openAddMealModal('${m.date}')" style="background:transparent;border:1px solid var(--border);padding:2px 6px;cursor:pointer;font-size:10px;color:var(--muted);">Add</button>`}</td>
         </tr>`;
       }
 
@@ -265,6 +268,153 @@
     }
   };
 
+  window.openMealModal = async function(mealId, dateStr) {
+    const mealData = await fetchNutrition(`widgets/meal-plan`);
+    const allRecipes = await fetchNutrition('recipes');
+    
+    let mealInfo = null;
+    for (const day of mealData.meals) {
+      if (day.dinner && day.dinner.id === mealId) {
+        mealInfo = day.dinner;
+        break;
+      }
+    }
+    
+    if (!mealInfo) {
+      return;
+    }
+    
+    const recipeDetails = await fetchNutrition(`recipes/${mealInfo.recipe_id}`);
+    
+    let html = `<div class="modal-header"><h2>${mealInfo.recipe_name}</h2><button class="modal-close" onclick="closeModal()">&times;</button></div>`;
+    html += `<div class="modal-body">`;
+    
+    if (recipeDetails.description) {
+      html += `<p style="font-size:13px;color:var(--muted);margin-bottom:12px;">${esc(recipeDetails.description)}</p>`;
+    }
+    
+    html += `<div style="display:flex;gap:16px;margin-bottom:12px;font-size:12px;">`;
+    if (recipeDetails.calories_per_serving) {
+      html += `<span>${recipeDetails.calories_per_serving} cal</span>`;
+    }
+    if (recipeDetails.protein_per_serving) {
+      html += `<span>${recipeDetails.protein_per_serving}g protein</span>`;
+    }
+    if (recipeDetails.prep_minutes || recipeDetails.cook_minutes) {
+      html += `<span>${recipeDetails.prep_minutes || 0} prep / ${recipeDetails.cook_minutes || 0} cook min</span>`;
+    }
+    html += `</div>`;
+    
+    if (recipeDetails.ingredients && recipeDetails.ingredients.length > 0) {
+      html += `<div style="margin-bottom:16px;"><strong style="font-size:12px;">Ingredients</strong>`;
+      html += `<ul style="font-size:12px;margin:4px 0;padding-left:20px;">`;
+      for (const ing of recipeDetails.ingredients) {
+        html += `<li>${ing.quantity_per_serving} ${ing.unit || ''} ${esc(ing.name)}</li>`;
+      }
+      html += `</ul></div>`;
+    }
+    
+    html += `<div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px;">`;
+    html += `<label style="font-size:12px;display:block;margin-bottom:6px;">Replace with:</label>`;
+    html += `<select id="recipe-override-select" style="width:100%;padding:6px;margin-bottom:8px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:12px;">`;
+    html += `<option value="">-- Select a recipe --</option>`;
+    for (const r of allRecipes) {
+      const selected = r.id === mealInfo.recipe_id ? 'selected' : '';
+      html += `<option value="${r.id}" ${selected}>${esc(r.name)} (${r.calories_per_serving || '?'} cal)</option>`;
+    }
+    html += `</select>`;
+    html += `<div style="display:flex;gap:8px;">`;
+    html += `<button onclick="overrideMeal(${mealId})" style="flex:1;background:var(--accent);color:#000;border:none;padding:8px;cursor:pointer;border-radius:4px;font-size:12px;">Replace</button>`;
+    html += `<button onclick="deletePlannedMeal(${mealId})" style="flex:1;background:transparent;color:var(--danger);border:1px solid var(--danger);padding:8px;cursor:pointer;border-radius:4px;font-size:12px;">Delete</button>`;
+    html += `</div>`;
+    html += `</div>`;
+    
+    html += `</div>`;
+    
+    openModal(() => html, null, () => renderAll());
+  };
+
+  window.overrideMeal = async function(mealId) {
+    const select = document.getElementById('recipe-override-select');
+    const recipeId = select.value;
+    
+    if (!recipeId) {
+      return;
+    }
+    
+    try {
+      await fetch(`/nutrition/planned-meals/${mealId}/override?recipe_id=${recipeId}`, { method: 'PATCH' });
+      closeModal();
+      renderAll();
+    } catch (e) {
+      console.error('Override failed:', e);
+    }
+  };
+
+  window.deletePlannedMeal = async function(mealId) {
+    if (!confirm('Remove this meal from the plan?')) {
+      return;
+    }
+    
+    try {
+      await fetch(`/nutrition/planned-meals/${mealId}`, { method: 'DELETE' });
+      closeModal();
+      renderAll();
+    } catch (e) {
+      console.error('Delete failed:', e);
+    }
+  };
+
+  window.openTodaysDinnerModal = async function() {
+    const data = await fetchNutrition('widgets/today');
+    if (!data || !data.dinner || !data.dinner.meal_id) {
+      return;
+    }
+    openMealModal(data.dinner.meal_id, data.date);
+  };
+
+  window.openAddMealModal = async function(dateStr) {
+    const mealData = window._currentMealPlanData;
+    if (!mealData || !mealData.plan_id) {
+      return;
+    }
+    
+    const allRecipes = await fetchNutrition('recipes');
+    
+    let html = `<div class="modal-header"><h2>Add a Meal</h2><button class="modal-close" onclick="closeModal()">&times;</button></div>`;
+    html += `<div class="modal-body">`;
+    html += `<p style="font-size:13px;color:var(--muted);margin-bottom:12px;">Select a recipe for ${dateStr}:</p>`;
+    
+    html += `<select id="add-meal-recipe-select" style="width:100%;padding:8px;margin-bottom:12px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:13px;">`;
+    html += `<option value="">-- Select a recipe --</option>`;
+    for (const r of allRecipes) {
+      html += `<option value="${r.id}">${esc(r.name)} (${r.calories_per_serving || '?'} cal)</option>`;
+    }
+    html += `</select>`;
+    
+    html += `<button onclick="addMealToPlan('${dateStr}', ${mealData.plan_id})" style="width:100%;background:var(--accent);color:#000;border:none;padding:10px;cursor:pointer;border-radius:4px;font-size:13px;">Add to Plan</button>`;
+    html += `</div>`;
+    
+    openModal(() => html, null, () => renderAll());
+  };
+
+  window.addMealToPlan = async function(dateStr, planId) {
+    const select = document.getElementById('add-meal-recipe-select');
+    const recipeId = select.value;
+    
+    if (!recipeId) {
+      return;
+    }
+    
+    try {
+      await fetch(`/nutrition/meal-plans/${planId}/meals?recipe_id=${recipeId}&meal_date=${dateStr}&slot=dinner`, { method: 'POST' });
+      closeModal();
+      renderAll();
+    } catch (e) {
+      console.error('Add meal failed:', e);
+    }
+  };
+
   window.generateGroceryList = async function() {
     try {
       await fetch('/nutrition/grocery-list/generate', { method: 'POST' });
@@ -277,6 +427,7 @@
   window.toggleGroceryItem = async function(itemId, checkbox) {
     try {
       await fetch(`/nutrition/grocery-items/${itemId}/check`, { method: 'PATCH' });
+      renderAll();
     } catch (e) {
       checkbox.checked = !checkbox.checked;
     }

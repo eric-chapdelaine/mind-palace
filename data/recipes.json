@@ -2,6 +2,7 @@
   "recipes": [
     {
       "name": "Sheet Pan Chicken Thighs & Roasted Veg",
+      "description": "Bone-in chicken thighs roasted with broccoli on a sheet pan. Simple one-pan dinner with minimal cleanup.",
       "base_servings": 4,
       "calories_per_serving": 480,
       "protein_per_serving": 42,
@@ -19,6 +20,7 @@
     },
     {
       "name": "Garlic Butter Salmon",
+      "description": "Pan-seared salmon fillets finished with garlic butter sauce. Quick and elegant weeknight dinner.",
       "base_servings": 4,
       "calories_per_serving": 520,
       "protein_per_serving": 45,
@@ -37,6 +39,7 @@
     },
     {
       "name": "Beef Stir Fry",
+      "description": "Quick ground beef stir fry with bell peppers and broccoli. Serve over rice with soy sauce.",
       "base_servings": 4,
       "calories_per_serving": 490,
       "protein_per_serving": 38,
@@ -56,6 +59,7 @@
     },
     {
       "name": "Greek Chicken Souvlaki",
+      "description": "Greek-inspired chicken wraps with cucumber and yogurt sauce. Mediterranean flavors in a handheld meal.",
       "base_servings": 4,
       "calories_per_serving": 450,
       "protein_per_serving": 42,
@@ -74,6 +78,7 @@
     },
     {
       "name": "Turkey Meatballs",
+      "description": "Homemade turkey meatballs in marinara sauce. Serve over pasta for a classic comfort meal.",
       "base_servings": 4,
       "calories_per_serving": 420,
       "protein_per_serving": 36,
@@ -92,6 +97,7 @@
     },
     {
       "name": "Steak & Sweet Potato",
+      "description": "Pan-seared ribeye steak with roasted sweet potato wedges. A hearty, protein-packed dinner.",
       "base_servings": 4,
       "calories_per_serving": 550,
       "protein_per_serving": 45,
@@ -109,6 +115,7 @@
     },
     {
       "name": "Pork Tenderloin with Apples",
+      "description": "Sliced pork tenderloin with caramelized apples. A sweet and savory combination.",
       "base_servings": 4,
       "calories_per_serving": 430,
       "protein_per_serving": 40,
@@ -126,6 +133,7 @@
     },
     {
       "name": "Shrimp Scampi",
+      "description": "Garlic butter shrimp served over pasta. Quick 15-minute meal with big flavor.",
       "base_servings": 4,
       "calories_per_serving": 460,
       "protein_per_serving": 38,
@@ -145,6 +153,7 @@
     },
     {
       "name": "Beef Chili",
+      "description": "Hearty beef and kidney bean chili. Great for meal prep and freezes well.",
       "base_servings": 6,
       "calories_per_serving": 410,
       "protein_per_serving": 32,
@@ -163,6 +172,7 @@
     },
     {
       "name": "Chicken Tikka Masala",
+      "description": "Creamy Indian-inspired chicken curry with rice. Rich, flavorful, and satisfying.",
       "base_servings": 4,
       "calories_per_serving": 490,
       "protein_per_serving": 40,
@@ -182,6 +192,7 @@
     },
     {
       "name": "Pork Chops & Sauerkraut",
+      "description": "Pan-fried pork chops with sauerkraut and apple. German-inspired comfort food.",
       "base_servings": 4,
       "calories_per_serving": 440,
       "protein_per_serving": 42,
@@ -199,6 +210,7 @@
     },
     {
       "name": "Baked Cod with Tomatoes",
+      "description": "Oven-baked cod with diced tomatoes and capers. Light, healthy, and flavorful.",
       "base_servings": 4,
       "calories_per_serving": 380,
       "protein_per_serving": 42,
@@ -217,6 +229,7 @@
     },
     {
       "name": "Sausage & Peppers",
+      "description": "Italian sausage with bell peppers and onions in a hoagie roll. Classic sandwich.",
       "base_servings": 4,
       "calories_per_serving": 480,
       "protein_per_serving": 28,
@@ -235,6 +248,7 @@
     },
     {
       "name": "Stuffed Peppers",
+      "description": "Bell peppers stuffed with ground beef and rice, topped with melted cheese.",
       "base_servings": 4,
       "calories_per_serving": 420,
       "protein_per_serving": 32,
@@ -253,6 +267,7 @@
     },
     {
       "name": "Tuna Steak with Sesame",
+      "description": "Pan-seared tuna steak with sesame crust and broccoli. Light yet satisfying.",
       "base_servings": 4,
       "calories_per_serving": 420,
       "protein_per_serving": 48,
@@ -271,6 +286,7 @@
     },
     {
       "name": "Pulled Pork",
+      "description": "Slow-cooked pulled pork shoulder with BBQ sauce. Serve on burger buns.",
       "base_servings": 6,
       "calories_per_serving": 450,
       "protein_per_serving": 38,
@@ -288,6 +304,7 @@
     },
     {
       "name": "Egg Frittata",
+      "description": "Baked eggs with bacon, spinach, and cheddar. Easy breakfast-for-dinner option.",
       "base_servings": 4,
       "calories_per_serving": 380,
       "protein_per_serving": 28,
@@ -306,6 +323,7 @@
     },
     {
       "name": "Lamb Chops with Rosemary",
+      "description": "Pan-seared lamb chops with rosemary and garlic. Elegant yet simple dinner.",
       "base_servings": 4,
       "calories_per_serving": 480,
       "protein_per_serving": 42,
@@ -324,6 +342,7 @@
     },
     {
       "name": "Chicken Parmesan",
+      "description": "Breaded chicken breast with marinara and melted mozzarella over pasta.",
       "base_servings": 4,
       "calories_per_serving": 520,
       "protein_per_serving": 45,
@@ -342,6 +361,7 @@
     },
     {
       "name": "Lemon Herb Chicken",
+      "description": "Pan-seared chicken breast with lemon, olive oil, and green beans.",
       "base_servings": 4,
       "calories_per_serving": 400,
       "protein_per_serving": 44,

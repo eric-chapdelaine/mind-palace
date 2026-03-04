@@ -1,7 +1,6 @@
 import json
 import garth
 from datetime import datetime, timedelta
-from typing import Optional
 
 
 class GarminFitnessError(Exception):

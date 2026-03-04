@@ -1,6 +1,5 @@
 import os
 from datetime import date, timedelta
-from datetime import datetime
 from sqlmodel import Session, select
 
 from core.database import engine
@@ -12,6 +11,7 @@ from services.progression import evaluate, Prescription, SessionResult, SetResul
 
 
 CALORIE_SURPLUS = 300
+MISC_MOVEMENT = 300
 COMMUTE_MAX_DURATION_MINUTES = 25
 
 
@@ -29,7 +29,7 @@ def _calculate_bmr() -> int:
 
 def sync_garmin():
     try:
-        from integrations.garmin_fitness import get_recent_activities, get_strength_exercise_sets
+        from integrations.garmin_fitness import get_recent_activities
     except Exception as e:
         print(f"⚠️  Garmin integration not available: {e}")
         return
@@ -236,7 +236,7 @@ def _update_daily_stats(session: Session):
         total_calories = sum(a.calories or 0 for a in activities)
         
         bmr = _calculate_bmr()
-        calories_target = bmr + total_calories + CALORIE_SURPLUS
+        calories_target = bmr + total_calories + MISC_MOVEMENT + CALORIE_SURPLUS
         
         stats = session.exec(
             select(DailyStats).where(DailyStats.stat_date == d)
