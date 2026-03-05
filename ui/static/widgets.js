@@ -4,7 +4,7 @@
 // Each widget needs: id, title, data(), render()
 //
 // Shared helpers available from core.js:
-//   fetchVikunja(projectId?)  fetchGroceries()
+//   fetchTodos()  fetchGroceries()
 //   parseDate(s)  fmtDate(d)  startOfDay(d)  endOfDay(d)  endOfWeek(d)  esc(s)
 // ─────────────────────────────────────────────────────────────
 
@@ -12,7 +12,7 @@
 function taskRow(task, metaClass = '') {
   const d = parseDate(task.due_date);
   const taskId = task.id;
-  const isDone = task.done;
+  const isDone = task.status === 'COMPLETED';
   return `
     <div class="task-item ${isDone ? 'completed' : ''}" data-task-id="${taskId}">
       <input type="checkbox" class="task-checkbox" ${isDone ? 'checked' : ''} onclick="event.stopPropagation();toggleTaskStatus(${taskId}, ${!isDone})">
@@ -138,11 +138,12 @@ function renderTodoModal(todo) {
   const hasTime = d && (d.getHours() || d.getMinutes() || d.getSeconds());
   const dueDateDisplay = d 
     ? d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) +
-      (hasTime ? ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '')
+      (hasTime ? ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }): '')
     : '<span class="muted">Click to set due date...</span>';
   const descriptionHtml = todo.description 
     ? marked.parse(todo.description, { breaks: true }) 
     : '<span class="muted">Click to add description...</span>';
+  const isDone = todo.status === 'COMPLETED';
   return `
     <div class="modal-header">
       <h2>${esc(todo.title)}</h2>
@@ -157,8 +158,8 @@ function renderTodoModal(todo) {
       <div class="modal-field">
         <label>Status</label>
         <label class="status-toggle">
-          <input type="checkbox" id="task-status" ${todo.done ? 'checked' : ''} onchange="saveTaskStatus()">
-          <span>${todo.done ? 'Completed' : 'TODO'}</span>
+          <input type="checkbox" id="task-status" ${isDone ? 'checked' : ''} onchange="saveTaskStatus()">
+          <span>${isDone ? 'Completed' : 'TODO'}</span>
         </label>
       </div>
       <div class="modal-field">
@@ -319,7 +320,7 @@ registerWidget({
   id: 'tasks-today',
   title: 'Today & Overdue',
   async data() {
-    const tasks = await fetchVikunja();
+    const tasks = await fetchTodos();
     const eod = endOfDay(new Date());
     const filtered = tasks.filter(t => {
       const d = parseDate(t.due_date);
@@ -345,7 +346,7 @@ registerWidget({
   id: 'tasks-week',
   title: 'This Week',
   async data() {
-    const tasks = await fetchVikunja();
+    const tasks = await fetchTodos();
     const now = new Date();
     const filtered = tasks.filter(t => {
       if (!t.due_date) return false;
@@ -369,7 +370,7 @@ registerWidget({
   id: 'tasks-later',
   title: 'Upcoming',
   async data() {
-    const tasks = await fetchVikunja();
+    const tasks = await fetchTodos();
     const eow = endOfWeek(new Date());
     const filtered = tasks.filter(t => {
       const d = parseDate(t.due_date);

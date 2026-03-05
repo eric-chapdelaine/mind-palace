@@ -1,10 +1,5 @@
 """
-/todos  — create, list, and sync todo items through Vikunja.
-
-Designed to be called from:
-  - iPhone Shortcuts (PUT /todos  with JSON body)
-  - IoT devices       (PUT /todos  with query params as fallback)
-  - Future automations
+/todos  — create, list, and update local todo items.
 """
 from datetime import datetime
 from typing import Optional
@@ -14,31 +9,34 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from core.database import get_session
-from integrations.vikunja import VikunjaClient, VikunjaError, get_vikunja_client
-from models.items import TodoItem
+from models.items import TodoItem, TodoStatus
 
 router = APIRouter(prefix="/todos", tags=["todos"])
 
 
 # ---------------------------------------------------------------------------
-# Request / Response schemas (separate from DB models)
+# Request / Response schemas
 # ---------------------------------------------------------------------------
 
 class TodoCreate(BaseModel):
     title: str
-    notes: Optional[str] = None
-    due_date: Optional[datetime] = None   # client sends ISO 8601
-    project_id: Optional[int] = None      # override inbox project if needed
+    description: Optional[str] = None
+    due_date: Optional[datetime] = None
+
+
+class TodoUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    due_date: Optional[datetime] = None
+    status: Optional[TodoStatus] = None
 
 
 class TodoRead(BaseModel):
     id: int
     title: str
-    notes: Optional[str]
+    description: Optional[str]
     due_date: Optional[datetime]
-    vikunja_id: Optional[int]
-    project_id: Optional[int]
-    synced: bool
+    status: TodoStatus
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -49,39 +47,17 @@ class TodoRead(BaseModel):
 # ---------------------------------------------------------------------------
 
 @router.post("/", response_model=TodoRead, status_code=201)
-async def create_todo(
+def create_todo(
     body: TodoCreate,
     db: Session = Depends(get_session),
-    vikunja: VikunjaClient = Depends(get_vikunja_client),
 ):
-    """
-    Create a new todo and immediately push it to Vikunja.
-    Falls back to local-only storage if Vikunja is unreachable,
-    so IoT devices never get a failed response over bad WiFi.
-    """
+    """Create a new todo item."""
     item = TodoItem(
         title=body.title,
-        notes=body.notes,
+        description=body.description,
         due_date=body.due_date,
-        project_id=body.project_id,
+        status=TodoStatus.TODO,
     )
-
-    # Try Vikunja — degrade gracefully
-    try:
-        result = await vikunja.create_task(
-            title=body.title,
-            project_id=body.project_id,
-            notes=body.notes,
-            due_date=body.due_date.isoformat() if body.due_date else None,
-        )
-        item.vikunja_id = result.get("id")
-        item.synced = True
-    except VikunjaError as e:
-        # Store locally; a future sync job can push unsynced items
-        item.synced = False
-        # Surface the degraded state in logs but don't fail the request
-        print(f"⚠️  Vikunja unavailable ({e}), saved locally for later sync.")
-
     db.add(item)
     db.commit()
     db.refresh(item)
@@ -90,69 +66,14 @@ async def create_todo(
 
 @router.get("/", response_model=list[TodoRead])
 def list_todos(
-    synced: Optional[bool] = Query(default=None, description="Filter by sync status"),
+    status: Optional[TodoStatus] = Query(default=None, description="Filter by status"),
     db: Session = Depends(get_session),
 ):
-    """List all local todo items, optionally filtered by sync status."""
+    """List all todo items, optionally filtered by status."""
     query = select(TodoItem)
-    if synced is not None:
-        query = query.where(TodoItem.synced == synced)
+    if status is not None:
+        query = query.where(TodoItem.status == status)
     return db.exec(query).all()
-
-
-@router.post("/sync", response_model=list[TodoRead])
-async def sync_unsynced(
-    db: Session = Depends(get_session),
-    vikunja: VikunjaClient = Depends(get_vikunja_client),
-):
-    """
-    Push any locally-queued (unsynced) items to Vikunja.
-    Useful to call after connectivity is restored.
-    """
-    pending = db.exec(select(TodoItem).where(TodoItem.synced == False)).all()
-    synced_items = []
-
-    for item in pending:
-        try:
-            result = await vikunja.create_task(
-                title=item.title,
-                project_id=item.project_id,
-                notes=item.notes,
-                due_date=item.due_date.isoformat() if item.due_date else None,
-            )
-            item.vikunja_id = result.get("id")
-            item.synced = True
-            db.add(item)
-            synced_items.append(item)
-        except VikunjaError as e:
-            print(f"⚠️  Could not sync item '{item.title}': {e}")
-
-    db.commit()
-    return synced_items
-
-
-@router.get("/vikunja", response_model=list[dict])
-async def list_vikunja_tasks(
-    project_id: Optional[int] = Query(default=None),
-    vikunja: VikunjaClient = Depends(get_vikunja_client),
-):
-    """Proxy: fetch tasks directly from Vikunja (live view)."""
-    try:
-        return await vikunja.get_tasks(project_id=project_id)
-    except VikunjaError as e:
-        raise HTTPException(status_code=e.status_code, detail=str(e))
-
-
-@router.get("/by-vikunja/{vikunja_id}", response_model=TodoRead)
-def get_todo_by_vikunja(
-    vikunja_id: int,
-    db: Session = Depends(get_session),
-):
-    """Get a todo by its Vikunja ID for modal display."""
-    item = db.exec(select(TodoItem).where(TodoItem.vikunja_id == vikunja_id)).first()
-    if not item:
-        raise HTTPException(status_code=404, detail="Todo not found")
-    return item
 
 
 @router.get("/{todo_id}", response_model=TodoRead)
@@ -160,57 +81,47 @@ def get_todo(
     todo_id: int,
     db: Session = Depends(get_session),
 ):
-    """Get a specific todo by local ID for modal display."""
+    """Get a specific todo by ID."""
     item = db.get(TodoItem, todo_id)
     if not item:
         raise HTTPException(status_code=404, detail="Todo not found")
     return item
 
 
-@router.get("/vikunja/{vikunja_task_id}", response_model=dict)
-async def get_vikunja_task(
-    vikunja_task_id: int,
-    vikunja: VikunjaClient = Depends(get_vikunja_client),
+@router.patch("/{todo_id}", response_model=TodoRead)
+def update_todo(
+    todo_id: int,
+    body: TodoUpdate,
+    db: Session = Depends(get_session),
 ):
-    """Get a specific task directly from Vikunja by its Vikunja ID."""
-    try:
-        return await vikunja.get_task(vikunja_task_id)
-    except VikunjaError as e:
-        raise HTTPException(status_code=e.status_code, detail=str(e))
+    """Update a todo item."""
+    item = db.get(TodoItem, todo_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Todo not found")
+
+    if body.title is not None:
+        item.title = body.title
+    if body.description is not None:
+        item.description = body.description
+    if body.due_date is not None:
+        item.due_date = body.due_date
+    if body.status is not None:
+        item.status = body.status
+
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
 
 
-@router.patch("/vikunja/{vikunja_task_id}", response_model=dict)
-async def update_task(
-    vikunja_task_id: int,
-    fields: dict,
-    vikunja: VikunjaClient = Depends(get_vikunja_client),
+@router.delete("/{todo_id}", status_code=204)
+def delete_todo(
+    todo_id: int,
+    db: Session = Depends(get_session),
 ):
-    """
-    Update a Vikunja task with the given fields.
-    
-    This endpoint is generic and accepts any valid Vikunja task fields.
-    Common fields include:
-        - title: str
-        - description: str
-        - due_date: str (ISO 8601)
-        - done: bool
-        - priority: int (0-5)
-    
-    The request body should be a JSON object with the fields to update.
-    """
-    try:
-        return await vikunja.update_task(vikunja_task_id, **fields)
-    except VikunjaError as e:
-        raise HTTPException(status_code=e.status_code, detail=str(e))
-
-
-@router.delete("/vikunja/{vikunja_task_id}", status_code=204)
-async def delete_task(
-    vikunja_task_id: int,
-    vikunja: VikunjaClient = Depends(get_vikunja_client),
-):
-    """Delete a task from Vikunja."""
-    try:
-        await vikunja.delete_task(vikunja_task_id)
-    except VikunjaError as e:
-        raise HTTPException(status_code=e.status_code, detail=str(e))
+    """Delete a todo item."""
+    item = db.get(TodoItem, todo_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Todo not found")
+    db.delete(item)
+    db.commit()
