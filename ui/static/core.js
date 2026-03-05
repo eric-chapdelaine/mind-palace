@@ -67,9 +67,8 @@ function bustCache() {
 }
 
 // Convenience fetchers widgets can call
-async function fetchVikunja(projectId) {
-    const url = '/todos/vikunja' + (projectId ? `?project_id=${projectId}` : '');
-    return cachedFetch(`vikunja:${projectId ?? 'default'}`, url);
+async function fetchTodos() {
+    return cachedFetch('todos', '/todos/');
 }
 
 async function fetchGroceries() {
@@ -77,16 +76,22 @@ async function fetchGroceries() {
 }
 
 async function fetchTodo(todoId) {
-    const res = await fetch(`/todos/vikunja/${todoId}`);
+    const res = await fetch(`/todos/${todoId}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
 }
 
 async function updateTodo(todoId, fields) {
-    const res = await fetch(`/todos/vikunja/${todoId}`, {
+    // Convert 'done' boolean to 'status' string for backend
+    const body = { ...fields };
+    if ('done' in body) {
+        body.status = body.done ? 'COMPLETED' : 'TODO';
+        delete body.done;
+    }
+    const res = await fetch(`/todos/${todoId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(fields),
+        body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
@@ -94,7 +99,7 @@ async function updateTodo(todoId, fields) {
 
 async function createTodo(title, description, dueDate) {
     const body = { title };
-    if (description) body.notes = description;
+    if (description) body.description = description;
     if (dueDate) body.due_date = dueDate;
     const res = await fetch(`/todos/`, {
         method: 'POST',
@@ -106,7 +111,7 @@ async function createTodo(title, description, dueDate) {
 }
 
 async function deleteTodo(todoId) {
-    const res = await fetch(`/todos/vikunja/${todoId}`, {
+    const res = await fetch(`/todos/${todoId}`, {
         method: 'DELETE',
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -207,9 +212,10 @@ async function renderAll() {
                         const data = await widget.data();
                         const countEl = container.querySelector(`#count-${widget.id}`);
                         const listEl = container.querySelector(`#list-${widget.id}`);
+                        const hasData = data != null && typeof data === 'object' && 'length' in data;
                         if (countEl) {
-                            countEl.textContent = data.length;
-                            countEl.className = `widget-count ${data.length > 0 ? 'has-items' : ''}`;
+                            countEl.textContent = hasData ? data.length : '—';
+                            countEl.className = `widget-count ${hasData && data.length > 0 ? 'has-items' : ''}`;
                         }
                         if (listEl) listEl.innerHTML = widget.render(data);
                     } catch (e) {
@@ -225,14 +231,6 @@ async function renderAll() {
     // First render - create everything from scratch
     content.innerHTML = '';
     bustCache();
-
-    // Update integration status dots
-    try {
-        await fetchVikunja();
-        document.getElementById('vikunja-dot').className = 'status-dot ok';
-    } catch {
-        document.getElementById('vikunja-dot').className = 'status-dot err';
-    }
 
     // Render widgets in parallel — each fails independently
     WIDGETS.forEach(w => renderWidget(w, content, true));

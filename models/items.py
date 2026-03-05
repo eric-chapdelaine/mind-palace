@@ -1,6 +1,12 @@
 from datetime import datetime
+from enum import Enum
 from typing import Optional
 from sqlmodel import Field, SQLModel
+
+
+class TodoStatus(str, Enum):
+    TODO = "TODO"
+    COMPLETED = "COMPLETED"
 
 
 class GroceryItem(SQLModel, table=True):
@@ -11,15 +17,10 @@ class GroceryItem(SQLModel, table=True):
 
 
 class TodoItem(SQLModel, table=True):
-    """
-    Local mirror / queue for todo items before/after Vikunja sync.
-    Useful for offline queuing when the vikunja integration doesn't work
-    """
+    """Local todo items stored in SQLite."""
     id: Optional[int] = Field(default=None, primary_key=True)
     title: str
-    notes: Optional[str] = None
+    description: Optional[str] = None
     due_date: Optional[datetime] = None
-    vikunja_id: Optional[int] = None          # set after successful push
-    project_id: Optional[int] = None
-    synced: bool = False
+    status: TodoStatus = TodoStatus.TODO
     created_at: datetime = Field(default_factory=datetime.utcnow)

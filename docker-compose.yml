@@ -1,20 +1,5 @@
 version: '3.3'
 services:
-  vikunja:
-    image: vikunja/vikunja:0.24.4
-    ports:
-      - "3456:3456"
-    volumes:
-      - ./vikunja-db:/db
-      - ./vikunja-files:/app/vikunja/files
-      - vikunja-cache:/.cache
-    environment:
-      - VIKUNJA_SERVICE_TIMEZONE=America/New_York
-      - VIKUNJA_DATABASE_TYPE=sqlite
-      - VIKUNJA_DATABASE_FILE=/db/vikunja.db
-      - VIKUNJA_SERVICE_PUBLICURL=http://localhost:3456
-    restart: unless-stopped
-
   mind-palace:
     build: .
     ports:
@@ -22,12 +7,5 @@ services:
     volumes:
       - ./mind-palace.db:/app/mind-palace.db
     environment:
-      - VIKUNJA_URL=http://vikunja:3456/api/v1
-      - VIKUNJA_TOKEN=${VIKUNJA_TOKEN}
-      - VIKUNJA_INBOX_PROJECT_ID=1
-    depends_on:
-      - vikunja
+      - DATABASE_URL=sqlite:///./mind-palace.db
     restart: unless-stopped
-
-volumes:
-    vikunja-cache:
