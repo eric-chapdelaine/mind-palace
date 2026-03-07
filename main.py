@@ -15,22 +15,22 @@ scheduler = AsyncIOScheduler()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    print(f"🚀 {settings.APP_TITLE} v{settings.APP_VERSION}: Database initialized.")
-    
+    print(f"{settings.APP_TITLE} v{settings.APP_VERSION}: Database initialized.")
+
     scheduler.add_job(
         sync_garmin,
         'interval',
         minutes=30,
         id='garmin_sync',
-        replace_existing=True
+        replace_existing=True,
     )
     scheduler.start()
-    print("📅 APScheduler started with garmin_sync job")
-    
+    print("APScheduler started with garmin_sync job (every 30 min)")
+
     yield
-    
+
     scheduler.shutdown()
-    print(f"🔌 {settings.APP_TITLE}: Shutting down gracefully.")
+    print(f"{settings.APP_TITLE}: Shutting down gracefully.")
 
 
 app = FastAPI(
@@ -53,9 +53,7 @@ app.include_router(fitness.router)
 app.include_router(nutrition.router)
 
 # Future routers drop in here:
-# app.include_router(calendar.router)
 # app.include_router(finance.router)
-# app.include_router(health.router)
 
 
 @app.get("/health", tags=["meta"])
@@ -68,7 +66,7 @@ def sync_garmin():
         from services.garmin_sync import sync_garmin as _sync
         _sync()
     except Exception as e:
-        print(f"⚠️  Garmin sync failed: {e}")
+        print(f"Garmin sync failed: {e}")
 
 
 if __name__ == "__main__":

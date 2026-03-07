@@ -1,21 +1,17 @@
 import os
 from datetime import date, timedelta
 from dataclasses import dataclass
-from typing import Optional
 
 
-TRAINING_AGE = "beginner"
 LIFTS_PER_WEEK = int(os.getenv("LIFTS_PER_WEEK", "3"))
-NO_LIFT_DAY = 2
-GYM_EQUIPMENT = "barbell"
-DELOAD_AFTER_FAILS = 3
+NO_LIFT_DAY = 2  # Wednesday (0=Mon)
 
 
 @dataclass
 class ScheduledDayData:
     date: date
-    template_id: Optional[int]
-    template_name: Optional[str]
+    template_id: int | None
+    template_name: str | None
     session_type: str
     status: str
 

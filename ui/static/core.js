@@ -31,7 +31,6 @@ function parseDate(s) {
 }
 
 function fmtDate(d) {
-    console.log(JSON.stringify(d));
     if (!d) return '';
     const now = new Date();
     const diff = d - now;
