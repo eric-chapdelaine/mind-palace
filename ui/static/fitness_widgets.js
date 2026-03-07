@@ -452,13 +452,27 @@
           html += `<div style="margin-bottom:6px;padding:6px;background:var(--surface);border-radius:4px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
               <span style="font-weight:500;">${esc(ev.recipe_name || 'Unknown Recipe')}</span>
-              <span style="font-size:10px;color:var(--muted);">${consumed.toFixed(0)} / ${produced} srv planned${surplus ? '' : ''}</span>
+              <span style="font-size:10px;color:var(--muted);">${consumed.toFixed(0)} / ${produced} srv planned</span>
             </div>
             <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;">
               <div style="height:100%;width:${Math.round(assignedPct * 100)}%;background:${barColor};border-radius:2px;"></div>
             </div>
             ${surplus ? `<div style="margin-top:3px;">${surplusLabel}</div>` : ''}
             ${ev.notes ? `<div style="font-size:10px;color:var(--muted);margin-top:3px;">${esc(ev.notes)}</div>` : ''}
+            <div style="display:flex;gap:6px;margin-top:6px;align-items:center;">
+              <button onclick="toggleMoveCookPanel(${ev.id})"
+                style="font-size:10px;padding:2px 8px;background:transparent;border:1px solid var(--border);color:var(--text);border-radius:3px;cursor:pointer;">Move</button>
+              <button onclick="deleteCookEvent(${ev.id})"
+                style="font-size:10px;padding:2px 8px;background:transparent;border:1px solid var(--danger);color:var(--danger);border-radius:3px;cursor:pointer;">Delete</button>
+            </div>
+            <div id="move-cook-panel-${ev.id}" style="display:none;margin-top:6px;display:none;gap:6px;align-items:center;">
+              <input type="date" id="move-cook-date-${ev.id}" value="${ev.cook_date || ''}"
+                style="font-size:11px;padding:3px 6px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:3px;">
+              <button onclick="submitMoveCookEvent(${ev.id})"
+                style="font-size:10px;padding:3px 8px;background:var(--accent);color:#000;border:none;border-radius:3px;cursor:pointer;">Confirm</button>
+              <button onclick="toggleMoveCookPanel(${ev.id})"
+                style="font-size:10px;padding:3px 8px;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:3px;cursor:pointer;">Cancel</button>
+            </div>
           </div>`;
         }
 
@@ -782,6 +796,46 @@
     } catch (e) {
       console.error('Log cook failed:', e);
     }
+  };
+
+  window.toggleMoveCookPanel = function(eventId) {
+    const panel = document.getElementById(`move-cook-panel-${eventId}`);
+    if (!panel) return;
+    panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+  };
+
+  window.submitMoveCookEvent = async function(eventId) {
+    const input = document.getElementById(`move-cook-date-${eventId}`);
+    const newDate = input?.value;
+    if (!newDate) return;
+
+    const res = await fetch(`/nutrition/cook-events/${eventId}/move`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cook_date: newDate }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(err.detail || 'Failed to move cook event.');
+      return;
+    }
+
+    renderAll();
+  };
+
+  window.deleteCookEvent = async function(eventId) {
+    if (!confirm('Delete this cook event and all its planned meals?')) return;
+
+    const res = await fetch(`/nutrition/cook-events/${eventId}`, { method: 'DELETE' });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(err.detail || 'Failed to delete cook event.');
+      return;
+    }
+
+    renderAll();
   };
 
   // ── Week-day modal: skip, override exercises, add exercise, regenerate ──

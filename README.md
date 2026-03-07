@@ -59,23 +59,19 @@ mind-palace/
 ## Running the Application
 
 ```bash
-# Using virtual environment
-source .venv/bin/activate
+# Production (Docker) — port 80 → 8000, source is volume-mounted
+docker compose up -d
+docker restart mind-palace-mind-palace-1   # required after any Python file change
+docker compose logs -f
 
-# Development server with auto-reload
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-
-# Or directly
-python main.py
-```
-
-## Setup
-
-```bash
+# Local development (venv)
 pip install -r requirements.txt
-cp .env.example .env   # configure optional integrations (Garmin, Google Calendar)
-python main.py
+cp .env.example .env
+source .venv/bin/activate
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+> JS/CSS changes in `ui/static/` are live immediately in both modes. Python changes always require a restart.
 
 ## API Reference
 
@@ -117,18 +113,21 @@ python main.py
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/nutrition/widgets/today` | Today's nutrition summary (calories, macros) |
-| `GET` | `/nutrition/widgets/meal-plan` | This week's meal plan |
-| `POST` | `/nutrition/meal-plans/generate` | Generate meal plan for the week |
+| `GET` | `/nutrition/widgets/today` | Today's nutrition summary (calories, macros, `calories_burned_source`) |
+| `GET` | `/nutrition/widgets/day` | Nutrition summary for any day (`?day=YYYY-MM-DD`) |
+| `GET` | `/nutrition/widgets/meal-plan` | This week's meal plan (`?week=YYYY-MM-DD`) |
+| `POST` | `/nutrition/meal-plans/generate` | Generate workout-aware meal plan for the week |
 | `POST` | `/nutrition/cook-events` | Record a cooking event |
 | `GET` | `/nutrition/cook-events` | List cook events with remaining servings |
-| `POST` | `/nutrition/planned-meals/{id}/swap` | Swap a meal |
+| `PATCH` | `/nutrition/cook-events/{id}/move` | Move cook event to a new date (validated against linked meals) |
+| `DELETE` | `/nutrition/cook-events/{id}` | Delete cook event and all linked planned meals |
+| `POST` | `/nutrition/planned-meals/{id}/swap` | Swap a meal for the next best recipe |
 | `PATCH` | `/nutrition/planned-meals/{id}/override` | Replace meal with specific recipe |
 | `PATCH` | `/nutrition/planned-meals/{id}/move` | Move meal to different date/slot |
 | `DELETE` | `/nutrition/planned-meals/{id}` | Delete a planned meal |
 | `POST` | `/nutrition/meal-plans/{plan_id}/meals` | Add a meal to plan |
 | `GET` | `/nutrition/grocery-list` | Get grocery list |
-| `POST` | `/nutrition/grocery-list/generate` | Generate grocery list from meal plan |
+| `POST` | `/nutrition/grocery-list/generate` | Generate grocery list (from stored meals, subtracts pantry) |
 | `PATCH` | `/nutrition/grocery-items/{id}/check` | Toggle grocery item checked |
 | `GET` | `/nutrition/recipes` | List all recipes |
 | `GET` | `/nutrition/recipes/{id}` | Recipe details with ingredients |
@@ -318,31 +317,36 @@ python -c "import garth; garth.login(); garth.save('~/.garth')"
 ### Meal Planning
 
 The meal planner generates weekly meal plans using a deterministic algorithm:
-- Alternates between breakfast, lunch, dinner slots
-- Prioritizes batch cook recipes to reduce cooking frequency
-- Avoids repeating same meals within the week
-- Targets configured calorie and macro goals (via `health_calc.py`)
+- One batch-cook dinner per day; leftovers become the next day's lunch (4 servings per batch: 2 dinner + 2 lunch)
+- On workout days, an additional breakfast meal is added to cover extra calorie burn
+- Breakfast candidates are non-batch-cook recipes (or tagged "breakfast"), scored by protein content
+- Avoids repeating meals within the week and recent past weeks
+- Calorie targets adapt per day: Garmin-synced burn data takes priority over schedule-based estimates
 
 ### Cook Events
 
 Meals use a cook-then-eat model:
 - **CookEvent**: Records when a recipe is cooked and how many servings it produces
 - **PlannedMeal**: A meal slot that optionally references a CookEvent
-- Tracking is soft — remaining servings are advisory, not enforced
-- Meals can be swapped, replaced, moved to different dates/slots, or deleted
+- Serving counts are advisory (not hard-enforced), but meals may not be placed before their cook date
+- Cook events can be rescheduled mid-week: moving earlier is always allowed; moving later is rejected if any linked meal would end up before the new cook date (HTTP 422 with a description of conflicting meals)
+- Deleting a cook event cascades to all linked planned meals
+- Meals can be swapped, replaced, moved to different dates/slots, or deleted independently
 
 ### Grocery Lists
 
-Automatically generates grocery lists from meal plans:
-- Aggregates ingredients across all meals
-- Combines quantities for common ingredients
-- Marks items as purchased as you shop
+Generated from the stored `PlannedMeal` rows for the week:
+- Aggregates ingredient quantities from each meal's actual servings
+- Subtracts pantry stock before showing what to buy
+- Includes ingredients from both dinner batches and breakfast meals
+- Items are grouped by store section (protein, produce, dairy, grains, frozen, pantry)
+- Mark items as purchased as you shop
 
 ### Recipes & Pantry
 
 - Browse and view recipe details with ingredients and nutrition info
 - Manage pantry items (add, update, delete)
-- Pantry items are considered when generating grocery lists
+- Pantry items are subtracted when generating grocery lists
 
 ## iPhone Shortcut
 

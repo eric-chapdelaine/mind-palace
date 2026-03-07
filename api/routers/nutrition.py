@@ -14,7 +14,7 @@ from models.nutrition import (
 )
 from models.fitness import DailyStats, ScheduledDay
 from schemas.nutrition import (
-    CookEventCreate, CookEventRead,
+    CookEventCreate, CookEventMove, CookEventRead,
     PlannedMealCreate, PlannedMealMove, PlannedMealRead,
     PantryItemCreate, PantryItemRead,
     RecipeRead, RecipeDetailRead, IngredientRead,
@@ -440,6 +440,67 @@ def list_cook_events(week: str | None = None, db: Session = Depends(get_session)
         ))
 
     return result
+
+
+@router.delete("/cook-events/{event_id}", status_code=200)
+def delete_cook_event(event_id: int, db: Session = Depends(get_session)):
+    """Delete a cook event and all PlannedMeals linked to it."""
+    event = db.get(CookEvent, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Cook event not found")
+
+    meals = db.exec(
+        select(PlannedMeal).where(PlannedMeal.cook_event_id == event_id)
+    ).all()
+    for meal in meals:
+        db.delete(meal)
+
+    db.delete(event)
+    db.commit()
+    return {"status": "success", "meals_deleted": len(meals)}
+
+
+@router.patch("/cook-events/{event_id}/move")
+def move_cook_event(event_id: int, body: CookEventMove, db: Session = Depends(get_session)):
+    """Move a cook event to a new date.
+
+    Moving earlier is always allowed. Moving later is rejected if any linked
+    PlannedMeal would end up before the new cook date.
+    """
+    event = db.get(CookEvent, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Cook event not found")
+
+    try:
+        new_date = date.fromisoformat(body.cook_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format")
+
+    # Moving earlier is always safe — skip validation.
+    if new_date > (event.cook_date or new_date):
+        meals = db.exec(
+            select(PlannedMeal).where(PlannedMeal.cook_event_id == event_id)
+        ).all()
+
+        conflicts = [
+            m for m in meals
+            if m.meal_date and m.meal_date < new_date
+        ]
+
+        if conflicts:
+            details = ", ".join(
+                f"{m.slot} on {m.meal_date.isoformat()}"
+                for m in sorted(conflicts, key=lambda m: m.meal_date)
+            )
+            raise HTTPException(
+                status_code=422,
+                detail=f"Cannot move cook date to {new_date}: meal(s) would be before the cook date: {details}",
+            )
+
+    event.cook_date = new_date
+    db.add(event)
+    db.commit()
+    return {"status": "success", "cook_date": new_date.isoformat()}
 
 
 # ---------------------------------------------------------------------------
