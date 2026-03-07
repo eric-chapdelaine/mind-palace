@@ -96,10 +96,12 @@ async function updateTodo(todoId, fields) {
     return res.json();
 }
 
-async function createTodo(title, description, dueDate) {
+async function createTodo(title, description, dueDate, priority, tagNames) {
     const body = { title };
     if (description) body.description = description;
     if (dueDate) body.due_date = dueDate;
+    if (priority) body.priority = priority;
+    if (tagNames && tagNames.length) body.tag_names = tagNames;
     const res = await fetch(`/todos/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -107,6 +109,10 @@ async function createTodo(title, description, dueDate) {
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
+}
+
+async function fetchTags() {
+    return cachedFetch('tags', '/todos/tags');
 }
 
 async function deleteTodo(todoId) {

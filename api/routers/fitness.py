@@ -10,7 +10,7 @@ from core.database import get_session
 from models.fitness import (
     Exercise, WorkoutTemplate, TemplateExercise, ExerciseState,
     ScheduledDay, ScheduledExerciseOverride, WorkoutLog, SetLog,
-    ExerciseHistory, GarminActivity, DailyStats,
+    ExerciseHistory, GarminActivity,
 )
 from schemas.fitness import (
     ExerciseOverrideCreate, ManualMatch, OverrideWorkout,
@@ -20,7 +20,6 @@ from schemas.fitness import (
 )
 from services.schedule_service import ensure_week_schedule, regenerate_week_schedule
 from services.garmin_sync import sync_garmin
-from services.health_calc import get_calorie_target
 
 router = APIRouter(prefix="/fitness", tags=["fitness"])
 
@@ -156,6 +155,7 @@ def get_today_workout(db: Session = Depends(get_session)):
 
     return TodayWorkoutRead(
         date=today.isoformat(),
+        day_id=scheduled.id,
         session_type=scheduled.session_type,
         template_name=template.name if template else None,
         status=scheduled.status,
@@ -272,6 +272,7 @@ def get_day_details(date_str: str, db: Session = Depends(get_session)):
             ))
 
     return DayDetailRead(
+        day_id=scheduled.id,
         date=scheduled.day_date.isoformat(),
         session_type=scheduled.session_type,
         template_name=template.name if template else None,
@@ -537,28 +538,4 @@ def get_exercise_history(exercise_id: int, db: Session = Depends(get_session)):
 
 
 # ---------------------------------------------------------------------------
-# Daily stats (weight logging)
-# ---------------------------------------------------------------------------
 
-@router.post("/daily-stats/weight")
-def log_weight(weight_lbs: float, db: Session = Depends(get_session)):
-    """Log body weight for today."""
-    today = date.today()
-
-    stats = db.exec(
-        select(DailyStats).where(DailyStats.stat_date == today)
-    ).first()
-
-    if stats:
-        stats.weight_lbs = weight_lbs
-    else:
-        stats = DailyStats(
-            stat_date=today,
-            weight_lbs=weight_lbs,
-            calories_burned_garmin=0,
-            calories_target=get_calorie_target(0),
-        )
-        db.add(stats)
-
-    db.commit()
-    return {"status": "success", "weight_lbs": weight_lbs}

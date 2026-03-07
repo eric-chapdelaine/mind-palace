@@ -219,6 +219,83 @@ header h1 {
   margin-top: -0.25rem;
 }
 
+/* Priority badge */
+.priority-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 3px;
+  vertical-align: middle;
+  margin-right: 4px;
+  font-family: var(--mono);
+}
+.priority-badge.p1 { background: #ff5f5f22; color: #ff5f5f; border: 1px solid #ff5f5f55; }
+.priority-badge.p2 { background: #ffaa4422; color: #ffaa44; border: 1px solid #ffaa4455; }
+.priority-badge.p3 { background: var(--border); color: var(--muted); border: 1px solid var(--border); }
+.priority-badge.p4 { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+.priority-badge.p5 { background: transparent; color: var(--muted); border: 1px solid transparent; }
+
+/* Tag chips */
+.task-tags {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 2px;
+}
+.tag-chip {
+  display: inline-block;
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--border);
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+/* Tag input area in modal */
+.tag-input-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  min-height: 32px;
+  cursor: text;
+}
+.tag-input-wrap .tag-chip-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--border);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+.tag-input-wrap .tag-chip-edit button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 0;
+  font-size: 11px;
+  line-height: 1;
+}
+.tag-input-wrap input[type="text"] {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 12px;
+  min-width: 80px;
+  flex: 1;
+}
+
 .empty-state { font-size: 12px; color: var(--muted); padding: 0.5rem 0; }
 .error-state { font-size: 12px; color: var(--danger); }
 

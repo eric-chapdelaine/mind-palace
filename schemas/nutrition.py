@@ -89,24 +89,23 @@ class PlannedMealRead(BaseModel):
 
 class MealDayRead(BaseModel):
     date: str
-    lunch: PlannedMealRead | None = None
-    dinner: PlannedMealRead | None = None
+    meals: list[PlannedMealRead] = []
 
 
 class MealPlanRead(BaseModel):
     week_start_date: str
     plan_id: int | None = None
-    meals: list[MealDayRead] = []
+    days: list[MealDayRead] = []
 
 
 class NutritionTodayRead(BaseModel):
     date: str
     calories_target: int
     calories_burned_garmin: int
+    calories_burned_source: str = "none"  # "garmin" | "estimate" | "none"
     macros_target: dict
     macros_current: dict
-    dinner: PlannedMealRead | None = None
-    lunch: dict | None = None
+    meals: list[PlannedMealRead] = []
 
 
 class GroceryItemRead(BaseModel):

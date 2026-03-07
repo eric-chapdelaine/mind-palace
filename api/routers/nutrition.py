@@ -12,7 +12,7 @@ from models.nutrition import (
     Recipe, RecipeIngredient, MealPlan, PlannedMeal, CookEvent,
     PantryItem, NutritionGroceryList, NutritionGroceryItem, Ingredient,
 )
-from models.fitness import DailyStats
+from models.fitness import DailyStats, ScheduledDay
 from schemas.nutrition import (
     CookEventCreate, CookEventRead,
     PlannedMealCreate, PlannedMealMove, PlannedMealRead,
@@ -21,11 +21,8 @@ from schemas.nutrition import (
     NutritionTodayRead, MealPlanRead, MealDayRead,
     GroceryListRead, GrocerySectionRead, GroceryItemRead,
 )
-from services.health_calc import get_calorie_target, get_macro_targets
-from services.meal_planner import (
-    generate_meal_plan, generate_grocery_list as _generate_grocery_list,
-    RecipeData,
-)
+from services.health_calc import get_calorie_target, get_macro_targets, get_workout_calorie_estimate
+from services.meal_planner import generate_meal_plan, RecipeData
 
 router = APIRouter(prefix="/nutrition", tags=["nutrition"])
 
@@ -35,6 +32,40 @@ def _get_week_monday(week: str | None = None) -> date:
         return date.fromisoformat(week)
     today = date.today()
     return today - timedelta(days=today.weekday())
+
+
+def _resolve_day_calories(target_date: date, db: Session) -> tuple[int, int, str]:
+    """Return (calories_burned, calories_target, source) for a given date.
+
+    Priority:
+      1. Garmin-synced calories from DailyStats  → source = "garmin"
+      2. Estimate from scheduled session type    → source = "estimate"
+      3. No workout                              → source = "none"
+    """
+    stats = db.exec(
+        select(DailyStats).where(DailyStats.stat_date == target_date)
+    ).first()
+
+    garmin_calories = stats.calories_burned_garmin if stats else 0
+
+    if garmin_calories:
+        target = get_calorie_target(garmin_calories)
+        return garmin_calories, target, "garmin"
+
+    # No Garmin data — check if a workout is scheduled
+    scheduled = db.exec(
+        select(ScheduledDay).where(ScheduledDay.day_date == target_date)
+    ).first()
+
+    if scheduled and scheduled.session_type and scheduled.session_type != "rest":
+        estimated = get_workout_calorie_estimate(scheduled.session_type)
+        if estimated:
+            target = get_calorie_target(estimated)
+            return estimated, target, "estimate"
+
+    # Rest day or no schedule
+    target = get_calorie_target(0)
+    return 0, target, "none"
 
 
 def _recipe_to_data(r: Recipe) -> RecipeData:
@@ -61,12 +92,7 @@ def get_today_nutrition(db: Session = Depends(get_session)):
     today = date.today()
     week_start = _get_week_monday()
 
-    stats = db.exec(
-        select(DailyStats).where(DailyStats.stat_date == today)
-    ).first()
-
-    calories_burned = stats.calories_burned_garmin if stats else 0
-    calories_target = stats.calories_target if stats else get_calorie_target(calories_burned)
+    calories_burned, calories_target, calories_source = _resolve_day_calories(today, db)
     macros = get_macro_targets(calories_target)
 
     meal_plan = db.exec(
@@ -74,8 +100,9 @@ def get_today_nutrition(db: Session = Depends(get_session)):
     ).first()
 
     macros_current = {"protein_g": 0, "carbs_g": 0, "fat_g": 0}
-    dinner = None
-    lunch = None
+    today_meal_reads: list[PlannedMealRead] = []
+
+    SLOT_ORDER = ["breakfast", "lunch", "dinner", "snack"]
 
     if meal_plan:
         todays_meals = db.exec(
@@ -85,64 +112,108 @@ def get_today_nutrition(db: Session = Depends(get_session)):
             )
         ).all()
 
+        # Sort by canonical slot order
+        todays_meals = sorted(
+            todays_meals,
+            key=lambda m: SLOT_ORDER.index(m.slot) if m.slot in SLOT_ORDER else 99,
+        )
+
         for meal in todays_meals:
             recipe = db.get(Recipe, meal.recipe_id)
             if recipe:
-                macros_current["protein_g"] += recipe.protein_per_serving or 0
-                macros_current["carbs_g"] += recipe.carbs_per_serving or 0
-                macros_current["fat_g"] += recipe.fat_per_serving or 0
-
-        today_dinner = db.exec(
-            select(PlannedMeal).where(
-                PlannedMeal.plan_id == meal_plan.id,
-                PlannedMeal.meal_date == today,
-                PlannedMeal.slot == "dinner",
-            )
-        ).first()
-
-        if today_dinner:
-            recipe = db.get(Recipe, today_dinner.recipe_id)
-            if recipe:
-                dinner = PlannedMealRead(
-                    id=today_dinner.id,
+                macros_current["protein_g"] += (recipe.protein_per_serving or 0) * meal.servings
+                macros_current["carbs_g"] += (recipe.carbs_per_serving or 0) * meal.servings
+                macros_current["fat_g"] += (recipe.fat_per_serving or 0) * meal.servings
+                today_meal_reads.append(PlannedMealRead(
+                    id=meal.id,
                     recipe_id=recipe.id,
                     recipe_name=recipe.name,
                     calories_per_serving=recipe.calories_per_serving,
                     protein_per_serving=recipe.protein_per_serving,
-                    meal_date=today_dinner.meal_date.isoformat() if today_dinner.meal_date else None,
-                    slot=today_dinner.slot,
-                    servings=today_dinner.servings,
-                    cook_event_id=today_dinner.cook_event_id,
-                )
-
-        yesterday = today - timedelta(days=1)
-        yesterday_dinner = db.exec(
-            select(PlannedMeal).where(
-                PlannedMeal.plan_id == meal_plan.id,
-                PlannedMeal.meal_date == yesterday,
-                PlannedMeal.slot == "dinner",
-            )
-        ).first()
-
-        if yesterday_dinner:
-            recipe = db.get(Recipe, yesterday_dinner.recipe_id)
-            if recipe:
-                lunch = {"recipe_name": recipe.name, "note": "Leftovers from yesterday"}
+                    meal_date=meal.meal_date.isoformat() if meal.meal_date else None,
+                    slot=meal.slot,
+                    servings=meal.servings,
+                    cook_event_id=meal.cook_event_id,
+                ))
 
     return NutritionTodayRead(
         date=today.isoformat(),
         calories_target=calories_target,
         calories_burned_garmin=calories_burned,
+        calories_burned_source=calories_source,
         macros_target=macros,
         macros_current=macros_current,
-        dinner=dinner,
-        lunch=lunch,
+        meals=today_meal_reads,
+    )
+
+
+@router.get("/widgets/day")
+def get_day_nutrition(day: str | None = None, db: Session = Depends(get_session)):
+    """Nutrition summary for any given day (defaults to today)."""
+    try:
+        target_date = date.fromisoformat(day) if day else date.today()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format")
+
+    week_start = target_date - timedelta(days=target_date.weekday())
+
+    calories_burned, calories_target, calories_source = _resolve_day_calories(target_date, db)
+    macros = get_macro_targets(calories_target)
+
+    meal_plan = db.exec(
+        select(MealPlan).where(MealPlan.week_start_date == week_start)
+    ).first()
+
+    macros_current = {"protein_g": 0, "carbs_g": 0, "fat_g": 0}
+    day_meal_reads: list[PlannedMealRead] = []
+
+    SLOT_ORDER = ["breakfast", "lunch", "dinner", "snack"]
+
+    if meal_plan:
+        day_meals = db.exec(
+            select(PlannedMeal).where(
+                PlannedMeal.plan_id == meal_plan.id,
+                PlannedMeal.meal_date == target_date,
+            )
+        ).all()
+
+        day_meals = sorted(
+            day_meals,
+            key=lambda m: SLOT_ORDER.index(m.slot) if m.slot in SLOT_ORDER else 99,
+        )
+
+        for meal in day_meals:
+            recipe = db.get(Recipe, meal.recipe_id)
+            if recipe:
+                macros_current["protein_g"] += (recipe.protein_per_serving or 0) * meal.servings
+                macros_current["carbs_g"] += (recipe.carbs_per_serving or 0) * meal.servings
+                macros_current["fat_g"] += (recipe.fat_per_serving or 0) * meal.servings
+                day_meal_reads.append(PlannedMealRead(
+                    id=meal.id,
+                    recipe_id=recipe.id,
+                    recipe_name=recipe.name,
+                    calories_per_serving=recipe.calories_per_serving,
+                    protein_per_serving=recipe.protein_per_serving,
+                    meal_date=meal.meal_date.isoformat() if meal.meal_date else None,
+                    slot=meal.slot,
+                    servings=meal.servings,
+                    cook_event_id=meal.cook_event_id,
+                ))
+
+    return NutritionTodayRead(
+        date=target_date.isoformat(),
+        calories_target=calories_target,
+        calories_burned_garmin=calories_burned,
+        calories_burned_source=calories_source,
+        macros_target=macros,
+        macros_current=macros_current,
+        meals=day_meal_reads,
     )
 
 
 @router.get("/widgets/meal-plan")
 def get_meal_plan_widget(week: str | None = None, db: Session = Depends(get_session)):
-    """This week's meal plan grid."""
+    """This week's meal plan grid, returning all slots per day."""
     week_start = _get_week_monday(week)
 
     meal_plan = db.exec(
@@ -156,57 +227,44 @@ def get_meal_plan_widget(week: str | None = None, db: Session = Depends(get_sess
         select(PlannedMeal).where(PlannedMeal.plan_id == meal_plan.id)
     ).all()
 
+    # Bulk-load recipes to avoid N+1
+    recipe_ids = {m.recipe_id for m in meals}
+    recipe_map: dict[int, Recipe] = {}
+    for rid in recipe_ids:
+        r = db.get(Recipe, rid)
+        if r:
+            recipe_map[rid] = r
+
+    SLOT_ORDER = ["breakfast", "lunch", "dinner", "snack"]
+
     result: list[MealDayRead] = []
     for i in range(7):
         day = week_start + timedelta(days=i)
+        day_meals = [m for m in meals if m.meal_date == day]
+        day_meals.sort(key=lambda m: SLOT_ORDER.index(m.slot) if m.slot in SLOT_ORDER else 99)
 
-        dinner_read = None
-        for m in meals:
-            if m.meal_date == day and m.slot == "dinner":
-                recipe = db.get(Recipe, m.recipe_id)
-                if recipe:
-                    dinner_read = PlannedMealRead(
-                        id=m.id,
-                        recipe_id=m.recipe_id,
-                        recipe_name=recipe.name,
-                        calories_per_serving=recipe.calories_per_serving,
-                        protein_per_serving=recipe.protein_per_serving,
-                        meal_date=m.meal_date.isoformat() if m.meal_date else None,
-                        slot=m.slot,
-                        servings=m.servings,
-                        cook_event_id=m.cook_event_id,
-                    )
-                break
+        meal_reads = []
+        for m in day_meals:
+            recipe = recipe_map.get(m.recipe_id)
+            if recipe:
+                meal_reads.append(PlannedMealRead(
+                    id=m.id,
+                    recipe_id=m.recipe_id,
+                    recipe_name=recipe.name,
+                    calories_per_serving=recipe.calories_per_serving,
+                    protein_per_serving=recipe.protein_per_serving,
+                    meal_date=m.meal_date.isoformat() if m.meal_date else None,
+                    slot=m.slot,
+                    servings=m.servings,
+                    cook_event_id=m.cook_event_id,
+                ))
 
-        lunch_read = None
-        if i > 0:
-            prev_day = week_start + timedelta(days=i - 1)
-            prev_dinner = next(
-                (m for m in meals if m.meal_date == prev_day and m.slot == "dinner"),
-                None,
-            )
-            if prev_dinner:
-                recipe = db.get(Recipe, prev_dinner.recipe_id)
-                if recipe:
-                    lunch_read = PlannedMealRead(
-                        id=prev_dinner.id,
-                        recipe_id=prev_dinner.recipe_id,
-                        recipe_name=recipe.name,
-                        meal_date=prev_day.isoformat(),
-                        slot="lunch",
-                        servings=prev_dinner.servings,
-                    )
-
-        result.append(MealDayRead(
-            date=day.isoformat(),
-            lunch=lunch_read,
-            dinner=dinner_read,
-        ))
+        result.append(MealDayRead(date=day.isoformat(), meals=meal_reads))
 
     return MealPlanRead(
         week_start_date=week_start.isoformat(),
         plan_id=meal_plan.id,
-        meals=result,
+        days=result,
     )
 
 
@@ -215,9 +273,9 @@ def get_meal_plan_widget(week: str | None = None, db: Session = Depends(get_sess
 # ---------------------------------------------------------------------------
 
 @router.post("/meal-plans/generate")
-def generate_meal_plan_endpoint(db: Session = Depends(get_session)):
-    """Generate (or regenerate) this week's meal plan."""
-    week_start = _get_week_monday()
+def generate_meal_plan_endpoint(week: str | None = None, db: Session = Depends(get_session)):
+    """Generate (or regenerate) the meal plan for the given (or current) week."""
+    week_start = _get_week_monday(week)
 
     existing = db.exec(
         select(MealPlan).where(MealPlan.week_start_date == week_start)
@@ -242,7 +300,19 @@ def generate_meal_plan_endpoint(db: Session = Depends(get_session)):
         db.add(plan)
         db.flush()
 
-    recipes = db.exec(select(Recipe).where(Recipe.is_batch_cook)).all()
+    # Fetch workout schedule for the week so the planner can add breakfast on workout days
+    scheduled_days = db.exec(
+        select(ScheduledDay).where(
+            ScheduledDay.day_date >= week_start,
+            ScheduledDay.day_date < week_start + timedelta(days=7),
+        )
+    ).all()
+    workout_schedule: dict[date, str] = {
+        sd.day_date: sd.session_type for sd in scheduled_days if sd.session_type
+    }
+
+    # All recipes (batch-cook for dinners; non-batch-cook for breakfast candidates)
+    all_recipes = db.exec(select(Recipe)).all()
 
     recent_plan = db.exec(
         select(MealPlan).order_by(MealPlan.week_start_date.desc())
@@ -254,29 +324,51 @@ def generate_meal_plan_endpoint(db: Session = Depends(get_session)):
         for rm in rms:
             recent_ids.add(rm.recipe_id)
 
-    recipe_data = [_recipe_to_data(r) for r in recipes]
-    schedule = generate_meal_plan(recipe_data, week_start, recent_ids)
+    recipe_data = [_recipe_to_data(r) for r in all_recipes]
+    schedule = generate_meal_plan(recipe_data, week_start, recent_ids, workout_schedule=workout_schedule)
 
-    for day_date, recipe in schedule:
-        # Create a cook event for each batch recipe
+    for day in schedule:
+        # Each batch cook produces 4 servings: 2 for dinner tonight, 2 for lunch tomorrow
         cook_event = CookEvent(
             plan_id=plan.id,
-            recipe_id=recipe.id,
-            cook_date=day_date,
-            servings_produced=recipe_data[0].is_batch_cook and 4.0 or 2.0,
+            recipe_id=day.dinner_recipe.id,
+            cook_date=day.day_date,
+            servings_produced=4.0,
         )
         db.add(cook_event)
         db.flush()
 
-        # Dinner uses the cook event
+        # Dinner on the cook day (2 servings)
         db.add(PlannedMeal(
             plan_id=plan.id,
-            meal_date=day_date,
+            meal_date=day.day_date,
             slot="dinner",
-            recipe_id=recipe.id,
+            recipe_id=day.dinner_recipe.id,
             servings=2.0,
             cook_event_id=cook_event.id,
         ))
+
+        # Lunch the next day from the same batch (2 servings)
+        lunch_date = day.day_date + timedelta(days=1)
+        db.add(PlannedMeal(
+            plan_id=plan.id,
+            meal_date=lunch_date,
+            slot="lunch",
+            recipe_id=day.dinner_recipe.id,
+            servings=2.0,
+            cook_event_id=cook_event.id,
+        ))
+
+        # Breakfast on workout days (2 servings, no cook event — simple prep)
+        if day.breakfast_recipe:
+            db.add(PlannedMeal(
+                plan_id=plan.id,
+                meal_date=day.day_date,
+                slot="breakfast",
+                recipe_id=day.breakfast_recipe.id,
+                servings=2.0,
+                cook_event_id=None,
+            ))
 
     db.commit()
     return {"status": "success", "week_start_date": week_start.isoformat()}
@@ -315,9 +407,9 @@ def create_cook_event(body: CookEventCreate, db: Session = Depends(get_session))
 
 
 @router.get("/cook-events", response_model=list[CookEventRead])
-def list_cook_events(db: Session = Depends(get_session)):
-    """List cook events for the current week with remaining servings."""
-    week_start = _get_week_monday()
+def list_cook_events(week: str | None = None, db: Session = Depends(get_session)):
+    """List cook events for the given (or current) week with remaining servings."""
+    week_start = _get_week_monday(week)
     plan = db.exec(
         select(MealPlan).where(MealPlan.week_start_date == week_start)
     ).first()
@@ -458,18 +550,18 @@ def add_planned_meal(body: PlannedMealCreate, plan_id: int, db: Session = Depend
 # ---------------------------------------------------------------------------
 
 @router.get("/grocery-list")
-def get_grocery_list(plan_id: int | None = None, db: Session = Depends(get_session)):
-    """Get the grocery list for the current (or specified) plan."""
-    if not plan_id:
-        week_start = _get_week_monday()
+def get_grocery_list(plan_id: int | None = None, week: str | None = None, db: Session = Depends(get_session)):
+    """Get the grocery list for the current (or specified) plan/week."""
+    if plan_id:
+        plan = db.get(MealPlan, plan_id)
+    else:
+        week_start = _get_week_monday(week)
         plan = db.exec(
             select(MealPlan).where(MealPlan.week_start_date == week_start)
         ).first()
-    else:
-        plan = db.get(MealPlan, plan_id)
 
     if not plan:
-        raise HTTPException(status_code=404, detail="No meal plan found")
+        return GroceryListRead(plan_id=0, week_start_date=(week or date.today().isoformat()), sections=[])
 
     grocery_list = db.exec(
         select(NutritionGroceryList).where(NutritionGroceryList.plan_id == plan.id)
@@ -522,9 +614,9 @@ def get_grocery_list(plan_id: int | None = None, db: Session = Depends(get_sessi
 
 
 @router.post("/grocery-list/generate")
-def generate_grocery_list_endpoint(db: Session = Depends(get_session)):
-    """Generate a grocery list from the current meal plan."""
-    week_start = _get_week_monday()
+def generate_grocery_list_endpoint(week: str | None = None, db: Session = Depends(get_session)):
+    """Generate a grocery list from the given (or current) week's meal plan."""
+    week_start = _get_week_monday(week)
     plan = db.exec(
         select(MealPlan).where(MealPlan.week_start_date == week_start)
     ).first()
@@ -553,6 +645,8 @@ def generate_grocery_list_endpoint(db: Session = Depends(get_session)):
         select(PlannedMeal).where(PlannedMeal.plan_id == plan.id)
     ).all()
 
+    # Build ingredient totals directly from the stored meals (recipe_id × servings).
+    # This avoids re-running the planner and correctly handles any manual edits.
     recipe_ingredients: dict[int, list[dict]] = {}
     for meal in meals:
         if meal.recipe_id not in recipe_ingredients:
@@ -571,20 +665,27 @@ def generate_grocery_list_endpoint(db: Session = Depends(get_session)):
     pantry = db.exec(select(PantryItem)).all()
     pantry_dict = {p.ingredient_id: p.quantity for p in pantry}
 
-    recipe_data_map: dict[int, RecipeData] = {}
+    # Aggregate: sum ingredient quantities for each meal's actual servings
+    grocery_totals: dict = {}
     for meal in meals:
-        if meal.recipe_id not in recipe_data_map:
-            recipe = db.get(Recipe, meal.recipe_id)
-            if recipe:
-                recipe_data_map[meal.recipe_id] = _recipe_to_data(recipe)
+        for ing in recipe_ingredients.get(meal.recipe_id, []):
+            ing_id = ing["ingredient_id"]
+            qty = ing["quantity_per_serving"] * meal.servings
+            if ing_id in grocery_totals:
+                grocery_totals[ing_id]["quantity_needed"] += qty
+            else:
+                grocery_totals[ing_id] = {
+                    "ingredient_id": ing_id,
+                    "quantity_needed": qty,
+                    "unit": ing["unit"],
+                }
 
-    schedule = [
-        (m.meal_date, recipe_data_map[m.recipe_id])
-        for m in meals
-        if m.meal_date and m.recipe_id in recipe_data_map
-    ]
-
-    grocery_totals = _generate_grocery_list(schedule, recipe_ingredients, pantry_dict)
+    # Subtract pantry stock
+    for ing_id, qty in pantry_dict.items():
+        if ing_id in grocery_totals:
+            grocery_totals[ing_id]["quantity_needed"] -= qty
+            if grocery_totals[ing_id]["quantity_needed"] <= 0:
+                del grocery_totals[ing_id]
 
     for ing_id, data in grocery_totals.items():
         db.add(NutritionGroceryItem(
