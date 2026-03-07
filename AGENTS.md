@@ -8,16 +8,20 @@ Mind Palace is a FastAPI-based central hub that connects open-source life-manage
 
 ## Running the Application
 
+The app runs in Docker in production (port 80 → 8000). Source code is volume-mounted, so file edits are live, but **Python file changes require a container restart** — there is no `--reload` in Docker.
+
 ```bash
-# Using virtual environment
+# Production (Docker)
+docker compose up -d
+docker restart mind-palace-mind-palace-1   # required after any Python file change
+docker compose logs -f                     # tail logs
+
+# Local development (venv)
 source .venv/bin/activate
-
-# Development server with auto-reload
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
-
-# Or directly
-python main.py
 ```
+
+JavaScript and CSS changes in `ui/static/` take effect immediately (no restart needed — static files are served directly from the volume mount).
 
 ## Testing
 
@@ -139,6 +143,17 @@ Meals use a cook-then-eat model:
 - Tracking is **soft**: the system shows remaining servings as a guide but does not block over-assignment
 - When a batch recipe is placed, a CookEvent is created, and PlannedMeals consume servings from it
 - Meals can be moved to different dates/slots via `PATCH /nutrition/planned-meals/{id}/move`
+- Cook events can be rescheduled via `PATCH /nutrition/cook-events/{id}/move`. Moving to an earlier date is unconditional; moving later is rejected with HTTP 422 if any linked `PlannedMeal` would fall before the new cook date
+- Deleting a cook event (`DELETE /nutrition/cook-events/{id}`) cascades to all linked `PlannedMeal` rows
+
+### Workout-Aware Meal Planning
+
+The meal planner (`services/meal_planner.py`) accepts an optional `workout_schedule: dict[date, str]` parameter:
+- On workout days, a **breakfast `PlannedMeal`** is added to cover extra calorie burn
+- Breakfast candidates are non-batch-cook recipes (or anything tagged "breakfast"), scored by protein content
+- The `generate_meal_plan_endpoint` in `api/routers/nutrition.py` fetches `ScheduledDay` rows for the week to build this dict before calling the planner
+- Calorie targets for a given day are resolved by `_resolve_day_calories()` in the nutrition router, which prefers Garmin-synced data over schedule-based estimates
+- `calories_burned_source` field on `NutritionTodayRead` indicates `"garmin"` | `"estimate"` | `"none"`
 
 ### Task Tags and Priorities
 
@@ -319,18 +334,21 @@ To add a new domain (e.g., finance):
 - `POST /fitness/daily-stats/weight` — Log body weight
 
 ### Nutrition (`/nutrition`)
-- `GET /nutrition/widgets/today` — Today's nutrition summary
-- `GET /nutrition/widgets/meal-plan` — Meal plan grid
-- `POST /nutrition/meal-plans/generate` — Generate meal plan
+- `GET /nutrition/widgets/today` — Today's nutrition summary (includes `calories_burned_source`)
+- `GET /nutrition/widgets/day` — Nutrition summary for any given day (`?day=YYYY-MM-DD`)
+- `GET /nutrition/widgets/meal-plan` — Meal plan grid (`?week=YYYY-MM-DD`)
+- `POST /nutrition/meal-plans/generate` — Generate meal plan (workout-aware; adds breakfast on lift days)
 - `POST /nutrition/cook-events` — Record a cooking event
 - `GET /nutrition/cook-events` — List cook events with remaining servings
+- `PATCH /nutrition/cook-events/{id}/move` — Move cook event to a new date (validated: no meals may precede the cook date)
+- `DELETE /nutrition/cook-events/{id}` — Delete cook event and all its linked PlannedMeals
 - `POST /nutrition/planned-meals/{id}/swap` — Swap meal
 - `PATCH /nutrition/planned-meals/{id}/override` — Replace meal
 - `PATCH /nutrition/planned-meals/{id}/move` — Move meal to different date/slot
 - `DELETE /nutrition/planned-meals/{id}` — Delete meal
 - `POST /nutrition/meal-plans/{plan_id}/meals` — Add meal to plan
 - `GET /nutrition/grocery-list` — Get grocery list
-- `POST /nutrition/grocery-list/generate` — Generate grocery list
+- `POST /nutrition/grocery-list/generate` — Generate grocery list (aggregates from stored PlannedMeals, subtracts pantry)
 - `PATCH /nutrition/grocery-items/{id}/check` — Toggle grocery item
 - `GET /nutrition/recipes` — List recipes
 - `GET /nutrition/recipes/{id}` — Recipe details with ingredients
@@ -475,5 +493,5 @@ VIKUNJA_URL=http://localhost:3456/api/v1
 3. **Dependency injection**: Use FastAPI's `Depends()` for DB sessions, clients, etc.
 4. **Separation of concerns**: Models, schemas, services, and routes are in separate directories
 5. **Single source of truth**: BMR in `health_calc.py`, schedule generation in `schedule_service.py`
-6. **Soft tracking**: CookEvent servings are advisory, not enforced
+6. **Soft tracking**: CookEvent servings are advisory, not enforced; but meals must not be eaten before they are cooked (cook_date ≤ earliest PlannedMeal date for that CookEvent)
 7. **Date fields**: Use `day_date`, `stat_date`, `cook_date` etc. instead of `date` to avoid conflict with Python's built-in

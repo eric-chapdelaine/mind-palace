@@ -27,6 +27,11 @@ class PlannedMealMove(BaseModel):
     slot: str | None = None
 
 
+class CookEventMove(BaseModel):
+    """Move a cook event to a different date."""
+    cook_date: str
+
+
 class PantryItemCreate(BaseModel):
     ingredient_id: int
     quantity: float
