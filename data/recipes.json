@@ -1,0 +1,382 @@
+{
+  "recipes": [
+    {
+      "name": "Sheet Pan Chicken Thighs & Roasted Veg",
+      "description": "Bone-in chicken thighs roasted with broccoli on a sheet pan. Simple one-pan dinner with minimal cleanup.",
+      "base_servings": 4,
+      "calories_per_serving": 480,
+      "protein_per_serving": 42,
+      "carbs_per_serving": 18,
+      "fat_per_serving": 26,
+      "prep_minutes": 10,
+      "cook_minutes": 35,
+      "tags": ["high-protein", "batch-cook", "cheap"],
+      "is_batch_cook": true,
+      "ingredients": [
+        { "name": "Chicken Thighs", "quantity_per_serving": 200, "unit": "g", "store_section": "protein" },
+        { "name": "Broccoli", "quantity_per_serving": 80, "unit": "g", "store_section": "produce" },
+        { "name": "Olive Oil", "quantity_per_serving": 10, "unit": "g", "store_section": "pantry" }
+      ]
+    },
+    {
+      "name": "Garlic Butter Salmon",
+      "description": "Pan-seared salmon fillets finished with garlic butter sauce. Quick and elegant weeknight dinner.",
+      "base_servings": 4,
+      "calories_per_serving": 520,
+      "protein_per_serving": 45,
+      "carbs_per_serving": 12,
+      "fat_per_serving": 32,
+      "prep_minutes": 10,
+      "cook_minutes": 15,
+      "tags": ["high-protein", "batch-cook", "quick"],
+      "is_batch_cook": true,
+      "ingredients": [
+        { "name": "Salmon Fillet", "quantity_per_serving": 170, "unit": "g", "store_section": "protein" },
+        { "name": "Butter", "quantity_per_serving": 14, "unit": "g", "store_section": "dairy" },
+        { "name": "Garlic", "quantity_per_serving": 5, "unit": "g", "store_section": "produce" },
+        { "name": "Asparagus", "quantity_per_serving": 100, "unit": "g", "store_section": "produce" }
+      ]
+    },
+    {
+      "name": "Beef Stir Fry",
+      "description": "Quick ground beef stir fry with bell peppers and broccoli. Serve over rice with soy sauce.",
+      "base_servings": 4,
+      "calories_per_serving": 490,
+      "protein_per_serving": 38,
+      "carbs_per_serving": 35,
+      "fat_per_serving": 22,
+      "prep_minutes": 15,
+      "cook_minutes": 15,
+      "tags": ["high-protein", "batch-cook", "quick"],
+      "is_batch_cook": true,
+      "ingredients": [
+        { "name": "Ground Beef", "quantity_per_serving": 150, "unit": "g", "store_section": "protein" },
+        { "name": "Bell Pepper", "quantity_per_serving": 100, "unit": "g", "store_section": "produce" },
+        { "name": "Broccoli", "quantity_per_serving": 80, "unit": "g", "store_section": "produce" },
+        { "name": "Soy Sauce", "quantity_per_serving": 20, "unit": "ml", "store_section": "pantry" },
+        { "name": "Rice", "quantity_per_serving": 60, "unit": "g", "store_section": "grains" }
+      ]
+    },
+    {
+      "name": "Greek Chicken Souvlaki",
+      "description": "Greek-inspired chicken wraps with cucumber and yogurt sauce. Mediterranean flavors in a handheld meal.",
+      "base_servings": 4,
+      "calories_per_serving": 450,
+      "protein_per_serving": 42,
+      "carbs_per_serving": 28,
+      "fat_per_serving": 20,
+      "prep_minutes": 20,
+      "cook_minutes": 15,
+      "tags": ["high-protein", "batch-cook"],
+      "is_batch_cook": true,
+      "ingredients": [
+        { "name": "Chicken Breast", "quantity_per_serving": 180, "unit": "g", "store_section": "protein" },
+        { "name": "Greek Yogurt", "quantity_per_serving": 50, "unit": "g", "store_section": "dairy" },
+        { "name": "Cucumber", "quantity_per_serving": 60, "unit": "g", "store_section": "produce" },
+        { "name": "Pita Bread", "quantity_per_serving": 60, "unit": "g", "store_section": "grains" }
+      ]
+    },
+    {
+      "name": "Turkey Meatballs",
+      "description": "Homemade turkey meatballs in marinara sauce. Serve over pasta for a classic comfort meal.",
+      "base_servings": 4,
+      "calories_per_serving": 420,
+      "protein_per_serving": 36,
+      "carbs_per_serving": 25,
+      "fat_per_serving": 18,
+      "prep_minutes": 15,
+      "cook_minutes": 25,
+      "tags": ["high-protein", "batch-cook", "cheap"],
+      "is_batch_cook": true,
+      "ingredients": [
+        { "name": "Ground Turkey", "quantity_per_serving": 150, "unit": "g", "store_section": "protein" },
+        { "name": "Breadcrumbs", "quantity_per_serving": 20, "unit": "g", "store_section": "grains" },
+        { "name": "Marinara Sauce", "quantity_per_serving": 100, "unit": "ml", "store_section": "pantry" },
+        { "name": "Pasta", "quantity_per_serving": 50, "unit": "g", "store_section": "grains" }
+      ]
+    },
+    {
+      "name": "Steak & Sweet Potato",
+      "description": "Pan-seared ribeye steak with roasted sweet potato wedges. A hearty, protein-packed dinner.",
+      "base_servings": 4,
+      "calories_per_serving": 550,
+      "protein_per_serving": 45,
+      "carbs_per_serving": 32,
+      "fat_per_serving": 28,
+      "prep_minutes": 10,
+      "cook_minutes": 25,
+      "tags": ["high-protein", "batch-cook"],
+      "is_batch_cook": true,
+      "ingredients": [
+        { "name": "Ribeye Steak", "quantity_per_serving": 170, "unit": "g", "store_section": "protein" },
+        { "name": "Sweet Potato", "quantity_per_serving": 150, "unit": "g", "store_section": "produce" },
+        { "name": "Olive Oil", "quantity_per_serving": 10, "unit": "g", "store_section": "pantry" }
+      ]
+    },
+    {
+      "name": "Pork Tenderloin with Apples",
+      "description": "Sliced pork tenderloin with caramelized apples. A sweet and savory combination.",
+      "base_servings": 4,
+      "calories_per_serving": 430,
+      "protein_per_serving": 40,
+      "carbs_per_serving": 22,
+      "fat_per_serving": 20,
+      "prep_minutes": 10,
+      "cook_minutes": 30,
+      "tags": ["high-protein", "batch-cook"],
+      "is_batch_cook": true,
+      "ingredients": [
+        { "name": "Pork Tenderloin", "quantity_per_serving": 150, "unit": "g", "store_section": "protein" },
+        { "name": "Apple", "quantity_per_serving": 80, "unit": "g", "store_section": "produce" },
+        { "name": "Brown Sugar", "quantity_per_serving": 10, "unit": "g", "store_section": "pantry" }
+      ]
+    },
+    {
+      "name": "Shrimp Scampi",
+      "description": "Garlic butter shrimp served over pasta. Quick 15-minute meal with big flavor.",
+      "base_servings": 4,
+      "calories_per_serving": 460,
+      "protein_per_serving": 38,
+      "carbs_per_serving": 30,
+      "fat_per_serving": 22,
+      "prep_minutes": 10,
+      "cook_minutes": 15,
+      "tags": ["high-protein", "batch-cook", "quick"],
+      "is_batch_cook": true,
+      "ingredients": [
+        { "name": "Shrimp", "quantity_per_serving": 150, "unit": "g", "store_section": "protein" },
+        { "name": "Pasta", "quantity_per_serving": 60, "unit": "g", "store_section": "grains" },
+        { "name": "Butter", "quantity_per_serving": 14, "unit": "g", "store_section": "dairy" },
+        { "name": "Garlic", "quantity_per_serving": 5, "unit": "g", "store_section": "produce" },
+        { "name": "White Wine", "quantity_per_serving": 30, "unit": "ml", "store_section": "pantry" }
+      ]
+    },
+    {
+      "name": "Beef Chili",
+      "description": "Hearty beef and kidney bean chili. Great for meal prep and freezes well.",
+      "base_servings": 6,
+      "calories_per_serving": 410,
+      "protein_per_serving": 32,
+      "carbs_per_serving": 28,
+      "fat_per_serving": 18,
+      "prep_minutes": 15,
+      "cook_minutes": 45,
+      "tags": ["high-protein", "batch-cook", "cheap"],
+      "is_batch_cook": true,
+      "ingredients": [
+        { "name": "Ground Beef", "quantity_per_serving": 130, "unit": "g", "store_section": "protein" },
+        { "name": "Kidney Beans", "quantity_per_serving": 80, "unit": "g", "store_section": "pantry" },
+        { "name": "Diced Tomatoes", "quantity_per_serving": 100, "unit": "ml", "store_section": "pantry" },
+        { "name": "Onion", "quantity_per_serving": 50, "unit": "g", "store_section": "produce" }
+      ]
+    },
+    {
+      "name": "Chicken Tikka Masala",
+      "description": "Creamy Indian-inspired chicken curry with rice. Rich, flavorful, and satisfying.",
+      "base_servings": 4,
+      "calories_per_serving": 490,
+      "protein_per_serving": 40,
+      "carbs_per_serving": 25,
+      "fat_per_serving": 26,
+      "prep_minutes": 15,
+      "cook_minutes": 30,
+      "tags": ["high-protein", "batch-cook"],
+      "is_batch_cook": true,
+      "ingredients": [
+        { "name": "Chicken Breast", "quantity_per_serving": 170, "unit": "g", "store_section": "protein" },
+        { "name": "Greek Yogurt", "quantity_per_serving": 60, "unit": "g", "store_section": "dairy" },
+        { "name": "Heavy Cream", "quantity_per_serving": 30, "unit": "ml", "store_section": "dairy" },
+        { "name": "Basmati Rice", "quantity_per_serving": 60, "unit": "g", "store_section": "grains" },
+        { "name": "Tikka Masala Paste", "quantity_per_serving": 20, "unit": "g", "store_section": "pantry" }
+      ]
+    },
+    {
+      "name": "Pork Chops & Sauerkraut",
+      "description": "Pan-fried pork chops with sauerkraut and apple. German-inspired comfort food.",
+      "base_servings": 4,
+      "calories_per_serving": 440,
+      "protein_per_serving": 42,
+      "carbs_per_serving": 15,
+      "fat_per_serving": 24,
+      "prep_minutes": 10,
+      "cook_minutes": 25,
+      "tags": ["high-protein", "batch-cook", "cheap"],
+      "is_batch_cook": true,
+      "ingredients": [
+        { "name": "Pork Chop", "quantity_per_serving": 170, "unit": "g", "store_section": "protein" },
+        { "name": "Sauerkraut", "quantity_per_serving": 80, "unit": "g", "store_section": "pantry" },
+        { "name": "Apple", "quantity_per_serving": 60, "unit": "g", "store_section": "produce" }
+      ]
+    },
+    {
+      "name": "Baked Cod with Tomatoes",
+      "description": "Oven-baked cod with diced tomatoes and capers. Light, healthy, and flavorful.",
+      "base_servings": 4,
+      "calories_per_serving": 380,
+      "protein_per_serving": 42,
+      "carbs_per_serving": 12,
+      "fat_per_serving": 18,
+      "prep_minutes": 10,
+      "cook_minutes": 20,
+      "tags": ["high-protein", "batch-cook", "quick"],
+      "is_batch_cook": true,
+      "ingredients": [
+        { "name": "Cod Fillet", "quantity_per_serving": 170, "unit": "g", "store_section": "protein" },
+        { "name": "Diced Tomatoes", "quantity_per_serving": 100, "unit": "ml", "store_section": "pantry" },
+        { "name": "Olive Oil", "quantity_per_serving": 10, "unit": "g", "store_section": "pantry" },
+        { "name": "Capers", "quantity_per_serving": 10, "unit": "g", "store_section": "pantry" }
+      ]
+    },
+    {
+      "name": "Sausage & Peppers",
+      "description": "Italian sausage with bell peppers and onions in a hoagie roll. Classic sandwich.",
+      "base_servings": 4,
+      "calories_per_serving": 480,
+      "protein_per_serving": 28,
+      "carbs_per_serving": 28,
+      "fat_per_serving": 30,
+      "prep_minutes": 10,
+      "cook_minutes": 25,
+      "tags": ["high-protein", "batch-cook", "cheap"],
+      "is_batch_cook": true,
+      "ingredients": [
+        { "name": "Italian Sausage", "quantity_per_serving": 140, "unit": "g", "store_section": "protein" },
+        { "name": "Bell Pepper", "quantity_per_serving": 120, "unit": "g", "store_section": "produce" },
+        { "name": "Onion", "quantity_per_serving": 80, "unit": "g", "store_section": "produce" },
+        { "name": "Hoagie Roll", "quantity_per_serving": 60, "unit": "g", "store_section": "grains" }
+      ]
+    },
+    {
+      "name": "Stuffed Peppers",
+      "description": "Bell peppers stuffed with ground beef and rice, topped with melted cheese.",
+      "base_servings": 4,
+      "calories_per_serving": 420,
+      "protein_per_serving": 32,
+      "carbs_per_serving": 32,
+      "fat_per_serving": 18,
+      "prep_minutes": 20,
+      "cook_minutes": 40,
+      "tags": ["high-protein", "batch-cook"],
+      "is_batch_cook": true,
+      "ingredients": [
+        { "name": "Ground Beef", "quantity_per_serving": 120, "unit": "g", "store_section": "protein" },
+        { "name": "Bell Pepper", "quantity_per_serving": 150, "unit": "g", "store_section": "produce" },
+        { "name": "Rice", "quantity_per_serving": 40, "unit": "g", "store_section": "grains" },
+        { "name": "Cheddar Cheese", "quantity_per_serving": 30, "unit": "g", "store_section": "dairy" }
+      ]
+    },
+    {
+      "name": "Tuna Steak with Sesame",
+      "description": "Pan-seared tuna steak with sesame crust and broccoli. Light yet satisfying.",
+      "base_servings": 4,
+      "calories_per_serving": 420,
+      "protein_per_serving": 48,
+      "carbs_per_serving": 18,
+      "fat_per_serving": 18,
+      "prep_minutes": 10,
+      "cook_minutes": 10,
+      "tags": ["high-protein", "batch-cook", "quick"],
+      "is_batch_cook": true,
+      "ingredients": [
+        { "name": "Tuna Steak", "quantity_per_serving": 170, "unit": "g", "store_section": "protein" },
+        { "name": "Sesame Oil", "quantity_per_serving": 10, "unit": "ml", "store_section": "pantry" },
+        { "name": "Soy Sauce", "quantity_per_serving": 15, "unit": "ml", "store_section": "pantry" },
+        { "name": "Broccoli", "quantity_per_serving": 80, "unit": "g", "store_section": "produce" }
+      ]
+    },
+    {
+      "name": "Pulled Pork",
+      "description": "Slow-cooked pulled pork shoulder with BBQ sauce. Serve on burger buns.",
+      "base_servings": 6,
+      "calories_per_serving": 450,
+      "protein_per_serving": 38,
+      "carbs_per_serving": 20,
+      "fat_per_serving": 26,
+      "prep_minutes": 15,
+      "cook_minutes": 180,
+      "tags": ["high-protein", "batch-cook", "cheap"],
+      "is_batch_cook": true,
+      "ingredients": [
+        { "name": "Pork Shoulder", "quantity_per_serving": 180, "unit": "g", "store_section": "protein" },
+        { "name": "BBQ Sauce", "quantity_per_serving": 40, "unit": "ml", "store_section": "pantry" },
+        { "name": "Burger Bun", "quantity_per_serving": 50, "unit": "g", "store_section": "grains" }
+      ]
+    },
+    {
+      "name": "Egg Frittata",
+      "description": "Baked eggs with bacon, spinach, and cheddar. Easy breakfast-for-dinner option.",
+      "base_servings": 4,
+      "calories_per_serving": 380,
+      "protein_per_serving": 28,
+      "carbs_per_serving": 10,
+      "fat_per_serving": 26,
+      "prep_minutes": 10,
+      "cook_minutes": 25,
+      "tags": ["high-protein", "batch-cook", "quick"],
+      "is_batch_cook": true,
+      "ingredients": [
+        { "name": "Eggs", "quantity_per_serving": 120, "unit": "g", "store_section": "dairy" },
+        { "name": "Bacon", "quantity_per_serving": 40, "unit": "g", "store_section": "protein" },
+        { "name": "Spinach", "quantity_per_serving": 40, "unit": "g", "store_section": "produce" },
+        { "name": "Cheddar Cheese", "quantity_per_serving": 30, "unit": "g", "store_section": "dairy" }
+      ]
+    },
+    {
+      "name": "Lamb Chops with Rosemary",
+      "description": "Pan-seared lamb chops with rosemary and garlic. Elegant yet simple dinner.",
+      "base_servings": 4,
+      "calories_per_serving": 480,
+      "protein_per_serving": 42,
+      "carbs_per_serving": 8,
+      "fat_per_serving": 32,
+      "prep_minutes": 10,
+      "cook_minutes": 20,
+      "tags": ["high-protein", "batch-cook"],
+      "is_batch_cook": true,
+      "ingredients": [
+        { "name": "Lamb Chops", "quantity_per_serving": 170, "unit": "g", "store_section": "protein" },
+        { "name": "Rosemary", "quantity_per_serving": 5, "unit": "g", "store_section": "produce" },
+        { "name": "Garlic", "quantity_per_serving": 5, "unit": "g", "store_section": "produce" },
+        { "name": "Olive Oil", "quantity_per_serving": 10, "unit": "g", "store_section": "pantry" }
+      ]
+    },
+    {
+      "name": "Chicken Parmesan",
+      "description": "Breaded chicken breast with marinara and melted mozzarella over pasta.",
+      "base_servings": 4,
+      "calories_per_serving": 520,
+      "protein_per_serving": 45,
+      "carbs_per_serving": 30,
+      "fat_per_serving": 24,
+      "prep_minutes": 15,
+      "cook_minutes": 30,
+      "tags": ["high-protein", "batch-cook"],
+      "is_batch_cook": true,
+      "ingredients": [
+        { "name": "Chicken Breast", "quantity_per_serving": 170, "unit": "g", "store_section": "protein" },
+        { "name": "Marinara Sauce", "quantity_per_serving": 100, "unit": "ml", "store_section": "pantry" },
+        { "name": "Mozzarella Cheese", "quantity_per_serving": 50, "unit": "g", "store_section": "dairy" },
+        { "name": "Pasta", "quantity_per_serving": 50, "unit": "g", "store_section": "grains" }
+      ]
+    },
+    {
+      "name": "Lemon Herb Chicken",
+      "description": "Pan-seared chicken breast with lemon, olive oil, and green beans.",
+      "base_servings": 4,
+      "calories_per_serving": 400,
+      "protein_per_serving": 44,
+      "carbs_per_serving": 15,
+      "fat_per_serving": 18,
+      "prep_minutes": 10,
+      "cook_minutes": 25,
+      "tags": ["high-protein", "batch-cook", "quick"],
+      "is_batch_cook": true,
+      "ingredients": [
+        { "name": "Chicken Breast", "quantity_per_serving": 180, "unit": "g", "store_section": "protein" },
+        { "name": "Lemon", "quantity_per_serving": 40, "unit": "g", "store_section": "produce" },
+        { "name": "Olive Oil", "quantity_per_serving": 15, "unit": "g", "store_section": "pantry" },
+        { "name": "Green Beans", "quantity_per_serving": 100, "unit": "g", "store_section": "produce" }
+      ]
+    }
+  ]
+}

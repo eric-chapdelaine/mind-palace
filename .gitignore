@@ -12,3 +12,4 @@
 .env.production.local
 
 *__pycache__*
+*.db

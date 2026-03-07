@@ -641,3 +641,13 @@ span.flatpickr-weekday {
 .flatpickr-confirm {
   color: var(--accent) !important;
 }
+
+.set-link {
+  cursor: pointer;
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.set-link:hover {
+  color: var(--bright);
+}
