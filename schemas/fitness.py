@@ -85,6 +85,7 @@ class GarminMatchRead(BaseModel):
 
 class TodayWorkoutRead(BaseModel):
     date: str
+    day_id: int | None = None
     session_type: str | None
     template_name: str | None = None
     status: str
@@ -101,6 +102,7 @@ class WeekDayRead(BaseModel):
 
 
 class DayDetailRead(BaseModel):
+    day_id: int | None = None
     date: str
     session_type: str | None
     template_name: str | None = None

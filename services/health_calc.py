@@ -5,6 +5,8 @@ Configure via environment variables.
 """
 import os
 
+from core.config import settings
+
 
 def _calculate_bmr() -> int:
     """Mifflin-St Jeor equation for male BMR.
@@ -45,6 +47,22 @@ def get_daily_stats_calorie_target(exercise_calories: int = 0) -> int:
     """Calorie target for DailyStats (includes misc movement estimate)."""
     bmr = _calculate_bmr()
     return bmr + exercise_calories + MISC_MOVEMENT + CALORIE_SURPLUS
+
+
+def get_workout_calorie_estimate(session_type: str | None) -> int:
+    """Return a calorie burn estimate for an unsynced workout session.
+
+    Args:
+        session_type: "lift", "run", "cycle", "rest", or None.
+
+    Returns:
+        Estimated calories burned. 0 for rest or unknown types.
+    """
+    if session_type in ("run", "cycle"):
+        return settings.CARDIO_CALORIES_ESTIMATE
+    if session_type == "lift":
+        return settings.LIFT_CALORIES_ESTIMATE
+    return 0
 
 
 def get_macro_targets(calorie_target: int) -> dict:

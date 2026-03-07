@@ -26,6 +26,10 @@ class Settings:
     GARMIN_ENABLED: bool = os.getenv("GARMIN_ENABLED", "true").lower() == "true"
     GARMIN_DB_PATH: str = os.getenv("GARMIN_DB_PATH", "./garmin.db")
 
+    # Workout calorie estimates (used when Garmin has not yet synced a session)
+    LIFT_CALORIES_ESTIMATE: int = int(os.getenv("LIFT_CALORIES_ESTIMATE", "350"))
+    CARDIO_CALORIES_ESTIMATE: int = int(os.getenv("CARDIO_CALORIES_ESTIMATE", "500"))
+
     # App URL for OAuth callbacks
     APP_URL: str = os.getenv("APP_URL", "http://localhost:8000")
 

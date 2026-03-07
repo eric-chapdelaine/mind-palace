@@ -8,17 +8,34 @@
 //   parseDate(s)  fmtDate(d)  startOfDay(d)  endOfDay(d)  endOfWeek(d)  esc(s)
 // ─────────────────────────────────────────────────────────────
 
+// ── Priority helpers ─────────────────────────────────────────
+const PRIORITY_LABELS = { 1: 'P1', 2: 'P2', 3: 'P3', 4: 'P4', 5: 'P5' };
+const PRIORITY_CLASSES = { 1: 'p1', 2: 'p2', 3: 'p3', 4: 'p4', 5: 'p5' };
+
+function priorityBadge(priority) {
+  if (!priority || priority === 3) return ''; // P3 is default/noise-free
+  const cls = PRIORITY_CLASSES[priority] || 'p3';
+  return `<span class="priority-badge ${cls}">${PRIORITY_LABELS[priority] || 'P' + priority}</span>`;
+}
+
+function tagChips(tags) {
+  if (!tags || !tags.length) return '';
+  return `<span class="task-tags">${tags.map(t => `<span class="tag-chip">${esc(t.name)}</span>`).join('')}</span>`;
+}
+
 // ── Task helpers (shared across the three task columns) ──────
 function taskRow(task, metaClass = '') {
   const d = parseDate(task.due_date);
   const taskId = task.id;
   const isDone = task.status === 'COMPLETED';
+  const hasTags = task.tags && task.tags.length > 0;
   return `
     <div class="task-item ${isDone ? 'completed' : ''}" data-task-id="${taskId}">
       <input type="checkbox" class="task-checkbox" ${isDone ? 'checked' : ''} onclick="event.stopPropagation();toggleTaskStatus(${taskId}, ${!isDone})">
-      <span class="task-title ${metaClass === 'overdue' ? 'overdue' : ''} ${isDone ? 'done' : ''}" onclick="openTaskModal(${taskId})">${esc(task.title)}</span>
+      <span class="task-title ${metaClass === 'overdue' ? 'overdue' : ''} ${isDone ? 'done' : ''}" onclick="openTaskModal(${taskId})">${priorityBadge(task.priority)}${esc(task.title)}</span>
       <span class="task-meta ${metaClass}">${d ? fmtDate(d) : '—'}</span>
       ${task.description ? `<span class="task-notes" style="grid-column: 2 / -1;">${esc(task.description.slice(0, 80))}${task.description.length > 80 ? '...' : ''}</span>` : ''}
+      ${hasTags ? tagChips(task.tags) : ''}
     </div>`;
 }
 
@@ -42,9 +59,11 @@ async function toggleTaskStatus(taskId, done) {
 // ── New Task Modal ──────────────────────────────────────────────
 let _newTaskFlatpickr = null;
 let _newTaskDueDate = null;
+let _newTaskTags = [];
 
 async function openNewTaskModal() {
   _newTaskDueDate = null;
+  _newTaskTags = [];
   openModal(
     () => {
       const html = renderNewTaskModal();
@@ -69,8 +88,25 @@ function renderNewTaskModal() {
           onkeydown="if(event.key==='Enter')createNewTask()">
       </div>
       <div class="modal-field">
+        <label>Priority</label>
+        <select id="new-task-priority" class="task-input" style="padding:4px 6px;">
+          <option value="1">P1 — Urgent</option>
+          <option value="2">P2 — High</option>
+          <option value="3" selected>P3 — Normal</option>
+          <option value="4">P4 — Low</option>
+          <option value="5">P5 — Someday</option>
+        </select>
+      </div>
+      <div class="modal-field">
         <label>Due Date</label>
         <input type="text" id="new-task-duedate" class="task-input" placeholder="Click to set due date...">
+      </div>
+      <div class="modal-field">
+        <label>Tags</label>
+        <div class="tag-input-wrap" id="new-task-tag-wrap" onclick="document.getElementById('new-task-tag-input').focus()">
+          <input type="text" id="new-task-tag-input" placeholder="Add tag, press Enter..."
+            onkeydown="handleNewTaskTagInput(event)">
+        </div>
       </div>
       <div class="modal-field">
         <label>Description</label>
@@ -80,6 +116,42 @@ function renderNewTaskModal() {
       <button class="btn-create-task" onclick="createNewTask()">Create Task</button>
     </div>`;
 }
+
+function handleNewTaskTagInput(e) {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    const input = document.getElementById('new-task-tag-input');
+    const val = input.value.trim().toLowerCase().replace(/,/g, '');
+    if (val && !_newTaskTags.includes(val)) {
+      _newTaskTags.push(val);
+      _renderNewTaskTags();
+    }
+    input.value = '';
+  } else if (e.key === 'Backspace' && e.target.value === '' && _newTaskTags.length) {
+    _newTaskTags.pop();
+    _renderNewTaskTags();
+  }
+}
+
+function _renderNewTaskTags() {
+  const wrap = document.getElementById('new-task-tag-wrap');
+  const input = document.getElementById('new-task-tag-input');
+  if (!wrap || !input) return;
+  // Remove old chips
+  wrap.querySelectorAll('.tag-chip-edit').forEach(el => el.remove());
+  // Re-insert chips before input
+  _newTaskTags.forEach((tag, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip-edit';
+    chip.innerHTML = `${esc(tag)}<button onclick="_removeNewTag(${i})" tabindex="-1">&times;</button>`;
+    wrap.insertBefore(chip, input);
+  });
+}
+
+window._removeNewTag = function(i) {
+  _newTaskTags.splice(i, 1);
+  _renderNewTaskTags();
+};
 
 function initNewTaskDatePicker() {
   const edit = document.getElementById('new-task-duedate');
@@ -99,6 +171,7 @@ function initNewTaskDatePicker() {
 async function createNewTask() {
   const titleInput = document.getElementById('new-task-title');
   const descInput = document.getElementById('new-task-description');
+  const priorityInput = document.getElementById('new-task-priority');
   
   const title = titleInput?.value?.trim();
   if (!title) {
@@ -107,9 +180,10 @@ async function createNewTask() {
   }
   
   const description = descInput?.value?.trim() || null;
+  const priority = priorityInput ? parseInt(priorityInput.value) : 3;
   
   try {
-    await createTodo(title, description, _newTaskDueDate);
+    await createTodo(title, description, _newTaskDueDate, priority, _newTaskTags);
     closeModal();
   } catch (e) {
     console.error('Failed to create task:', e);
@@ -133,6 +207,9 @@ async function openTaskModal(taskId) {
   }
 }
 
+// Per-task tag edit state
+let _editTaskTags = [];
+
 function renderTodoModal(todo) {
   const d = todo.due_date ? parseDate(todo.due_date) : null;
   const hasTime = d && (d.getHours() || d.getMinutes() || d.getSeconds());
@@ -144,6 +221,15 @@ function renderTodoModal(todo) {
     ? marked.parse(todo.description, { breaks: true }) 
     : '<span class="muted">Click to add description...</span>';
   const isDone = todo.status === 'COMPLETED';
+  const priority = todo.priority || 3;
+
+  // Seed tag state from current todo
+  _editTaskTags = (todo.tags || []).map(t => t.name);
+
+  const tagChipsHtml = _editTaskTags.map((tag, i) =>
+    `<span class="tag-chip-edit">${esc(tag)}<button onclick="_removeEditTag(${i})" tabindex="-1">&times;</button></span>`
+  ).join('');
+
   return `
     <div class="modal-header">
       <h2>${esc(todo.title)}</h2>
@@ -154,6 +240,24 @@ function renderTodoModal(todo) {
         <label>Due Date</label>
         <div id="duedate-view" class="clickable-field" onclick="enableDueDateEdit()">${dueDateDisplay}</div>
         <input type="text" id="duedate-edit" class="task-date-input" style="display:none">
+      </div>
+      <div class="modal-field">
+        <label>Priority</label>
+        <select id="task-priority" class="task-input" style="padding:4px 6px;" onchange="saveTaskPriority()">
+          <option value="1" ${priority===1?'selected':''}>P1 — Urgent</option>
+          <option value="2" ${priority===2?'selected':''}>P2 — High</option>
+          <option value="3" ${priority===3?'selected':''}>P3 — Normal</option>
+          <option value="4" ${priority===4?'selected':''}>P4 — Low</option>
+          <option value="5" ${priority===5?'selected':''}>P5 — Someday</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label>Tags</label>
+        <div class="tag-input-wrap" id="edit-task-tag-wrap" onclick="document.getElementById('edit-task-tag-input').focus()">
+          ${tagChipsHtml}
+          <input type="text" id="edit-task-tag-input" placeholder="Add tag, press Enter..."
+            onkeydown="handleEditTaskTagInput(event)" onblur="saveTaskTags()">
+        </div>
       </div>
       <div class="modal-field">
         <label>Status</label>
@@ -170,6 +274,62 @@ function renderTodoModal(todo) {
       </div>
       <button class="btn-delete-task" onclick="confirmDeleteTask()">Delete Task</button>
     </div>`;
+}
+
+function handleEditTaskTagInput(e) {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    const input = document.getElementById('edit-task-tag-input');
+    const val = input.value.trim().toLowerCase().replace(/,/g, '');
+    if (val && !_editTaskTags.includes(val)) {
+      _editTaskTags.push(val);
+      _renderEditTaskTags();
+    }
+    input.value = '';
+  } else if (e.key === 'Backspace' && e.target.value === '' && _editTaskTags.length) {
+    _editTaskTags.pop();
+    _renderEditTaskTags();
+  }
+}
+
+function _renderEditTaskTags() {
+  const wrap = document.getElementById('edit-task-tag-wrap');
+  const input = document.getElementById('edit-task-tag-input');
+  if (!wrap || !input) return;
+  wrap.querySelectorAll('.tag-chip-edit').forEach(el => el.remove());
+  _editTaskTags.forEach((tag, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip-edit';
+    chip.innerHTML = `${esc(tag)}<button onclick="_removeEditTag(${i})" tabindex="-1">&times;</button>`;
+    wrap.insertBefore(chip, input);
+  });
+}
+
+window._removeEditTag = function(i) {
+  _editTaskTags.splice(i, 1);
+  _renderEditTaskTags();
+  saveTaskTags();
+};
+
+async function saveTaskPriority() {
+  const sel = document.getElementById('task-priority');
+  if (!sel || !_currentTaskId) return;
+  try {
+    await updateTodo(_currentTaskId, { priority: parseInt(sel.value) });
+    bustCache();
+  } catch (e) {
+    console.error('Failed to save priority:', e);
+  }
+}
+
+async function saveTaskTags() {
+  if (!_currentTaskId) return;
+  try {
+    await updateTodo(_currentTaskId, { tag_names: _editTaskTags });
+    bustCache();
+  } catch (e) {
+    console.error('Failed to save tags:', e);
+  }
 }
 
 async function saveTaskStatus() {
