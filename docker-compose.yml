@@ -3,7 +3,7 @@ services:
   mind-palace:
     build: .
     ports:
-      - "8000:8000"
+      - "80:8000"
     volumes:
       - ./mind-palace.db:/app/mind-palace.db
       - ~/.garth:/root/.garth
