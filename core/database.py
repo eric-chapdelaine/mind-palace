@@ -1,6 +1,8 @@
-"""Database engine, session management, and seed data."""
+"""Database engine, session management, seed data, and migrations."""
 import json
 import os
+import sqlite3
+from datetime import datetime
 
 from sqlmodel import SQLModel, create_engine, Session, select
 
@@ -9,14 +11,91 @@ from core.config import settings
 engine = create_engine(settings.DATABASE_URL, echo=False)
 
 
+# ---------------------------------------------------------------------------
+# Lightweight migrations
+# ---------------------------------------------------------------------------
+# Each entry is (id, description, sql).  Migrations are applied in order and
+# tracked in a ``schema_migrations`` table so they only run once.  To add a
+# new migration, append a tuple to the end of this list — never reorder or
+# delete existing entries.
+MIGRATIONS: list[tuple[int, str, str]] = [
+    (
+        1,
+        "Add priority column to todoitem",
+        "ALTER TABLE todoitem ADD COLUMN priority INTEGER DEFAULT 3",
+    ),
+    (
+        2,
+        "Add cook_event_id column to nutrition_planned_meal",
+        "ALTER TABLE nutrition_planned_meal ADD COLUMN cook_event_id INTEGER "
+        "REFERENCES nutrition_cook_event(id)",
+    ),
+]
+
+
+def _run_migrations():
+    """Apply any pending migrations against the SQLite database."""
+    # Work with raw sqlite3 so we don't need SQLModel tables registered yet.
+    db_url = settings.DATABASE_URL
+    # Strip the ``sqlite:///`` prefix to get the file path.
+    db_path = db_url.replace("sqlite:///", "", 1)
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+
+    # Ensure the tracking table exists.
+    cur.execute(
+        "CREATE TABLE IF NOT EXISTS schema_migrations ("
+        "  id INTEGER PRIMARY KEY,"
+        "  description TEXT NOT NULL,"
+        "  applied_at TEXT NOT NULL"
+        ")"
+    )
+    conn.commit()
+
+    applied: set[int] = {
+        row[0] for row in cur.execute("SELECT id FROM schema_migrations").fetchall()
+    }
+
+    for mid, desc, sql in MIGRATIONS:
+        if mid in applied:
+            continue
+        try:
+            cur.execute(sql)
+            cur.execute(
+                "INSERT INTO schema_migrations (id, description, applied_at) "
+                "VALUES (?, ?, ?)",
+                (mid, desc, datetime.utcnow().isoformat()),
+            )
+            conn.commit()
+            print(f"  Migration {mid} applied: {desc}")
+        except sqlite3.OperationalError as exc:
+            # E.g. "duplicate column name" if the column already exists but
+            # wasn't tracked — mark it as applied and move on.
+            if "duplicate column" in str(exc).lower():
+                cur.execute(
+                    "INSERT INTO schema_migrations (id, description, applied_at) "
+                    "VALUES (?, ?, ?)",
+                    (mid, desc, datetime.utcnow().isoformat()),
+                )
+                conn.commit()
+                print(f"  Migration {mid} skipped (already applied): {desc}")
+            else:
+                conn.rollback()
+                print(f"  Migration {mid} FAILED: {exc}")
+                raise
+
+    conn.close()
+
+
 def init_db():
-    """Create all tables and seed if empty."""
+    """Create all tables, run migrations, and seed if empty."""
     # Import all models so SQLModel registers them
     import models.items  # noqa: F401
     import models.fitness  # noqa: F401
     import models.nutrition  # noqa: F401
 
     SQLModel.metadata.create_all(engine)
+    _run_migrations()
     seed_if_empty()
 
 
