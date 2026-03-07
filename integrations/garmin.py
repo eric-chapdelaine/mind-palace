@@ -290,12 +290,13 @@ class GarminClient:
 
         records = []
         for a in activities:
-            start_time_str = a.get("startTimeLocal")
-            if not start_time_str:
+            start_time_gmt = a.get("startTimeGMT")
+            if not start_time_gmt:
                 continue
 
             try:
-                start_time = datetime.fromisoformat(start_time_str).astimezone()
+                # Use GMT timestamp and convert to local timezone
+                start_time = datetime.fromisoformat(start_time_gmt.replace(" ", "T")).astimezone()
             except Exception:
                 continue
 
