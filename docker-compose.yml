@@ -9,6 +9,13 @@ services:
       - ~/.garth:/root/.garth
       - ./data:/app/data
       - ./.env:/app/.env:ro
+      - ./main.py:/app/main.py
+      - ./api:/app/api
+      - ./core:/app/core
+      - ./models:/app/models
+      - ./services:/app/services
+      - ./integrations:/app/integrations
+      - ./ui:/app/ui
     environment:
       - DATABASE_URL=sqlite:///./mind-palace.db
       - TZ=America/New_York

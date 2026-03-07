@@ -5,7 +5,7 @@ from sqlmodel import Session, select
 from core.database import engine
 from models.fitness import (
     Exercise, ScheduledDay, GarminActivity, WorkoutLog, SetLog,
-    ExerciseHistory, ExerciseState, DailyStats
+    ExerciseHistory, ExerciseState, DailyStats, TemplateExercise
 )
 from services.progression import evaluate, Prescription, SessionResult, SetResult
 
@@ -55,6 +55,98 @@ def sync_garmin():
         
         _update_daily_stats(session)
         session.commit()
+
+
+def sync_garmin_for_date(target_date: date, template_id: int | None = None):
+    """Sync Garmin for a specific date, creating a scheduled day if needed."""
+    try:
+        from integrations.garmin_fitness import get_recent_activities
+    except Exception as e:
+        print(f"⚠️  Garmin integration not available: {e}")
+        return None
+    
+    activities = get_recent_activities(days=7)
+    
+    matching_activity = None
+    strength_activity = None
+    
+    for act in activities:
+        act_date = date.fromisoformat(act["date"])
+        if act_date == target_date:
+            if act["activity_type"] == "strength_training":
+                strength_activity = act
+                break
+    
+    if strength_activity:
+        matching_activity = strength_activity
+    else:
+        for act in activities:
+            act_date = date.fromisoformat(act["date"])
+            if act_date == target_date:
+                if act["activity_type"] == "cycling":
+                    duration = act.get("duration_minutes") or 0
+                    if duration >= COMMUTE_MAX_DURATION_MINUTES:
+                        matching_activity = act
+                        break
+                elif act["activity_type"] in ("running", "walking"):
+                    matching_activity = act
+                    break
+    
+    if not matching_activity:
+        return None
+    
+    with Session(engine) as session:
+        _upsert_activity(session, matching_activity)
+        
+        activity_date = date.fromisoformat(matching_activity["date"])
+        activity_type = matching_activity["activity_type"]
+        
+        garmin_activity = session.exec(
+            select(GarminActivity).where(GarminActivity.garmin_id == matching_activity["garmin_id"])
+        ).first()
+        
+        if not garmin_activity:
+            session.commit()
+            return None
+        
+        scheduled = session.exec(
+            select(ScheduledDay).where(ScheduledDay.day_date == activity_date)
+        ).first()
+        
+        if scheduled:
+            if scheduled.status == "matched":
+                session.commit()
+                return {"status": "already_matched", "scheduled_day_id": scheduled.id}
+            
+            scheduled.template_id = template_id
+            scheduled.session_type = "lift" if activity_type == "strength_training" else activity_type
+            scheduled.status = "matched"
+        else:
+            session_type = "lift" if activity_type == "strength_training" else activity_type
+            scheduled = ScheduledDay(
+                day_date=activity_date,
+                template_id=template_id,
+                session_type=session_type,
+                status="matched"
+            )
+            session.add(scheduled)
+            session.flush()
+        
+        log = WorkoutLog(
+            scheduled_day_id=scheduled.id,
+            garmin_activity_id=garmin_activity.id,
+            match_type="auto"
+        )
+        session.add(log)
+        session.flush()
+        
+        if activity_type == "strength_training":
+            _process_strength_workout(session, log, garmin_activity, scheduled)
+        
+        _update_daily_stats(session)
+        session.commit()
+        
+        return {"status": "success", "scheduled_day_id": scheduled.id, "workout_log_id": log.id}
 
 
 def _upsert_activity(session: Session, act: dict):
@@ -129,54 +221,86 @@ def _match_activity_to_schedule(session: Session, act: dict):
     scheduled.status = "matched"
     
     if activity_type == "strength_training":
-        _process_strength_workout(session, log, garmin_activity)
+        _process_strength_workout(session, log, garmin_activity, scheduled)
 
 
-def _process_strength_workout(session: Session, log: WorkoutLog, garmin_activity: GarminActivity):
+def _process_strength_workout(session: Session, log: WorkoutLog, garmin_activity: GarminActivity, scheduled: ScheduledDay):
     try:
-        from integrations.garmin_fitness import get_strength_exercise_sets
+        from integrations.garmin_fitness import _ensure_client
+        from garminconnect import Garmin
+        import garth
     except Exception as e:
         print(f"⚠️  Garmin strength exercise sets not available: {e}")
         return
     
-    exercise_sets = get_strength_exercise_sets(garmin_activity.garmin_id)
+    try:
+        _ensure_client()
+        client = Garmin()
+        client.garth = garth
+        
+        exercise_data = client.get_activity_exercise_sets(garmin_activity.garmin_id)
+    except Exception as e:
+        print(f"⚠️  Failed to get exercise sets: {e}")
+        return
     
-    for ex_data in exercise_sets:
-        garmin_enum = ex_data.get("exerciseName", "").upper().replace(" ", "_")
+    exercise_sets = exercise_data.get("exerciseSets", [])
+    
+    for set_data in exercise_sets:
+        if set_data.get("setType") == "REST":
+            continue
+        
+        reps = set_data.get("repetitionCount") or 0
+        
+        exercises_in_set = set_data.get("exercises", [])
+        if not exercises_in_set:
+            continue
+        
+        best_exercise = max(exercises_in_set, key=lambda x: x.get("probability", 0))
+        garmin_category = best_exercise.get("category", "").upper()
+        
+        if not garmin_category:
+            continue
         
         exercise = session.exec(
-            select(Exercise).where(Exercise.garmin_enum == garmin_enum)
+            select(Exercise).where(Exercise.garmin_enum == garmin_category)
         ).first()
         
         if not exercise:
-            print(f"⚠️  No matching exercise for garmin_enum: {garmin_enum}")
+            print(f"⚠️  No matching exercise for garmin_category: {garmin_category}")
             continue
         
-        template_ex = session.exec(
-            select(Exercise).where(Exercise.id == exercise.id)
-        ).first()
+        existing_sets_for_ex = session.exec(
+            select(SetLog).where(
+                SetLog.workout_log_id == log.id,
+                SetLog.exercise_id == exercise.id
+            )
+        ).all()
         
-        sets_data = ex_data.get("sets", [])
-        for i, set_data in enumerate(sets_data):
-            session.add(SetLog(
-                workout_log_id=log.id,
-                exercise_id=exercise.id,
-                set_number=i + 1,
-                reps_completed=set_data.get("reps", 0),
-                weight_lbs=set_data.get("weight_lbs", 0)
-            ))
+        set_number = len(existing_sets_for_ex) + 1
         
-        prescribed_sets = 3
-        prescribed_reps = 8
-        
+        weight_lbs = 0
         state = session.exec(
             select(ExerciseState).where(ExerciseState.exercise_id == exercise.id)
         ).first()
         
+        if state and state.current_weight_lbs:
+            weight_lbs = state.current_weight_lbs
+        
+        session.add(SetLog(
+            workout_log_id=log.id,
+            exercise_id=exercise.id,
+            set_number=set_number,
+            reps_completed=reps,
+            weight_lbs=weight_lbs
+        ))
+        
+        prescribed_sets = 3
+        prescribed_reps = 8
+        
         if not state:
             state = ExerciseState(
                 exercise_id=exercise.id,
-                current_weight_lbs=set_data.get("weight_lbs", 0)
+                current_weight_lbs=weight_lbs
             )
             session.add(state)
             session.flush()
@@ -194,10 +318,7 @@ def _process_strength_workout(session: Session, log: WorkoutLog, garmin_activity
         
         result = SessionResult(
             exercise_id=exercise.id,
-            sets=[
-                SetResult(i + 1, s.get("reps", 0), s.get("weight_lbs", 0))
-                for i, s in enumerate(sets_data)
-            ],
+            sets=[SetResult(set_number, reps, weight_lbs)],
             prescribed_sets=prescribed_sets,
             prescribed_reps=prescribed_reps
         )
@@ -214,7 +335,7 @@ def _process_strength_workout(session: Session, log: WorkoutLog, garmin_activity
             exercise_id=exercise.id,
             history_date=garmin_activity.activity_date,
             verdict=eval_result.verdict,
-            weight_used_lbs=set_data.get("weight_lbs", 0),
+            weight_used_lbs=weight_lbs,
             sets_prescribed=prescribed_sets,
             reps_prescribed=prescribed_reps,
             avg_completion_pct=eval_result.avg_completion_pct
