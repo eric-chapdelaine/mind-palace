@@ -44,12 +44,16 @@
 
       html += '<table style="width:100%;font-size:13px;border-collapse:collapse;"><thead><tr style="border-bottom:1px solid var(--border);"><th style="text-align:left;padding:4px;">Exercise</th><th style="text-align:left;padding:4px;">Prescribed</th><th style="text-align:left;padding:4px;">Actual</th><th style="text-align:left;padding:4px;">Status</th></tr></thead><tbody>';
 
+      const workoutLogId = data.workout_log_id;
+      
       for (const ex of data.exercises) {
         const prescribed = `${ex.prescribed_sets} × ${ex.prescribed_reps} @ ${ex.current_weight_lbs} lb`;
         
         let actual = '—';
         if (ex.actual_sets && ex.actual_sets.length > 0) {
-          actual = ex.actual_sets.map(s => s.reps_completed).join(' / ');
+          actual = ex.actual_sets.map(s => 
+            `<span class="set-link" onclick="event.stopPropagation();editSet(${s.id}, ${ex.exercise_id}, '${ex.name}', ${s.weight_lbs}, ${s.reps_completed})">${s.weight_lbs}×${s.reps_completed}</span>`
+          ).join(' / ');
         }
 
         const color = verdictColor(ex.last_verdict);
@@ -65,7 +69,8 @@
 
       html += '</tbody></table>';
       html += '<div style="margin-top:12px;font-size:11px;color:var(--muted);">';
-      html += '<button onclick="syncGarmin()" style="background:transparent;border:1px solid var(--border);padding:4px 8px;cursor:pointer;color:var(--text);font-size:11px;">[Sync Now]</button>';
+      html += '<button onclick="syncGarminForToday()" style="background:transparent;border:1px solid var(--border);padding:4px 8px;cursor:pointer;color:var(--text);font-size:11px;margin-right:8px;">[Sync from Garmin]</button>';
+      html += '<button onclick="addSet(' + workoutLogId + ')" style="background:transparent;border:1px solid var(--border);padding:4px 8px;cursor:pointer;color:var(--text);font-size:11px;">[Add Set]</button>';
       html += '</div>';
 
       return html;
@@ -247,6 +252,71 @@
       renderAll();
     } catch (e) {
       console.error('Sync failed:', e);
+    }
+  };
+
+  window.syncGarminForToday = async function() {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const res = await fetch(`/fitness/sync/garmin/date/${today}`, { method: 'POST' });
+      const data = await res.json();
+      if (data.status === 'no_activity') {
+        alert('No Garmin activity found for today');
+      } else {
+        renderAll();
+      }
+    } catch (e) {
+      console.error('Sync failed:', e);
+    }
+  };
+
+  window.editSet = async function(setId, exerciseId, exerciseName, currentWeight, currentReps) {
+    const weight = prompt(`Edit weight for ${exerciseName}:`, currentWeight);
+    if (weight === null) return;
+    const reps = prompt(`Edit reps for ${exerciseName}:`, currentReps);
+    if (reps === null) return;
+    
+    try {
+      await fetch(`/fitness/set-logs/${setId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ weight_lbs: parseFloat(weight), reps_completed: parseInt(reps) })
+      });
+      renderAll();
+    } catch (e) {
+      console.error('Update failed:', e);
+    }
+  };
+
+  window.addSet = async function(workoutLogId) {
+    try {
+      const exercises = await fetch('/fitness/exercises').then(r => r.json());
+      const exNames = exercises.map(e => `${e.id}: ${e.name}`).join('\n');
+      const exId = prompt(`Enter exercise ID:\n${exNames}`);
+      if (!exId) return;
+      
+      const setNum = prompt('Set number:', '1');
+      if (setNum === null) return;
+      
+      const weight = prompt('Weight (lbs):', '0');
+      if (weight === null) return;
+      
+      const reps = prompt('Reps:', '0');
+      if (reps === null) return;
+      
+      await fetch(`/fitness/workout-logs/${workoutLogId}/sets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          exercise_id: parseInt(exId),
+          set_number: parseInt(setNum),
+          weight_lbs: parseFloat(weight),
+          reps_completed: parseInt(reps)
+        })
+      });
+      renderAll();
+    } catch (e) {
+      console.error('Add set failed:', e);
     }
   };
 
