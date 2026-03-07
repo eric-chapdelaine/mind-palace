@@ -1,5 +1,8 @@
 """
 Google Calendar integration using OAuth2.
+
+Provides both task-specific convenience methods and generic event
+create/update methods used by SyncProviders.
 """
 import httpx
 from urllib.parse import quote
@@ -22,7 +25,7 @@ class GoogleCalendarClient:
             raise GoogleCalendarError("GOOGLE_REFRESH_TOKEN is not set", status_code=503)
         if not settings.GOOGLE_CALENDAR_ID:
             raise GoogleCalendarError("GOOGLE_CALENDAR_ID is not set", status_code=503)
-        
+
         self.calendar_id = settings.GOOGLE_CALENDAR_ID
         self.client_id = settings.GOOGLE_CLIENT_ID
         self.client_secret = settings.GOOGLE_CLIENT_SECRET
@@ -32,7 +35,7 @@ class GoogleCalendarClient:
     async def _get_access_token(self) -> str:
         if self._access_token:
             return self._access_token
-        
+
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.post(
                 "https://oauth2.googleapis.com/token",
@@ -43,10 +46,10 @@ class GoogleCalendarClient:
                     "grant_type": "refresh_token",
                 },
             )
-        
+
         if resp.status_code != 200:
             raise GoogleCalendarError(f"Failed to get access token: {resp.text}", status_code=501)
-        
+
         self._access_token = resp.json()["access_token"]
         assert self._access_token is not None
         return self._access_token
@@ -61,29 +64,10 @@ class GoogleCalendarClient:
             "Content-Type": "application/json",
         }
 
-    async def create_event(self, task: dict) -> dict:
-        task_id = task.get("id")
-        title = task.get("title", "Untitled")
-        description = task.get("description", "")
-        due_date = task.get("due_date")
+    # --- Generic event methods (used by SyncProviders) ---
 
-        if not due_date or due_date == "0001-01-01T00:00:00Z":
-            raise GoogleCalendarError("Task has no due date", status_code=400)
-
-        from datetime import datetime
-        dt = datetime.fromisoformat(due_date.replace("Z", "+00:00"))
-        
-        event = {
-            "summary": title,
-            "description": description,
-            "start": {"date": dt.strftime("%Y-%m-%d")},
-            "end": {"date": dt.strftime("%Y-%m-%d")},
-            "colorId": "6",  # Tangerine
-            "extendedProperties": {
-                "private": {"vikunja_task_id": str(task_id)}
-            },
-        }
-
+    async def create_event_raw(self, event: dict) -> dict:
+        """Create a calendar event from a raw event dict."""
         async with httpx.AsyncClient(timeout=10) as client:
             try:
                 resp = await client.post(
@@ -96,28 +80,10 @@ class GoogleCalendarClient:
 
         if resp.status_code not in (200, 201):
             raise GoogleCalendarError(f"Google Calendar error: {resp.text}", status_code=resp.status_code)
-
         return resp.json()
 
-    async def update_event(self, event_id: str, task: dict) -> dict:
-        title = task.get("title", "Untitled")
-        description = task.get("description", "")
-        done = task.get("done", False)
-        due_date = task.get("due_date")
-
-        event = {"summary": title, "description": description}
-
-        if done:
-            event["status"] = "completed"
-        elif due_date and due_date != "0001-01-01T00:00:00Z":
-            from datetime import datetime
-            dt = datetime.fromisoformat(due_date.replace("Z", "+00:00"))
-            event["start"] = {"date": dt.strftime("%Y-%m-%d")}
-            event["end"] = {"date": dt.strftime("%Y-%m-%d")}
-
-        # Always set color to Tangerine (6)
-        event["colorId"] = "6"
-
+    async def update_event_raw(self, event_id: str, event: dict) -> dict:
+        """Update a calendar event from a raw event dict."""
         async with httpx.AsyncClient(timeout=10) as client:
             try:
                 resp = await client.patch(
@@ -130,10 +96,10 @@ class GoogleCalendarClient:
 
         if resp.status_code not in (200, 201):
             raise GoogleCalendarError(f"Google Calendar error: {resp.text}", status_code=resp.status_code)
-
         return resp.json()
 
     async def delete_event(self, event_id: str) -> None:
+        """Delete a calendar event."""
         async with httpx.AsyncClient(timeout=10) as client:
             try:
                 resp = await client.delete(
@@ -146,105 +112,8 @@ class GoogleCalendarClient:
         if resp.status_code not in (200, 204):
             raise GoogleCalendarError(f"Google Calendar error: {resp.text}", status_code=resp.status_code)
 
-    async def create_sleep_event(self, sleep_event: dict) -> dict:
-        """Create a sleep event in Google Calendar.
-        
-        Args:
-            sleep_event: Event dict with summary, description, start, end, extendedProperties
-            
-        Returns:
-            Created event dict from Google Calendar
-        """
-        async with httpx.AsyncClient(timeout=10) as client:
-            try:
-                resp = await client.post(
-                    self._get_url("events"),
-                    json=sleep_event,
-                    headers=await self._headers(),
-                )
-            except httpx.RequestError as e:
-                raise GoogleCalendarError(f"Could not reach Google: {e}", status_code=503)
-
-        if resp.status_code not in (200, 201):
-            raise GoogleCalendarError(f"Google Calendar error: {resp.text}", status_code=resp.status_code)
-
-        return resp.json()
-
-    async def update_sleep_event(self, event_id: str, sleep_event: dict) -> dict:
-        """Update an existing sleep event in Google Calendar.
-        
-        Args:
-            event_id: The Google Calendar event ID to update
-            sleep_event: Event dict with fields to update
-            
-        Returns:
-            Updated event dict from Google Calendar
-        """
-        async with httpx.AsyncClient(timeout=10) as client:
-            try:
-                resp = await client.patch(
-                    f"{self._get_url('events')}/{event_id}",
-                    json=sleep_event,
-                    headers=await self._headers(),
-                )
-            except httpx.RequestError as e:
-                raise GoogleCalendarError(f"Could not reach Google: {e}", status_code=503)
-
-        if resp.status_code not in (200, 201):
-            raise GoogleCalendarError(f"Google Calendar error: {resp.text}", status_code=resp.status_code)
-
-        return resp.json()
-
-    async def create_activity_event(self, activity_event: dict) -> dict:
-        """Create an activity event in Google Calendar.
-        
-        Args:
-            activity_event: Event dict with summary, description, start, end, extendedProperties
-            
-        Returns:
-            Created event dict from Google Calendar
-        """
-        async with httpx.AsyncClient(timeout=10) as client:
-            try:
-                resp = await client.post(
-                    self._get_url("events"),
-                    json=activity_event,
-                    headers=await self._headers(),
-                )
-            except httpx.RequestError as e:
-                raise GoogleCalendarError(f"Could not reach Google: {e}", status_code=503)
-
-        if resp.status_code not in (200, 201):
-            raise GoogleCalendarError(f"Google Calendar error: {resp.text}", status_code=resp.status_code)
-
-        return resp.json()
-
-    async def update_activity_event(self, event_id: str, activity_event: dict) -> dict:
-        """Update an existing activity event in Google Calendar.
-        
-        Args:
-            event_id: The Google Calendar event ID to update
-            activity_event: Event dict with fields to update
-            
-        Returns:
-            Updated event dict from Google Calendar
-        """
-        async with httpx.AsyncClient(timeout=10) as client:
-            try:
-                resp = await client.patch(
-                    f"{self._get_url('events')}/{event_id}",
-                    json=activity_event,
-                    headers=await self._headers(),
-                )
-            except httpx.RequestError as e:
-                raise GoogleCalendarError(f"Could not reach Google: {e}", status_code=503)
-
-        if resp.status_code not in (200, 201):
-            raise GoogleCalendarError(f"Google Calendar error: {resp.text}", status_code=resp.status_code)
-
-        return resp.json()
-
     async def list_events(self) -> list[dict]:
+        """List events from the calendar."""
         async with httpx.AsyncClient(timeout=10) as client:
             try:
                 resp = await client.get(
@@ -258,6 +127,20 @@ class GoogleCalendarClient:
             raise GoogleCalendarError(f"Google Calendar error: {resp.text}", status_code=resp.status_code)
 
         return resp.json().get("items", [])
+
+    # --- Convenience aliases (backwards compat) ---
+
+    async def create_sleep_event(self, event: dict) -> dict:
+        return await self.create_event_raw(event)
+
+    async def update_sleep_event(self, event_id: str, event: dict) -> dict:
+        return await self.update_event_raw(event_id, event)
+
+    async def create_activity_event(self, event: dict) -> dict:
+        return await self.create_event_raw(event)
+
+    async def update_activity_event(self, event_id: str, event: dict) -> dict:
+        return await self.update_event_raw(event_id, event)
 
 
 _client: "GoogleCalendarClient | None" = None
