@@ -6,37 +6,54 @@ Central hub running on a Raspberry Pi that connects open-source life-management 
 
 ```
 mind-palace/
-├── main.py                    # App entry point, router registration, scheduler
+├── main.py                    # App entry point, router registration, APScheduler
 ├── core/
-│   ├── config.py              # All settings via env vars
-│   └── database.py            # SQLite engine + session dep, seeding
-├── models/
-│   ├── items.py               # SQLModel tables: TodoItem, GroceryItem, etc.
-│   ├── fitness.py             # Fitness tables: Exercise, WorkoutTemplate, ScheduledDay, etc.
-│   └── nutrition.py           # Nutrition tables: Recipe, MealPlan, GroceryList, etc.
-├── services/
-│   ├── progression.py         # Lift progression logic (PASS/CLOSE/FAIL/DELOAD)
-│   ├── scheduler.py           # Weekly workout schedule generator
+│   ├── config.py              # Settings via env vars
+│   └── database.py            # SQLModel engine + session dep, seeding
+├── models/                    # SQLModel table definitions (DB schema)
+│   ├── items.py               # TodoItem, GroceryItem, Tag, TodoTag, TodoPriority
+│   ├── fitness.py             # Exercise, WorkoutTemplate, ScheduledDay, SetLog, etc.
+│   └── nutrition.py           # Recipe, MealPlan, CookEvent, PlannedMeal, etc.
+├── schemas/                   # Pydantic request/response models (API contract)
+│   ├── todos.py               # TodoCreate, TodoRead, TagRead
+│   ├── groceries.py           # GroceryItemCreate, GroceryItemRead
+│   ├── fitness.py             # SetLogCreate, TodayWorkoutRead, ExerciseDetail, etc.
+│   ├── nutrition.py           # CookEventCreate, MealPlanRead, RecipeDetailRead, etc.
+│   └── sync.py                # SyncDomainResult, SyncResult
+├── services/                  # Business logic
+│   ├── health_calc.py         # Shared BMR, calorie targets, macro targets
+│   ├── scheduler.py           # Week schedule generation algorithm
+│   ├── schedule_service.py    # DB-aware schedule ensure/regenerate
+│   ├── progression.py         # Lift progression evaluation engine
 │   ├── meal_planner.py        # Deterministic meal planning algorithm
-│   └── garmin_sync.py        # Garmin Connect sync service
-├── integrations/
-│   ├── vikunja.py             # Vikunja API client
-│   ├── google_calendar.py     # Google Calendar API client
-│   └── garmin_fitness.py     # Garmin Connect API (optional - requires Python <3.14)
+│   ├── garmin_sync.py         # Garmin activity sync, workout matching, progression
+│   └── sync_providers/        # Generic sync provider abstraction
+│       ├── __init__.py        # SyncProvider protocol
+│       └── garmin_provider.py # Sleep + Activity sync to Google Calendar
+├── integrations/              # External API clients
+│   ├── vikunja.py             # Vikunja API client (available but not currently wired)
+│   ├── google_calendar.py     # Google Calendar client
+│   ├── garmin.py              # Garmin Connect client (sleep + activities via garth)
+│   └── garmin_fitness.py      # Lightweight activity fetcher for fitness sync
 ├── api/routers/
-│   ├── todos.py               # Full todo CRUD + Vikunja sync
-│   ├── groceries.py          # Grocery list
-│   ├── fitness.py             # Workout tracking, scheduling, Garmin sync
-│   ├── nutrition.py           # Meal planning, grocery generation
-│   ├── auth.py                # OAuth authentication
-│   └── sync.py                # Sync between integrations
-└── ui/
-    ├── templates/
-    │   └── dashboard.html     # Main dashboard template
-    └── static/
-        ├── core.js            # Data fetching, widget system, modal system
-        ├── widgets.js         # Widget definitions & rendering
-        └── fitness_widgets.js # Fitness/nutrition dashboard widgets
+│   ├── ui.py                  # Static file serving, dashboard route
+│   ├── todos.py               # Todo CRUD with tags and priority filtering
+│   ├── groceries.py           # Simple grocery list CRUD
+│   ├── fitness.py             # Workouts, scheduling, Garmin sync, exercise overrides
+│   ├── nutrition.py           # Meal plans, cook events, grocery lists, recipes, pantry
+│   ├── auth.py                # Google OAuth flow
+│   └── sync.py                # Sync to Google Calendar via SyncProviders
+├── ui/
+│   ├── templates/
+│   │   └── dashboard.html     # Main HTML template
+│   └── static/
+│       ├── core.js            # Widget system, data layer, modal system, clock
+│       ├── widgets.js         # Task widgets + task modal system
+│       ├── fitness_widgets.js # Fitness + nutrition widgets
+│       └── style.css          # Dark theme CSS
+└── data/
+    ├── program_templates.json # Seed: 3 workout templates, 10 exercises
+    └── recipes.json           # Seed: 20 batch-cook recipes
 ```
 
 ## Running the Application
@@ -56,48 +73,45 @@ python main.py
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env   # fill in VIKUNJA_TOKEN, etc.
+cp .env.example .env   # configure optional integrations (Garmin, Google Calendar)
 python main.py
 ```
 
 ## API Reference
 
-### Quick Capture (iPhone Shortcuts / IoT)
-
-```
-POST /capture?text=Buy+milk&category=grocery
-POST /capture?text=Call+dentist&category=task
-POST /capture?text=Call+dentist&category=task&notes=Ask+about+cleaning
-
-# or JSON body:
-POST /capture
-{"text": "Buy milk", "category": "grocery"}
-{"text": "Call dentist", "category": "task", "notes": "10am slot", "due_date": "2025-07-01T10:00:00"}
-```
-
 ### Todos
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/todos/` | Create todo → push to Vikunja (queues locally if offline) |
-| `GET` | `/todos/` | List local todos (`?synced=false` for pending) |
-| `POST` | `/todos/sync` | Push all unsynced local items to Vikunja |
-| `GET` | `/todos/vikunja` | Live fetch from Vikunja (`?project_id=2`) |
+| `POST` | `/todos/` | Create todo (with tags, priority) |
+| `GET` | `/todos/` | List todos (`?status=TODO`, `?priority=1`, `?tag=work`) |
+| `GET` | `/todos/tags` | List all tags |
+| `GET` | `/todos/{id}` | Get a specific todo |
+| `PATCH` | `/todos/{id}` | Update todo (any fields, including tags) |
+| `DELETE` | `/todos/{id}` | Delete a todo |
 
 ### Fitness
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/fitness/widgets/today-workout` | Today's scheduled workout with exercises |
-| `GET` | `/fitness/widgets/week-overview` | This week's schedule (Mon-Sun) |
-| `GET` | `/fitness/schedule/this-week` | Generate/retrieve current week's schedule |
-| `GET` | `/fitness/schedule/{date}` | Get workout details for a specific date |
-| `POST` | `/fitness/sync/garmin` | Sync Garmin activities with scheduled workouts |
-| `PATCH` | `/fitness/scheduled-days/{day_id}/skip` | Skip a scheduled workout |
-| `GET` | `/fitness/exercises/{exercise_id}/history` | Get exercise progress history |
-
-**Scheduler Configuration** (environment variables):
-- `LIFTS_PER_WEEK` - Number of strength workouts per week (default: 3)
+| `GET` | `/fitness/widgets/today-workout` | Today's workout with prescribed and actual sets |
+| `GET` | `/fitness/widgets/week-overview` | 7-day schedule grid (Mon-Sun) |
+| `GET` | `/fitness/schedule/this-week` | Current week schedule |
+| `POST` | `/fitness/schedule/generate` | Regenerate next week's schedule |
+| `GET` | `/fitness/schedule/{date}` | Day details with exercises |
+| `PATCH` | `/fitness/scheduled-days/{id}/skip` | Skip a workout day |
+| `POST` | `/fitness/scheduled-days/{id}/overrides` | Add exercise override (override/skip/add) |
+| `DELETE` | `/fitness/scheduled-days/{id}/overrides/{oid}` | Remove exercise override |
+| `POST` | `/fitness/sync/garmin` | Full Garmin sync |
+| `POST` | `/fitness/sync/garmin/date/{date}` | Sync specific date |
+| `POST` | `/fitness/workout-logs/override` | Override/create workout log |
+| `POST` | `/fitness/workout-logs/{id}/manual-match` | Manual Garmin activity match |
+| `POST` | `/fitness/workout-logs/{id}/sets` | Add a set to a workout |
+| `PATCH` | `/fitness/set-logs/{id}` | Update a set |
+| `DELETE` | `/fitness/set-logs/{id}` | Delete a set |
+| `GET` | `/fitness/exercises` | List all exercises |
+| `GET` | `/fitness/exercises/{id}/history` | Exercise progress history |
+| `POST` | `/fitness/daily-stats/weight` | Log body weight |
 
 ### Nutrition
 
@@ -106,34 +120,45 @@ POST /capture
 | `GET` | `/nutrition/widgets/today` | Today's nutrition summary (calories, macros) |
 | `GET` | `/nutrition/widgets/meal-plan` | This week's meal plan |
 | `POST` | `/nutrition/meal-plans/generate` | Generate meal plan for the week |
-| `PATCH` | `/nutrition/planned-meals/{id}/override?recipe_id=X` | Replace meal with specific recipe |
+| `POST` | `/nutrition/cook-events` | Record a cooking event |
+| `GET` | `/nutrition/cook-events` | List cook events with remaining servings |
+| `POST` | `/nutrition/planned-meals/{id}/swap` | Swap a meal |
+| `PATCH` | `/nutrition/planned-meals/{id}/override` | Replace meal with specific recipe |
+| `PATCH` | `/nutrition/planned-meals/{id}/move` | Move meal to different date/slot |
 | `DELETE` | `/nutrition/planned-meals/{id}` | Delete a planned meal |
 | `POST` | `/nutrition/meal-plans/{plan_id}/meals` | Add a meal to plan |
-| `GET` | `/nutrition/grocery-lists/latest` | Get latest grocery list |
-| `POST` | `/nutrition/grocery-lists/generate` | Generate grocery list from meal plan |
+| `GET` | `/nutrition/grocery-list` | Get grocery list |
+| `POST` | `/nutrition/grocery-list/generate` | Generate grocery list from meal plan |
+| `PATCH` | `/nutrition/grocery-items/{id}/check` | Toggle grocery item checked |
 | `GET` | `/nutrition/recipes` | List all recipes |
-| `GET` | `/nutrition/recipes/{id}` | Get recipe details with ingredients |
-| `POST` | `/nutrition/pantry/` | Add item to pantry |
-| `PATCH` | `/nutrition/pantry/{id}` | Update pantry item |
+| `GET` | `/nutrition/recipes/{id}` | Recipe details with ingredients |
+| `GET` | `/nutrition/pantry` | List pantry items |
+| `POST` | `/nutrition/pantry` | Add/update pantry item |
+| `DELETE` | `/nutrition/pantry/{id}` | Delete pantry item |
 
 ### Sync
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/sync/to-google` | Sync Vikunja tasks + Garmin sleep + activities to Google Calendar |
+| `POST` | `/sync/to-google` | Sync Garmin sleep + activities to Google Calendar |
 
-Options:
-- `?project_id=2` - Filter Vikunja tasks by project
-- `?include_sleep=false` - Skip Garmin sleep data
-- `?include_activities=false` - Skip Garmin activities
+Uses an extensible SyncProvider pattern — each provider implements `collect()` and `push()`.
 
-### Groceries (Legacy)
+### Groceries
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/groceries/?name=Milk` | Add item |
 | `GET` | `/groceries/` | List pending items |
 | `PATCH` | `/groceries/{id}/done` | Mark purchased |
+
+### Auth
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/auth/google` | Start OAuth flow → redirects to Google |
+| `GET` | `/auth/google/callback` | OAuth callback → returns refresh token |
+| `GET` | `/auth/google/status` | Check if Google Calendar is configured |
 
 ### Meta
 
@@ -142,17 +167,9 @@ GET /health      → {"status": "ok", ...}
 GET /docs        → Interactive API docs (Swagger UI)
 ```
 
-### Authentication (Google Calendar)
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/auth/google` | Start OAuth flow → redirects to Google |
-| `GET` | `/auth/google/callback` | OAuth callback → returns refresh token |
-| `GET` | `/auth/google/status` | Check if Google Calendar is configured |
-
 ## Google Calendar Integration
 
-Mind Palace can sync your Vikunja tasks with due dates and Garmin sleep data to Google Calendar automatically.
+Mind Palace can sync Garmin sleep and activity data to Google Calendar automatically.
 
 ### Prerequisites
 
@@ -235,14 +252,12 @@ echo "0 * * * * curl -X POST http://localhost:8000/sync/to-google" | crontab -
 
 ### How It Works
 
-- **Tasks**: Only tasks with **due dates** are synced
 - **Sleep**: Garmin sleep data is synced as "Sleep" events with start/end times and quality score
 - **Activities**: Garmin activities are synced with activity name, duration, distance, calories, and average HR
-- Tasks are linked via `extendedProperties` (Vikunja task ID stored in Google event)
-- Sleep events are linked by date
-- Activities are linked by Garmin activity ID
-- Updates are one-way: Vikunja/Garmin → Google Calendar
-- Completing a task in Vikunja marks it completed in Google Calendar
+- Sleep events are linked by date via `extendedProperties`
+- Activities are linked by Garmin activity ID via `extendedProperties`
+- Updates are one-way: Garmin → Google Calendar
+- The sync uses an extensible SyncProvider pattern — add new providers in `services/sync_providers/`
 
 ### Check Auth Status
 
@@ -265,27 +280,35 @@ The scheduler generates weekly workout schedules based on:
 - `GET /fitness/schedule/this-week` - Generate/retrieve current week's schedule (Mon-Sun)
 - Click on any day in the week overview widget to see exercises
 
+### Exercise Overrides
+
+Per-day exercise flexibility via `ScheduledExerciseOverride`:
+- **override**: Change prescribed sets/reps for an exercise on a specific day
+- **skip**: Skip an exercise from the template for that day
+- **add**: Add an ad-hoc exercise not in the template
+
 ### Progression System
 
-After completing a workout, the system evaluates each exercise:
+After completing a workout, the progression engine evaluates each exercise based on completion percentage (`total_reps_completed / (prescribed_sets * prescribed_reps)`):
 
-- **PASS** (all sets completed at prescribed weight): Weight increases by exercise's increment
-- **CLOSE** (within 1 rep of target): Weight stays same
-- **FAIL** (missed 2+ reps): Weight decreases by 10%
-- **DELOAD** (3+ consecutive fails): Reduce weight by 20%, reset fail streak
+- **PASS** (>=95% completion): Weight increases by exercise's increment
+- **CLOSE** (>=80% but <95%): Weight stays same; 2 consecutive CLOSEs auto-promote to PASS
+- **FAIL** (<80%): Weight stays same; 3 consecutive FAILs trigger DELOAD (10% weight reduction)
 
 ### Garmin Sync
 
-The system matches Garmin workout activities to scheduled workouts by:
-1. Looking for activities on scheduled workout days
-2. Matching by session type (lift, run, cycle)
-3. Marking matched days as "completed" with Garmin data (duration, calories)
+APScheduler runs Garmin sync every 30 minutes. The sync:
+1. Fetches the last 2 days of activities from Garmin
+2. Upserts them into the database
+3. Auto-matches to scheduled workout days
+4. For strength workouts: parses exercise sets and runs progression evaluation
+5. Updates daily calorie stats
 
-**Note:** Garmin integration requires Python <3.14 due to library compatibility. Set `GARMIN_ENABLED=false` in `.env` to disable.
+**Note:** The `garth` library may have issues with Python 3.14+. Set `GARMIN_ENABLED=false` in `.env` to disable.
 
 ### Setup
 
-1. Configure Garmin (optional - set `GARMIN_ENABLED=false` if on Python 3.14+):
+1. Configure Garmin (optional):
 ```bash
 python -c "import garth; garth.login(); garth.save('~/.garth')"
 ```
@@ -298,19 +321,15 @@ The meal planner generates weekly meal plans using a deterministic algorithm:
 - Alternates between breakfast, lunch, dinner slots
 - Prioritizes batch cook recipes to reduce cooking frequency
 - Avoids repeating same meals within the week
-- Targets configured calorie and macro goals
+- Targets configured calorie and macro goals (via `health_calc.py`)
 
-**Endpoints:**
-- `POST /nutrition/meal-plans/generate` - Generate meal plan for current week
-- `GET /nutrition/widgets/meal-plan` - View this week's meal plan
+### Cook Events
 
-### Managing Meals
-
-In the meal plan UI:
-- Click on any dinner to view recipe details (description, ingredients, nutrition)
-- Use "Replace" to swap a meal with a different recipe
-- Use "Delete" to remove a meal from the plan
-- Empty slots show "+ Add" to add a new meal
+Meals use a cook-then-eat model:
+- **CookEvent**: Records when a recipe is cooked and how many servings it produces
+- **PlannedMeal**: A meal slot that optionally references a CookEvent
+- Tracking is soft — remaining servings are advisory, not enforced
+- Meals can be swapped, replaced, moved to different dates/slots, or deleted
 
 ### Grocery Lists
 
@@ -319,24 +338,15 @@ Automatically generates grocery lists from meal plans:
 - Combines quantities for common ingredients
 - Marks items as purchased as you shop
 
-**Endpoints:**
-- `POST /nutrition/grocery-lists/generate` - Generate from current meal plan
-- `GET /nutrition/grocery-lists/latest` - View current grocery list
-
 ### Recipes & Pantry
 
-- `GET /nutrition/recipes` - Browse all recipes
-- `GET /nutrition/recipes/{id}` - View recipe details with ingredients
-- `POST /nutrition/pantry/` - Add items to pantry (what you have on hand)
+- Browse and view recipe details with ingredients and nutrition info
+- Manage pantry items (add, update, delete)
 - Pantry items are considered when generating grocery lists
 
 ## iPhone Shortcut
 
 1. Add a **Get Contents of URL** action
-2. URL: `http://pi-3b.local:8000/todo`
+2. URL: `http://pi-3b.local:8000/todos/`
 3. Method: `POST`
-4. Request Body: `JSON` → `{"text": "[Ask for Input]", "category": "task"}`
-
-## Offline Resilience
-
-If Vikunja is unreachable, todos are saved locally with `synced=false`. Call `POST /todos/sync` when connectivity is restored to flush the queue.
+4. Request Body: `JSON` → `{"title": "[Ask for Input]"}`
