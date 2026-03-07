@@ -131,8 +131,44 @@ def get_today_workout(db: Session = Depends(get_session)):
 
 @router.get("/widgets/week-overview")
 def get_week_overview(db: Session = Depends(get_session)):
+    from services.scheduler import get_this_monday, generate_week_schedule
+    
     today = _get_today()
     monday = today - timedelta(days=today.weekday())
+    sunday = monday + timedelta(days=6)
+    
+    existing = db.exec(
+        select(ScheduledDay).where(
+            ScheduledDay.day_date >= monday,
+            ScheduledDay.day_date <= sunday
+        )
+    ).all()
+    
+    if not existing:
+        templates = db.exec(select(WorkoutTemplate).order_by(WorkoutTemplate.sort_order)).all()
+        template_list = [{"id": t.id, "name": t.name, "session_type": t.session_type} for t in templates]
+        
+        last_lift = db.exec(
+            select(ScheduledDay).where(ScheduledDay.session_type == "lift")
+            .order_by(desc(ScheduledDay.day_date))
+        ).first()
+        
+        last_sort = -1
+        if last_lift and last_lift.template_id:
+            last_template = db.get(WorkoutTemplate, last_lift.template_id)
+            if last_template:
+                last_sort = last_template.sort_order
+        
+        schedule = generate_week_schedule(template_list, last_sort)
+        
+        for sd in schedule:
+            db.add(ScheduledDay(
+                day_date=sd.date,
+                template_id=sd.template_id,
+                session_type=sd.session_type,
+                status=sd.status
+            ))
+        db.commit()
     
     days = []
     for i in range(7):
