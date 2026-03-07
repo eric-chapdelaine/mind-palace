@@ -6,6 +6,10 @@ services:
       - "8000:8000"
     volumes:
       - ./mind-palace.db:/app/mind-palace.db
+      - ~/.garth:/root/.garth
+      - ./data:/app/data
+      - ./.env:/app/.env:ro
     environment:
       - DATABASE_URL=sqlite:///./mind-palace.db
+      - TZ=America/New_York
     restart: unless-stopped
