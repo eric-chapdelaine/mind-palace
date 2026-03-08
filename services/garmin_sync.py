@@ -65,23 +65,17 @@ def sync_garmin_for_date(target_date: date, template_id: int | None = None):
 
     # Prefer strength training, fall back to other activity types
     matching_activity = None
-    for act in activities:
-        if date.fromisoformat(act["date"]) == target_date:
-            if act["activity_type"] == "strength_training":
-                matching_activity = act
-                break
 
-    if not matching_activity:
-        for act in activities:
-            if date.fromisoformat(act["date"]) != target_date:
-                continue
-            if act["activity_type"] == "cycling":
-                if (act.get("duration_minutes") or 0) >= COMMUTE_MAX_DURATION_MINUTES:
-                    matching_activity = act
-                    break
-            elif act["activity_type"] in ("running", "walking"):
-                matching_activity = act
-                break
+    for act in activities:
+        if date.fromisoformat(act["date"]) != target_date:
+          continue
+        if act["activity_type"] in ("running", "strength_training"):
+          matching_activity = act
+          break
+        if act["activity_type"] == "cycling":
+          if (act.get("duration_minutes") or 0) >= COMMUTE_MAX_DURATION_MINUTES:
+            matching_activity = act
+            break
 
     if not matching_activity:
         return None
