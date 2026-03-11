@@ -1,0 +1,175 @@
+{
+  "templates": [
+    {
+      "name": "Full Body A",
+      "session_type": "lift",
+      "sort_order": 0,
+      "exercises": [
+        {
+          "name": "Barbell Squat",
+          "garmin_enum": "SQUAT",
+          "category": "lower",
+          "equipment": "barbell",
+          "sets": 3,
+          "reps": 5,
+          "start_weight_lbs": 95,
+          "increment": 10
+        },
+        {
+          "name": "Barbell Bench Press",
+          "garmin_enum": "BENCH_PRESS",
+          "category": "upper",
+          "equipment": "barbell",
+          "sets": 3,
+          "reps": 8,
+          "start_weight_lbs": 75,
+          "increment": 5
+        },
+        {
+          "name": "Barbell Bent-Over Row",
+          "garmin_enum": "BENT_OVER_ROW",
+          "category": "upper",
+          "equipment": "barbell",
+          "sets": 3,
+          "reps": 8,
+          "start_weight_lbs": 65,
+          "increment": 5
+        },
+        {
+          "name": "Romanian Deadlift",
+          "garmin_enum": "ROMANIAN_DEADLIFT",
+          "category": "lower",
+          "equipment": "barbell",
+          "sets": 3,
+          "reps": 10,
+          "start_weight_lbs": 85,
+          "increment": 10
+        },
+        {
+          "name": "Dumbbell Curl",
+          "garmin_enum": "CURL",
+          "category": "upper",
+          "equipment": "dumbbell",
+          "sets": 3,
+          "reps": 12,
+          "start_weight_lbs": 25,
+          "increment": 5
+        }
+      ]
+    },
+    {
+      "name": "Full Body B",
+      "session_type": "lift",
+      "sort_order": 1,
+      "exercises": [
+        {
+          "name": "Barbell Deadlift",
+          "garmin_enum": "DEADLIFT",
+          "category": "lower",
+          "equipment": "barbell",
+          "sets": 3,
+          "reps": 5,
+          "start_weight_lbs": 115,
+          "increment": 10
+        },
+        {
+          "name": "Overhead Press",
+          "garmin_enum": "OVERHEAD_PRESS",
+          "category": "upper",
+          "equipment": "barbell",
+          "sets": 3,
+          "reps": 8,
+          "start_weight_lbs": 55,
+          "increment": 5
+        },
+        {
+          "name": "Lat Pulldown",
+          "garmin_enum": "LAT_PULLDOWN",
+          "category": "upper",
+          "equipment": "machine",
+          "sets": 3,
+          "reps": 10,
+          "start_weight_lbs": 90,
+          "increment": 5
+        },
+        {
+          "name": "Leg Press",
+          "garmin_enum": "LEG_PRESS",
+          "category": "lower",
+          "equipment": "machine",
+          "sets": 3,
+          "reps": 10,
+          "start_weight_lbs": 135,
+          "increment": 10
+        },
+        {
+          "name": "Tricep Pushdown",
+          "garmin_enum": "PUSHDOWN",
+          "category": "upper",
+          "equipment": "machine",
+          "sets": 3,
+          "reps": 12,
+          "start_weight_lbs": 40,
+          "increment": 5
+        }
+      ]
+    },
+    {
+      "name": "Full Body C",
+      "session_type": "lift",
+      "sort_order": 2,
+      "exercises": [
+        {
+          "name": "Barbell Squat",
+          "garmin_enum": "SQUAT",
+          "category": "lower",
+          "equipment": "barbell",
+          "sets": 3,
+          "reps": 5,
+          "start_weight_lbs": 95,
+          "increment": 10
+        },
+        {
+          "name": "Barbell Bench Press",
+          "garmin_enum": "BENCH_PRESS",
+          "category": "upper",
+          "equipment": "barbell",
+          "sets": 3,
+          "reps": 8,
+          "start_weight_lbs": 75,
+          "increment": 5
+        },
+        {
+          "name": "Barbell Bent-Over Row",
+          "garmin_enum": "BENT_OVER_ROW",
+          "category": "upper",
+          "equipment": "barbell",
+          "sets": 3,
+          "reps": 8,
+          "start_weight_lbs": 65,
+          "increment": 5
+        },
+        {
+          "name": "Romanian Deadlift",
+          "garmin_enum": "ROMANIAN_DEADLIFT",
+          "category": "lower",
+          "equipment": "barbell",
+          "sets": 3,
+          "reps": 10,
+          "start_weight_lbs": 85,
+          "increment": 10
+        },
+        {
+          "name": "Overhead Press",
+          "garmin_enum": "OVERHEAD_PRESS",
+          "category": "upper",
+          "equipment": "barbell",
+          "sets": 3,
+          "reps": 8,
+          "start_weight_lbs": 55,
+          "increment": 5
+        }
+      ]
+    }
+  ]
+}

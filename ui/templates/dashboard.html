@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mind Palace</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Mind Palace</h1>
+    <button class="btn-new-task" onclick="openNewTaskModal()">+ New Task</button>
+    <span id="clock"></span>
+  </header>
+  <div id="content"></div>
+</div>
+
+<!-- core must load before widgets -->
+<script src="/static/core.js"></script>
+<script src="/static/widgets.js"></script>
+<script src="/static/fitness_widgets.js"></script>
+</body>
+</html>
