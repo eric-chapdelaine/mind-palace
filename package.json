@@ -1,0 +1,17 @@
+{
+  "name": "opencode-task-manager",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.15.1",
+  "scripts": {
+    "dev": "concurrently --kill-others --names server,web \"pnpm --filter @opencode-task-manager/server dev\" \"pnpm --filter @opencode-task-manager/web dev\"",
+    "build": "pnpm --recursive build",
+    "typecheck": "pnpm --recursive typecheck",
+    "db:migrate": "pnpm --filter @opencode-task-manager/server db:migrate",
+    "start": "pnpm --filter @opencode-task-manager/server start"
+  },
+  "devDependencies": {
+    "concurrently": "10.0.5",
+    "typescript": "7.0.2"
+  }
+}

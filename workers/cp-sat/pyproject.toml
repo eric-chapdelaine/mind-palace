@@ -1,0 +1,5 @@
+[project]
+name = "mind-palace-cp-sat"
+version = "0.1.0"
+requires-python = ">=3.11,<3.14"
+dependencies = ["ortools==9.14.6206"]
