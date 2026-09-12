@@ -1,0 +1,25 @@
+{
+  "name": "@opencode-task-manager/server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "db:migrate": "tsx src/migrate.ts",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.1",
+    "@opencode-ai/sdk": "1.18.29",
+    "@opencode-task-manager/database": "workspace:*",
+    "@opencode-task-manager/shared": "workspace:*",
+    "hono": "4.13.7"
+  },
+  "devDependencies": {
+    "@types/node": "26.5.0",
+    "tsx": "4.23.13",
+    "typescript": "7.0.2"
+  }
+}
