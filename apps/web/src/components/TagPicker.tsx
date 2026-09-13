@@ -19,11 +19,12 @@ function fuzzyScore(title: string, query: string): number {
   return 250 - gaps - candidate.length;
 }
 
-export function TagPicker({ tags, selectedIds, onChange, onCreateTag }: {
+export function TagPicker({ tags, selectedIds, onChange, onCreateTag, placeholder = "Type to find or create a tag" }: {
   tags: Tag[];
   selectedIds: number[];
   onChange: (ids: number[]) => void;
   onCreateTag?: (title: string) => Promise<Tag>;
+  placeholder?: string;
 }) {
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
@@ -57,7 +58,7 @@ export function TagPicker({ tags, selectedIds, onChange, onCreateTag }: {
 
   return <div className="tag-picker">
     {selected.length > 0 && <div className="selected-tags">{selected.map((tag) => <button type="button" key={tag.id} onClick={() => onChange(selectedIds.filter((id) => id !== tag.id))}>{tag.title} <span aria-hidden="true">x</span></button>)}</div>}
-    <input role="combobox" aria-expanded={matches.length > 0} aria-controls="tag-results" value={query} disabled={busy} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => void accept(event)} placeholder="Type to find or create a tag" />
+    <input role="combobox" aria-expanded={matches.length > 0} aria-controls="tag-results" value={query} disabled={busy} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => void accept(event)} placeholder={placeholder} />
     {matches.length > 0 && <div className="tag-results" id="tag-results">{matches.map(({ tag }) => <button type="button" key={tag.id} onClick={() => select(tag)}>{tag.title}</button>)}</div>}
   </div>;
 }

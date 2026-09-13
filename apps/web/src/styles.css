@@ -33,6 +33,8 @@ code, pre { overflow-wrap: anywhere; white-space: pre-wrap; }
 .view-nav, .detail-nav { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1rem 0; }
 .view-nav > div, .button-row, .detail-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .view-nav button.selected { font-weight: 700; }
+.view-nav .tag-filter { align-items: start; gap: 1rem; }
+.tag-filter label { margin: 0; min-width: 240px; }
 .mind-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 1rem; align-items: start; }
 
 .kanban-board { display: grid; grid-template-columns: repeat(5, minmax(190px, 1fr)); gap: .75rem; overflow-x: auto; }
