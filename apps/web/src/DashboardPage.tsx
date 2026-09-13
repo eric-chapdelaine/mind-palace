@@ -5,6 +5,7 @@ import { api } from "./api";
 import { CreateTaskPanel } from "./components/CreateTaskPanel";
 import { TaskCard } from "./components/TaskCard";
 import { TagHierarchy } from "./components/TagHierarchy";
+import { TagPicker } from "./components/TagPicker";
 
 const columns: Array<{ status: KanbanStatus; label: string }> = [
   { status: "inbox", label: "Inbox" },
@@ -17,7 +18,8 @@ const columns: Array<{ status: KanbanStatus; label: string }> = [
 export function DashboardPage() {
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
-  const [view, setView] = useState<"all" | "work" | "personal">("all");
+  const [includedTagIds, setIncludedTagIds] = useState<number[]>([]);
+  const [excludedTagIds, setExcludedTagIds] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -38,9 +40,11 @@ export function DashboardPage() {
     return () => window.clearInterval(interval);
   }, []);
 
+  // Included acts as a whitelist; excluded is resolved afterwards, so a tag on both lists hides its tasks.
   const visible = tasks.filter((task) => {
-    const work = [...task.tags, ...task.derivedTags].some((tag) => tag.publicId === "mind-palace:work");
-    return view === "all" || (view === "work" ? work : !work);
+    const taskTagIds = new Set([...task.tags, ...task.derivedTags].map((tag) => tag.id));
+    if (includedTagIds.length > 0 && !includedTagIds.some((id) => taskTagIds.has(id))) return false;
+    return !excludedTagIds.some((id) => taskTagIds.has(id));
   });
   const active = visible.filter((task) => !["completed", "cancelled"].includes(task.kanbanStatus));
   const completed = visible
@@ -81,7 +85,13 @@ export function DashboardPage() {
           <div><strong>{scheduled}</strong><span>fixed events</span></div>
         </div>
       </header>
-      <nav className="view-nav"><div>{(["all", "work", "personal"] as const).map((item) => <button className={view === item ? "selected" : ""} key={item} onClick={() => setView(item)}>{item}</button>)}</div><Link to="/schedule">Weekly schedule</Link></nav>
+      <nav className="view-nav">
+        <div className="tag-filter">
+          <label>Included tags<TagPicker tags={tags} selectedIds={includedTagIds} onChange={setIncludedTagIds} placeholder="Type to filter in" /></label>
+          <label>Excluded tags<TagPicker tags={tags} selectedIds={excludedTagIds} onChange={setExcludedTagIds} placeholder="Type to filter out" /></label>
+        </div>
+        <Link to="/schedule">Weekly schedule</Link>
+      </nav>
       {error && <div className="error-banner">{error}</div>}
       <div className="mind-layout">
         <section className="kanban-board">
