@@ -1,4 +1,4 @@
-import type { Schedule, TaskSummary, WeatherForecast } from "@mind-palace/shared";
+import type { Schedule, TaskSummary, TimeBlockStatus, WeatherForecast } from "@mind-palace/shared";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "./api";
@@ -21,6 +21,36 @@ function sameDay(left: Date, right: Date): boolean {
   return left.getFullYear() === right.getFullYear()
     && left.getMonth() === right.getMonth()
     && left.getDate() === right.getDate();
+}
+
+// Collapse adjacent blocks of the same task (e.g. consecutive 30-minute solver
+// chunks) into one event in the UI. Adjacency is judged on the times as they
+// appear in this day column, so blocks that touch across midnight still merge.
+function mergeAdjacentBlocks(
+  blocks: Array<{ key: string; taskId: number; startAt: string; endAt: string; status: TimeBlockStatus }>,
+  day: Date,
+  dayEnd: Date,
+): Array<{ key: string; taskId: number; startAt: string; endAt: string; status: TimeBlockStatus }> {
+  const sorted = [...blocks].sort((left, right) => new Date(left.startAt).getTime() - new Date(right.startAt).getTime());
+  const merged: typeof blocks = [];
+  for (const block of sorted) {
+    const previous = merged[merged.length - 1];
+    const previousEnd = previous
+      ? new Date(Math.min(new Date(previous.endAt).getTime(), dayEnd.getTime()))
+      : null;
+    const blockStart = new Date(Math.max(new Date(block.startAt).getTime(), day.getTime()));
+    if (
+      previous && previousEnd
+      && previous.taskId === block.taskId
+      && previous.status === block.status
+      && previousEnd.getTime() === blockStart.getTime()
+    ) {
+      merged[merged.length - 1] = { ...previous, endAt: block.endAt };
+    } else {
+      merged.push(block);
+    }
+  }
+  return merged;
 }
 
 export function SchedulePage() {
@@ -159,9 +189,13 @@ export function SchedulePage() {
         </div>
         {days.map((day) => {
           const dayEnd = addDays(day, 1);
-          const blocks = visibleBlocks.filter((block) => (
-            new Date(block.startAt) < dayEnd && new Date(block.endAt) > day
-          ));
+          const blocks = mergeAdjacentBlocks(
+            visibleBlocks.filter((block) => (
+              new Date(block.startAt) < dayEnd && new Date(block.endAt) > day
+            )),
+            day,
+            dayEnd,
+          );
           const elapsedMinutes = sameDay(day, now)
             ? now.getHours() * 60 + now.getMinutes()
             : day < startOfDay(now) ? 1440 : 0;
