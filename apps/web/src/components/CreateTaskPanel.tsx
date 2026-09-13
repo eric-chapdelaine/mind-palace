@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import type { CreateTaskInput, Tag } from "@opencode-task-manager/shared";
+import type { CreateTaskInput, Tag } from "@mind-palace/shared";
 import { TagPicker } from "./TagPicker";
 
 interface Props {
@@ -21,7 +21,7 @@ export function CreateTaskPanel({ tags, onCreateTask, onCreateTag }: Props) {
     event.preventDefault();
     setBusy(true);
     try {
-      await onCreateTask({ title, description, priority, durationMinutes: durationMinutes ? Number(durationMinutes) : null, splittable, tagIds, startImmediately: false });
+      await onCreateTask({ title, description, priority, durationMinutes: durationMinutes ? Number(durationMinutes) : null, splittable, tagIds });
       setTitle("");
       setDescription("");
       setDurationMinutes("");

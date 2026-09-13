@@ -1,14 +1,14 @@
 {
-  "name": "opencode-task-manager",
+  "name": "mind-palace",
   "private": true,
   "version": "0.1.0",
   "packageManager": "pnpm@10.15.1",
   "scripts": {
-    "dev": "concurrently --kill-others --names server,web \"pnpm --filter @opencode-task-manager/server dev\" \"pnpm --filter @opencode-task-manager/web dev\"",
+    "dev": "concurrently --kill-others --names server,web \"pnpm --filter @mind-palace/server dev\" \"pnpm --filter @mind-palace/web dev\"",
     "build": "pnpm --recursive build",
     "typecheck": "pnpm --recursive typecheck",
-    "db:migrate": "pnpm --filter @opencode-task-manager/server db:migrate",
-    "start": "pnpm --filter @opencode-task-manager/server start"
+    "db:migrate": "pnpm --filter @mind-palace/server db:migrate",
+    "start": "pnpm --filter @mind-palace/server start"
   },
   "devDependencies": {
     "concurrently": "10.0.5",

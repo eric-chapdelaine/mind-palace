@@ -1,4 +1,4 @@
-import { Database } from "@opencode-task-manager/database";
+import { Database } from "@mind-palace/database";
 import { loadConfig } from "./config.js";
 
 const config = loadConfig();

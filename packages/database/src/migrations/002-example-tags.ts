@@ -1,11 +1,7 @@
-export const optionalEstimatesAndExampleTagsMigration = {
-  version: 9,
-  name: "optional estimates and example tag hierarchy",
+export const exampleTagsMigration = {
+  version: 2,
+  name: "example tag hierarchy",
   sql: String.raw`
-    ALTER TABLE tasks ADD COLUMN duration_estimated INTEGER NOT NULL DEFAULT 0
-      CHECK (duration_estimated IN (0, 1));
-    UPDATE tasks SET duration_estimated = 1;
-
     INSERT OR IGNORE INTO tags (public_id, title, description, created_at, updated_at) VALUES
       ('example:personal', 'personal', 'Personal commitments and interests.', '2026-09-10T00:00:00.000Z', '2026-09-10T00:00:00.000Z'),
       ('example:home', 'home', 'Household tasks and projects.', '2026-09-10T00:00:00.000Z', '2026-09-10T00:00:00.000Z'),

@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-task-manager/server",
+  "name": "@mind-palace/server",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -12,9 +12,8 @@
   },
   "dependencies": {
     "@hono/node-server": "2.1.1",
-    "@opencode-ai/sdk": "1.18.29",
-    "@opencode-task-manager/database": "workspace:*",
-    "@opencode-task-manager/shared": "workspace:*",
+    "@mind-palace/database": "workspace:*",
+    "@mind-palace/shared": "workspace:*",
     "hono": "4.13.7"
   },
   "devDependencies": {

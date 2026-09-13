@@ -1,6 +1,6 @@
 # Server
 
-The Hono server is the single-owner control plane and sole SQLite writer. It hosts the built React application, runs durable OpenCode jobs, invokes CP-SAT, and normalizes integration data.
+The Hono server is the single-owner control plane and sole SQLite writer. It hosts the built React application, invokes CP-SAT, and normalizes integration data.
 
 ## Main API
 
@@ -13,9 +13,7 @@ The Hono server is the single-owner control plane and sole SQLite writer. It hos
 - `GET /api/weather`, `POST /api/weather/refresh`: cached Boston forecast.
 - `POST /api/integrations/calendar/import`: normalized Google Calendar event import.
 - `POST /api/integrations/garmin/import`, `GET /api/health-observations`: plan-versus-actual health data.
-- `POST /api/tasks/:id/start-agent`: explicit agent dispatch for an `llm_eligible` task.
-
-Existing workflow, approval, dependency, resource, and interaction endpoints remain available.
+- `POST /api/tasks/:id/lifecycle`: lifecycle transitions such as `archived`.
 
 ## Provider Import Shapes
 
@@ -52,4 +50,4 @@ Provider-specific clients should produce these normalized shapes. Do not pass ra
 
 ## Security
 
-There is no end-user authentication in v0. Keep `HOST=127.0.0.1` unless access is protected by Tailscale ACLs. Future remote workers require machine credentials even though owner-operated workers are trusted.
+There is no end-user authentication in v0. Keep `HOST=127.0.0.1` unless access is protected by Tailscale ACLs.

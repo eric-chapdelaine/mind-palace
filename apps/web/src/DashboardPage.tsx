@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import type { CreateTaskInput, KanbanStatus, Tag, TaskSummary } from "@opencode-task-manager/shared";
+import type { CreateTaskInput, KanbanStatus, Tag, TaskSummary } from "@mind-palace/shared";
 import { api } from "./api";
 import { CreateTaskPanel } from "./components/CreateTaskPanel";
 import { TaskCard } from "./components/TaskCard";
@@ -47,7 +47,6 @@ export function DashboardPage() {
     .filter((task) => task.kanbanStatus === "completed")
     .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
   const scheduled = tasks.filter((task) => task.fixedStart || task.fixedEnd).length;
-  const running = tasks.filter((task) => task.agentStatus === "running").length;
 
   async function createTask(input: CreateTaskInput) {
     const task = await api.createTask(input);
@@ -76,11 +75,10 @@ export function DashboardPage() {
   return (
     <main className="dashboard-shell">
       <header className="masthead">
-        <div><h1>Mind Palace</h1><p>Tasks, schedules, and agent work.</p></div>
+        <div><h1>Mind Palace</h1><p>Tasks and schedules.</p></div>
         <div className="masthead-stats">
           <div><strong>{active.length}</strong><span>open tasks</span></div>
           <div><strong>{scheduled}</strong><span>fixed events</span></div>
-          <div><strong>{running}</strong><span>agents running</span></div>
         </div>
       </header>
       <nav className="view-nav"><div>{(["all", "work", "personal"] as const).map((item) => <button className={view === item ? "selected" : ""} key={item} onClick={() => setView(item)}>{item}</button>)}</div><Link to="/schedule">Weekly schedule</Link></nav>

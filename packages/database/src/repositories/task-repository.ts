@@ -1,25 +1,28 @@
 import { randomUUID } from "node:crypto";
 import type {
   CreateTagInput,
+  CreateTaskInput,
   CreateTimeBlockInput,
   HealthObservation,
   KanbanStatus,
+  LifecycleStatus,
   RecurrenceRule,
   ScheduleRun,
   Tag,
+  TaskDetail,
+  TaskSummary,
   TimeBlock,
   TimeBlockStatus,
   UpdateTaskInput,
   UpsertRecurrenceInput,
   WeatherForecast,
-} from "@opencode-task-manager/shared";
+} from "@mind-palace/shared";
 import { Database } from "../database.js";
 import { boolean, integer, json, nullableText, row, text, type Row } from "../rows.js";
 
 export const reservedTagIds = {
   calendarEvent: "mind-palace:calendar-event",
   routine: "mind-palace:routine",
-  llmEligible: "mind-palace:llm-eligible",
 } as const;
 
 function now(): string {
@@ -83,8 +86,103 @@ export interface RecurrenceTemplate {
   tagIds: number[];
 }
 
+const taskSummarySql = String.raw`
+  SELECT
+    t.id, t.public_id, t.title, t.priority, t.rank, t.description,
+    t.kanban_status, t.lifecycle_status, t.splittable, t.duration_minutes, t.duration_estimated,
+    t.earliest_start, t.deadline_at,
+    t.fixed_start, t.fixed_end, t.completed_at, t.parent_task_id, t.origin, t.updated_at,
+    COALESCE((SELECT json_group_array(json_object(
+      'id', tag.id, 'publicId', tag.public_id, 'title', tag.title, 'description', tag.description,
+      'reserved', CASE WHEN tag.public_id LIKE 'mind-palace:%' THEN json('true') ELSE json('false') END
+    )) FROM task_tags task_tag JOIN tags tag ON tag.id = task_tag.tag_id WHERE task_tag.task_id = t.id), '[]') AS tags_json,
+    COALESCE((WITH RECURSIVE ancestors(id) AS (
+      SELECT relation.parent_tag_id FROM task_tags direct JOIN tag_parents relation ON relation.child_tag_id = direct.tag_id WHERE direct.task_id = t.id
+      UNION
+      SELECT relation.parent_tag_id FROM tag_parents relation JOIN ancestors ON relation.child_tag_id = ancestors.id
+    ) SELECT json_group_array(json_object(
+      'id', tag.id, 'publicId', tag.public_id, 'title', tag.title, 'description', tag.description,
+      'reserved', CASE WHEN tag.public_id LIKE 'mind-palace:%' THEN json('true') ELSE json('false') END
+    )) FROM ancestors JOIN tags tag ON tag.id = ancestors.id), '[]') AS derived_tags_json
+  FROM tasks t
+`;
+
+function mapTaskSummary(value: Row): TaskSummary {
+  const tags = json<Tag[]>(value.tags_json, []);
+  const derivedTags = json<Tag[]>(value.derived_tags_json, []);
+  return {
+    id: integer(value.id),
+    publicId: text(value.public_id),
+    title: text(value.title),
+    priority: integer(value.priority),
+    rank: Number(value.rank),
+    description: nullableText(value.description),
+    durationMinutes: boolean(value.duration_estimated) ? integer(value.duration_minutes) : null,
+    kanbanStatus: text(value.kanban_status) as KanbanStatus,
+    lifecycleStatus: text(value.lifecycle_status) as LifecycleStatus,
+    splittable: boolean(value.splittable),
+    earliestStart: nullableText(value.earliest_start),
+    deadlineAt: nullableText(value.deadline_at),
+    fixedStart: nullableText(value.fixed_start),
+    fixedEnd: nullableText(value.fixed_end),
+    completedAt: nullableText(value.completed_at),
+    parentTaskId: value.parent_task_id === null ? null : integer(value.parent_task_id),
+    origin: text(value.origin),
+    tags: tags.map((tag) => ({ ...tag, parentIds: [] })),
+    derivedTags: derivedTags.map((tag) => ({ ...tag, parentIds: [] })),
+    updatedAt: text(value.updated_at),
+  };
+}
+
 export class TaskRepository {
   constructor(private readonly database: Database) {}
+
+  listTasks(): TaskSummary[] {
+    return this.database.connection
+      .prepare(`${taskSummarySql} ORDER BY CASE t.lifecycle_status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END, t.priority DESC, t.updated_at DESC`)
+      .all()
+      .map((value) => mapTaskSummary(row(value, "task summary")));
+  }
+
+  getTask(id: number): TaskDetail {
+    const task = row(this.database.connection.prepare("SELECT * FROM tasks WHERE id = ?").get(id), "task");
+    return {
+      ...mapTaskSummary(row(this.database.connection.prepare(`${taskSummarySql} WHERE t.id = ?`).get(id), "task")),
+      minChunkMinutes: task.min_chunk_minutes === null ? 30 : integer(task.min_chunk_minutes),
+      maxChunkMinutes: task.max_chunk_minutes === null ? 180 : integer(task.max_chunk_minutes),
+      createdAt: text(task.created_at),
+      timeBlocks: this.listTimeBlocksForTask(id),
+      recurrence: this.listRecurrence(id),
+    };
+  }
+
+  createTask(input: CreateTaskInput): TaskDetail {
+    const timestamp = now();
+    const title = input.title.trim();
+    if (!title) throw new Error("A task title is required");
+    const kanbanStatus = input.kanbanStatus ?? "inbox";
+    const lifecycleStatus =
+      kanbanStatus === "completed" ? "completed" : kanbanStatus === "cancelled" ? "cancelled" : "active";
+
+    const result = this.database.connection
+      .prepare(
+        `INSERT INTO tasks
+          (public_id, title, description, kanban_status, priority, rank, duration_minutes, duration_estimated,
+           splittable, min_chunk_minutes, max_chunk_minutes, earliest_start, deadline_at, fixed_start, fixed_end,
+           parent_task_id, origin, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        randomUUID(), title, input.description?.trim() || null, kanbanStatus, input.priority ?? 0,
+        input.rank ?? Date.now(), input.durationMinutes ?? null, input.durationMinutes === null ? 0 : 1,
+        input.splittable ? 1 : 0, input.minChunkMinutes ?? 30, input.maxChunkMinutes ?? 180,
+        input.earliestStart ?? null, input.deadlineAt ?? null, input.fixedStart ?? null, input.fixedEnd ?? null,
+        input.parentTaskId ?? null, input.origin ?? "manual", timestamp, timestamp,
+      );
+    const taskId = insertedId(result);
+    if (input.tagIds && input.tagIds.length > 0) this.setTaskTags(taskId, input.tagIds);
+    return this.getTask(taskId);
+  }
 
   listTags(): Tag[] {
     const parents = this.database.connection.prepare("SELECT child_tag_id, parent_tag_id FROM tag_parents").all();
@@ -210,6 +308,12 @@ export class TaskRepository {
     if (input.tagIds) this.setTaskTags(taskId, input.tagIds);
   }
 
+  setTaskLifecycle(id: number, status: LifecycleStatus): void {
+    this.database.connection
+      .prepare("UPDATE tasks SET lifecycle_status = ?, updated_at = ? WHERE id = ?")
+      .run(status, now(), id);
+  }
+
   setTaskTags(taskId: number, tagIds: number[]): void {
     const uniqueIds = [...new Set(tagIds)];
     const timestamp = now();
@@ -226,22 +330,6 @@ export class TaskRepository {
       this.database.connection.exec("ROLLBACK");
       throw error;
     }
-  }
-
-  enableAutomation(taskId: number): void {
-    const eligible = this.database.connection
-      .prepare(
-        `WITH RECURSIVE task_tag_ids(id) AS (
-           SELECT tag_id FROM task_tags WHERE task_id = ?
-           UNION
-           SELECT relation.parent_tag_id FROM tag_parents relation JOIN task_tag_ids ON relation.child_tag_id = task_tag_ids.id
-         ) SELECT 1 FROM task_tag_ids JOIN tags tag ON tag.id = task_tag_ids.id WHERE tag.public_id = ?`,
-      )
-      .get(taskId, reservedTagIds.llmEligible);
-    if (!eligible) throw new Error("Task must have the llm_eligible tag before starting an agent");
-    this.database.connection
-      .prepare("UPDATE tasks SET automation_enabled = 1, agent_status = 'queued', updated_at = ? WHERE id = ?")
-      .run(now(), taskId);
   }
 
   createTimeBlock(input: CreateTimeBlockInput, scheduleRunId: number | null = null): TimeBlock {
@@ -279,6 +367,13 @@ export class TaskRepository {
     return values.map((value) => mapTimeBlock(row(value, "time block")));
   }
 
+  private listTimeBlocksForTask(taskId: number): TimeBlock[] {
+    return this.database.connection
+      .prepare("SELECT * FROM time_blocks WHERE task_id = ? ORDER BY start_at")
+      .all(taskId)
+      .map((value) => mapTimeBlock(row(value, "time block")));
+  }
+
   setTimeBlockStatus(id: number, status: TimeBlockStatus): void {
     const current = row(this.database.connection.prepare("SELECT * FROM time_blocks WHERE id = ?").get(id), "time block");
     if (text(current.status) === "accepted" && status !== "completed" && status !== "missed") {
@@ -314,10 +409,10 @@ export class TaskRepository {
         taskId, input.frequency, input.intervalCount ?? 1, JSON.stringify(input.weekdays ?? []),
         input.localStartTime ?? null, input.nextOccurrenceDate, timestamp, timestamp,
       );
-    return this.getRecurrence(taskId)!;
+    return this.listRecurrence(taskId)!;
   }
 
-  getRecurrence(taskId: number): RecurrenceRule | null {
+  private listRecurrence(taskId: number): RecurrenceRule | null {
     const value = this.database.connection.prepare("SELECT * FROM recurrence_rules WHERE task_id = ?").get(taskId);
     if (!value) return null;
     const item = row(value, "recurrence");

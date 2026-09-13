@@ -1,6 +1,6 @@
-import type { OrchestrationRepository, TaskRepository } from "@opencode-task-manager/database";
-import { reservedTagIds } from "@opencode-task-manager/database";
-import type { HealthObservation, TaskDetail } from "@opencode-task-manager/shared";
+import type { TaskRepository } from "@mind-palace/database";
+import { reservedTagIds } from "@mind-palace/database";
+import type { HealthObservation, TaskDetail } from "@mind-palace/shared";
 
 export interface CalendarImportEvent {
   id: string;
@@ -13,10 +13,7 @@ export interface CalendarImportEvent {
 }
 
 export class IntegrationService {
-  constructor(
-    private readonly orchestration: OrchestrationRepository,
-    private readonly tasks: TaskRepository,
-  ) {}
+  constructor(private readonly tasks: TaskRepository) {}
 
   importCalendar(accountId: string, events: CalendarImportEvent[]): TaskDetail[] {
     const integrationId = this.tasks.ensureIntegrationAccount("google_calendar", accountId);
@@ -25,12 +22,9 @@ export class IntegrationService {
     for (const event of events) {
       let taskId = this.tasks.findMappedTask(integrationId, event.id);
       if (taskId === null) {
-        const task = this.orchestration.createTask({
+        const task = this.tasks.createTask({
           title: event.title,
-          initialPrompt: event.description || event.title,
-          taskType: "question",
-          startImmediately: false,
-          automationPolicy: "manual",
+          origin: "calendar_import",
           ...(event.description ? { description: event.description } : {}),
         });
         taskId = task.id;
@@ -45,7 +39,7 @@ export class IntegrationService {
         tagIds: [calendarTagId],
       });
       this.tasks.upsertCalendarTimeBlock(taskId, event.startAt, event.endAt);
-      imported.push(this.orchestration.getTask(taskId));
+      imported.push(this.tasks.getTask(taskId));
     }
     return imported;
   }
