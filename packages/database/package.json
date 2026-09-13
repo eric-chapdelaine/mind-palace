@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-task-manager/database",
+  "name": "@mind-palace/database",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@opencode-task-manager/shared": "workspace:*"
+    "@mind-palace/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "26.5.0",

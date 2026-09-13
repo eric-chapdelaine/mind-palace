@@ -1,5 +1,5 @@
-import type { TaskRepository } from "@opencode-task-manager/database";
-import type { WeatherForecast } from "@opencode-task-manager/shared";
+import type { TaskRepository } from "@mind-palace/database";
+import type { WeatherForecast } from "@mind-palace/shared";
 
 interface NwsPointsResponse {
   properties: { forecastHourly: string };

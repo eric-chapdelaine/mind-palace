@@ -1,14 +1,12 @@
-import type { TaskSummary } from "@opencode-task-manager/shared";
+import type { TaskSummary } from "@mind-palace/shared";
 import { Link } from "react-router-dom";
 import type { DragEvent } from "react";
-import { StatusPill } from "./StatusPill";
 
 export function TaskCard({ task, draggable = false, onDragStart, onDrop }: { task: TaskSummary; draggable?: boolean; onDragStart?: (event: DragEvent<HTMLAnchorElement>) => void; onDrop?: (event: DragEvent<HTMLAnchorElement>) => void }) {
   return (
     <Link className="task-card" draggable={draggable} onDragStart={(event) => onDragStart?.(event)} onDragOver={(event) => onDrop && event.preventDefault()} onDrop={onDrop} to={`/tasks/${task.id}`}>
       <div className="task-card-topline">
         <span className="task-priority">P{task.priority}</span>
-        {(task.agentEligible || task.agentStatus !== "not_started") && <StatusPill status={task.agentStatus} />}
       </div>
       <h3>{task.title}</h3>
       {task.description && <p className="task-description">{task.description}</p>}
@@ -18,13 +16,6 @@ export function TaskCard({ task, draggable = false, onDragStart, onDrop }: { tas
         {task.durationMinutes !== null && <div><dt>Estimate</dt><dd>{task.durationMinutes} min</dd></div>}
         <div><dt>{task.kanbanStatus === "completed" ? "Completed" : "Updated"}</dt><dd>{new Date(task.completedAt ?? task.updatedAt).toLocaleDateString()}</dd></div>
       </dl>
-      {(task.openApprovalCount > 0 || task.openInteractionCount > 0 || task.blockedByCount > 0) && (
-        <div className="attention-row">
-          {task.openApprovalCount > 0 && <span>{task.openApprovalCount} approval</span>}
-          {task.openInteractionCount > 0 && <span>{task.openInteractionCount} question</span>}
-          {task.blockedByCount > 0 && <span>{task.blockedByCount} dependency</span>}
-        </div>
-      )}
     </Link>
   );
 }

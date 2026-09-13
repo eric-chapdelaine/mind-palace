@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { kanbanStatuses, type Tag, type TaskDetail, type UpdateTaskInput } from "@opencode-task-manager/shared";
+import { kanbanStatuses, type Tag, type TaskDetail, type UpdateTaskInput } from "@mind-palace/shared";
 import { TagPicker } from "./TagPicker";
 
 function toLocalDateTime(value: string | null): string {

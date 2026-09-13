@@ -1,4 +1,4 @@
-import type { Tag } from "@opencode-task-manager/shared";
+import type { Tag } from "@mind-palace/shared";
 
 export function TagHierarchy({ tags }: { tags: Tag[] }) {
   const byId = new Map(tags.map((tag) => [tag.id, tag]));

@@ -1,15 +1,12 @@
-import type { OrchestrationRepository, TaskRepository } from "@opencode-task-manager/database";
-import { reservedTagIds } from "@opencode-task-manager/database";
+import type { TaskRepository } from "@mind-palace/database";
+import { reservedTagIds } from "@mind-palace/database";
 
 function dateString(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
 
 export class RecurrenceService {
-  constructor(
-    private readonly orchestration: OrchestrationRepository,
-    private readonly tasks: TaskRepository,
-  ) {}
+  constructor(private readonly tasks: TaskRepository) {}
 
   materializeThrough(endDate: string): number[] {
     const created: number[] = [];
@@ -23,24 +20,20 @@ export class RecurrenceService {
           || template.rule.weekdays.length === 0
           || template.rule.weekdays.includes(occurrence.getUTCDay());
         if (weekdayAllowed && !this.tasks.recurrenceOccurrenceExists(template.rule.id, occurrenceDate)) {
-          const child = this.orchestration.createTask({
+          const child = this.tasks.createTask({
             title: `${template.title} - ${occurrenceDate}`,
-            taskType: "question",
-            startImmediately: false,
-            automationPolicy: "manual",
             ...(template.description ? { description: template.description } : {}),
-          });
-          this.tasks.updateTask(child.id, {
-            parentTaskId: template.rule.taskId,
-            kanbanStatus: "ready",
             priority: template.priority,
             rank: template.rank,
             durationMinutes: template.durationMinutes,
             splittable: template.splittable,
             earliestStart: `${occurrenceDate}T00:00:00-04:00`,
             deadlineAt: `${occurrenceDate}T23:59:59-04:00`,
-            tagIds: template.tagIds.filter((id) => id !== routineTagId),
+            parentTaskId: template.rule.taskId,
+            kanbanStatus: "ready",
+            origin: "recurrence",
           });
+          this.tasks.setTaskTags(child.id, template.tagIds.filter((id) => id !== routineTagId));
           this.tasks.recordRecurrenceOccurrence(template.rule.id, occurrenceDate, child.id);
           created.push(child.id);
         }

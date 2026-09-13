@@ -1,4 +1,4 @@
-import type { Schedule, TaskSummary, WeatherForecast } from "@opencode-task-manager/shared";
+import type { Schedule, TaskSummary, WeatherForecast } from "@mind-palace/shared";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "./api";

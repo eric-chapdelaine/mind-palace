@@ -1,5 +1,5 @@
 import { useState, type KeyboardEvent } from "react";
-import type { Tag } from "@opencode-task-manager/shared";
+import type { Tag } from "@mind-palace/shared";
 
 function fuzzyScore(title: string, query: string): number {
   const candidate = title.toLowerCase();

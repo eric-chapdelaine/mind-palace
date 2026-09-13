@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { TaskRepository } from "@opencode-task-manager/database";
-import type { Schedule } from "@opencode-task-manager/shared";
+import type { TaskRepository } from "@mind-palace/database";
+import type { Schedule } from "@mind-palace/shared";
 
 interface SolverResult {
   horizonStart: string;

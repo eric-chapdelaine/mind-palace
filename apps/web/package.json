@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-task-manager/web",
+  "name": "@mind-palace/web",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@opencode-task-manager/shared": "workspace:*",
+    "@mind-palace/shared": "workspace:*",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-markdown": "^10.1.0",

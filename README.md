@@ -1,6 +1,6 @@
 # Mind Palace
 
-Mind Palace is a single-owner task manager, weekly scheduler, and explicit-button OpenCode orchestrator. Everything schedulable is a task: actionable work, calendar commitments, recurring routines, sleep, and agent work. Stable tags add behavior without creating parallel work-item models.
+Mind Palace is a single-owner task manager and weekly scheduler. Everything schedulable is a task: actionable work, calendar commitments, recurring routines, and sleep. Stable tags add behavior without creating parallel work-item models.
 
 ## V0 Capabilities
 
@@ -11,14 +11,13 @@ Mind Palace is a single-owner task manager, weekly scheduler, and explicit-butto
 - Seven-day calendar grid with date navigation, fixed and planned blocks, and muted elapsed time.
 - Numeric priority with drag rank as the tie-breaker.
 - Multi-parent tag DAG with cycle prevention.
-- Reserved modular tags: `calendar_event`, `routine`, and `llm_eligible`.
+- Reserved modular tags: `calendar_event` and `routine`.
 - Thirty-minute CP-SAT scheduling through a separate Python worker.
 - Per-task schedule acceptance; accepted blocks are immutable.
 - Routine templates and independently completable child occurrences.
 - Google Calendar normalization into tagged tasks through an import endpoint.
 - Garmin activity and sleep normalization into permanent health observations.
 - Boston hourly weather cached for eight hours from the National Weather Service.
-- Existing durable OpenCode workflows, approvals, leases, recovery, and tmux attachment, shown only for `llm_eligible` tasks.
 
 V0 has no application accounts or login. Each owner runs an independent instance. Bind the server only to localhost or a controlled Tailscale interface.
 
@@ -28,8 +27,6 @@ V0 has no application accounts or login. Each owner runs an independent instance
 - pnpm 10+
 - Python 3.11+
 - `uv`
-- OpenCode 1.18+
-- tmux 3.6+
 
 ## Start
 
@@ -49,8 +46,6 @@ pnpm build
 pnpm start
 ```
 
-The server hosts the web UI and API at `http://127.0.0.1:4310` and starts or reuses OpenCode at `http://127.0.0.1:4096`.
-
 ## Architecture
 
 ```text
@@ -61,12 +56,11 @@ TypeScript/Hono control plane
 SQLite in WAL mode
      |
      +-- Python CP-SAT process
-     +-- OpenCode and tmux
      +-- NWS weather adapter
      +-- normalized calendar/Garmin imports
 ```
 
-Only the TypeScript control plane writes SQLite. The CP-SAT worker accepts JSON through standard input and returns JSON through standard output. Future laptop workers should communicate through HTTP and never mount the database.
+Only the TypeScript control plane writes SQLite. The CP-SAT worker accepts JSON through standard input and returns JSON through standard output.
 
 ## Packages
 
@@ -82,14 +76,11 @@ Weather fetching and CP-SAT scheduling are operational. Google Calendar and Garm
 
 ## Configuration
 
-Copy values from `.env.example` into the environment as needed. `DATABASE_PATH` controls the SQLite location and `HOST` can expose the control plane on a Tailscale interface. Do not expose this unauthenticated v0 server to the public internet.
+`DATABASE_PATH` controls the SQLite location and `HOST` can expose the control plane on a Tailscale interface; set them in the environment as needed. Do not expose this unauthenticated v0 server to the public internet.
 
 ## Data Retention
 
-- Tasks, blocks, status history, health observations, agent metadata, and audit events: indefinite.
+- Tasks, blocks, health observations, and schedule runs: indefinite.
 - Raw calendar payloads: not stored.
 - Weather: eight-hour cache.
-- Solver snapshots and non-audit job details: intended 90-day retention; automated cleanup is deferred until enough data exists to validate the policy.
-- Agent transcripts: owned by OpenCode local storage.
-
-The complete product plan is `~/plans/opencode-system.md`.
+- Solver snapshots: intended 90-day retention; automated cleanup is deferred until enough data exists to validate the policy.
