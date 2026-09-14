@@ -98,12 +98,28 @@ def solve(payload: dict) -> dict:
         if occupants:
             model.add(sum(occupants) <= 1)
 
+    # Ordering weights are relative only: tasks sort by (priority, rank), the
+    # absolute values do not matter. The decision tier spaces tasks PRIORITY_STEP
+    # apart per step of that ordering. The position tier rewards earlier slots,
+    # weighted by the same ordering, but is bounded far below PRIORITY_STEP so it
+    # only breaks ties between placements (it can never change which tasks get
+    # scheduled): earliness per slot <= 256 * 16 and there are at most len(slots)
+    # <= 224 occupied slots, so total position influence <= 917,504, plus the
+    # <= 22,400 contiguity penalty, stays under the 1,000,000 decision step.
+    ordered_keys = sorted({(task["priority"], task["rank"]) for task in candidates}, reverse=True)
+    num_keys = len(ordered_keys)
+    order_weight = {key: min(num_keys - index, 256) for index, key in enumerate(ordered_keys)}
+    PRIORITY_STEP = 1_000_000
+    num_slots = len(slots)
+
     objective = []
     for task in candidates:
-        priority_weight = max(0, task["priority"] + 1000) * 1_000_000
-        rank_weight = int(task["rank"] * 1000)
-        objective.append((priority_weight + rank_weight) * scheduled[task["id"]])
+        objective.append(order_weight[(task["priority"], task["rank"])] * PRIORITY_STEP * scheduled[task["id"]])
     objective.extend(-100 * start for start in starts)
+    for task in candidates:
+        for slot_index, variable in selected[task["id"]].items():
+            earliness = (num_slots - 1 - slot_index) * 16 // max(1, num_slots - 1)
+            objective.append(order_weight[(task["priority"], task["rank"])] * earliness * variable)
     model.maximize(sum(objective))
 
     solver = cp_model.CpSolver()
