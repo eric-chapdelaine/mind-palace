@@ -12,6 +12,14 @@ export class RecurrenceService {
     const created: number[] = [];
     const routineTagId = this.tasks.tagId(reservedTagIds.routine);
     for (const template of this.tasks.listRecurrenceTemplates()) {
+      // Parent-child links between tasks are expressed through tags: give the routine
+      // template a tag that names it, then stamp every occurrence (and the template
+      // itself) with that tag. The tag page for it shows the parent task and its children.
+      const parentTag = this.tasks.ensureTaskTag(template.rule.taskId, {
+        title: template.title,
+        description: `Recurring occurrences of the routine “${template.title}”.`,
+      });
+      const occurrenceTagIds = [...new Set([...template.tagIds.filter((id) => id !== routineTagId), parentTag.id])];
       let occurrence = new Date(`${template.rule.nextOccurrenceDate}T12:00:00Z`);
       const end = new Date(`${endDate}T23:59:59Z`);
       while (occurrence <= end) {
@@ -29,11 +37,10 @@ export class RecurrenceService {
             splittable: template.splittable,
             earliestStart: `${occurrenceDate}T00:00:00-04:00`,
             deadlineAt: `${occurrenceDate}T23:59:59-04:00`,
-            parentTaskId: template.rule.taskId,
             kanbanStatus: "ready",
             origin: "recurrence",
           });
-          this.tasks.setTaskTags(child.id, template.tagIds.filter((id) => id !== routineTagId));
+          this.tasks.setTaskTags(child.id, occurrenceTagIds);
           this.tasks.recordRecurrenceOccurrence(template.rule.id, occurrenceDate, child.id);
           created.push(child.id);
         }

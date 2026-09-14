@@ -66,7 +66,6 @@ export function createHttpApp({ tasks, schedule, weather, integrations, recurren
       splittable: body.splittable === true,
       minChunkMinutes: typeof body.minChunkMinutes === "number" ? body.minChunkMinutes : 30,
       maxChunkMinutes: typeof body.maxChunkMinutes === "number" ? body.maxChunkMinutes : 180,
-      ...(typeof body.parentTaskId === "number" ? { parentTaskId: body.parentTaskId } : {}),
       tagIds: Array.isArray(body.tagIds) ? body.tagIds.map(Number) : [],
       ...(typeof body.description === "string" ? { description: body.description } : {}),
       ...(typeof body.earliestStart === "string" ? { earliestStart: body.earliestStart } : {}),
@@ -97,7 +96,6 @@ export function createHttpApp({ tasks, schedule, weather, integrations, recurren
       ...(body.deadlineAt === null || typeof body.deadlineAt === "string" ? { deadlineAt: body.deadlineAt } : {}),
       ...(body.fixedStart === null || typeof body.fixedStart === "string" ? { fixedStart: body.fixedStart } : {}),
       ...(body.fixedEnd === null || typeof body.fixedEnd === "string" ? { fixedEnd: body.fixedEnd } : {}),
-      ...(body.parentTaskId === null || typeof body.parentTaskId === "number" ? { parentTaskId: body.parentTaskId } : {}),
       ...(Array.isArray(body.tagIds) ? { tagIds: body.tagIds.map(Number) } : {}),
     });
     return context.json(tasks.getTask(taskId));
@@ -112,9 +110,21 @@ export function createHttpApp({ tasks, schedule, weather, integrations, recurren
     }), 201);
   });
 
+  app.patch("/api/tags/:id", async (context) => {
+    const body = (await context.req.json()) as Record<string, unknown>;
+    return context.json(tasks.updateTag(numberParam(context.req.param("id"), "tag id"), {
+      ...(body.description === null || typeof body.description === "string" ? { description: body.description } : {}),
+    }));
+  });
+
   app.post("/api/tags/:id/parents", async (context) => {
     const body = (await context.req.json()) as Record<string, unknown>;
     tasks.addTagParent(numberParam(context.req.param("id"), "tag id"), numberParam(String(body.parentId), "parent id"));
+    return context.json(tasks.listTags());
+  });
+
+  app.delete("/api/tags/:id/parents/:parentId", (context) => {
+    tasks.removeTagParent(numberParam(context.req.param("id"), "tag id"), numberParam(context.req.param("parentId"), "parent id"));
     return context.json(tasks.listTags());
   });
 

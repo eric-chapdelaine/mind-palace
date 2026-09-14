@@ -1,4 +1,4 @@
-import type { Tag, TaskDetail, TaskSummary } from "@mind-palace/shared";
+import type { Tag, TaskDetail } from "@mind-palace/shared";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
@@ -9,22 +9,6 @@ import { TaskEditor } from "./components/TaskEditor";
 
 function formatDateTime(value: string): string {
   return new Date(value).toLocaleString();
-}
-
-function SubTaskLinks({ tasks, parentId }: { tasks: TaskSummary[]; parentId: number }) {
-  return (
-    <details className="detail-section history-details">
-      <summary>Sub-tasks</summary>
-      <div className="transition-list">
-        {tasks.filter((task) => task.parentTaskId === parentId).map((task) => (
-          <div key={task.id}>
-            <Link to={`/tasks/${task.id}`}><strong>{task.title}</strong></Link>
-            <span>{task.kanbanStatus}</span>
-          </div>
-        ))}
-      </div>
-    </details>
-  );
 }
 
 function PlanningSection({ task }: { task: TaskDetail }) {
@@ -62,20 +46,17 @@ function TimeBlockSection({ task, onAcceptSchedule }: { task: TaskDetail; onAcce
 export function TaskPage() {
   const id = Number(useParams().id);
   const [task, setTask] = useState<TaskDetail | null>(null);
-  const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
 
   async function load() {
     try {
-      const [nextTask, nextTasks, nextTags] = await Promise.all([
+      const [nextTask, nextTags] = await Promise.all([
         api.task(id),
-        api.tasks(),
         api.tags(),
       ]);
       setTask(nextTask);
-      setTasks(nextTasks);
       setTags(nextTags);
       setError(null);
     } catch (loadError) {
@@ -124,8 +105,8 @@ export function TaskPage() {
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{task.description}</ReactMarkdown>
             </div>
           )}
-          <TagRow tags={task.tags} />
-          <TagRow tags={task.derivedTags} derived />
+          <TagRow tags={task.tags} links />
+          <TagRow tags={task.derivedTags} derived links />
         </div>
         <div className="detail-actions">
           <button onClick={() => setEditing((current) => !current)}>
@@ -152,15 +133,9 @@ export function TaskPage() {
         />
       )}
 
-      <div className="detail-grid">
-        <div className="detail-main">
-          <SubTaskLinks tasks={tasks} parentId={task.id} />
-        </div>
-
-        <aside className="detail-sidebar">
-          <PlanningSection task={task} />
-          <TimeBlockSection task={task} onAcceptSchedule={() => void acceptSchedule()} />
-        </aside>
+      <div className="detail-stack">
+        <PlanningSection task={task} />
+        <TimeBlockSection task={task} onAcceptSchedule={() => void acceptSchedule()} />
       </div>
     </main>
   );

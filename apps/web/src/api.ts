@@ -33,6 +33,12 @@ export const api = {
     request<TaskDetail>(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
   createTag: (input: { title: string; description?: string; parentIds?: number[] }) =>
     request<Tag>("/api/tags", { method: "POST", body: JSON.stringify(input) }),
+  updateTag: (id: number, input: { description?: string | null }) =>
+    request<Tag>(`/api/tags/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+  addTagParent: (id: number, parentId: number) =>
+    request<Tag[]>(`/api/tags/${id}/parents`, { method: "POST", body: JSON.stringify({ parentId }) }),
+  removeTagParent: (id: number, parentId: number) =>
+    request<Tag[]>(`/api/tags/${id}/parents/${parentId}`, { method: "DELETE" }),
   generateSchedule: () => request<Schedule>("/api/schedule/generate", { method: "POST" }),
   acceptTaskSchedule: (id: number) => request<Schedule>(`/api/tasks/${id}/accept-schedule`, { method: "POST" }),
   setTimeBlockStatus: (id: number, status: "completed" | "missed") =>

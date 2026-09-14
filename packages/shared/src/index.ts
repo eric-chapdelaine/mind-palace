@@ -40,7 +40,6 @@ export interface TaskSummary {
   fixedStart: string | null;
   fixedEnd: string | null;
   completedAt: string | null;
-  parentTaskId: number | null;
   origin: string;
   tags: Tag[];
   derivedTags: Tag[];
@@ -138,7 +137,6 @@ export interface CreateTaskInput {
   fixedStart?: string;
   fixedEnd?: string;
   kanbanStatus?: KanbanStatus;
-  parentTaskId?: number;
   tagIds?: number[];
   origin?: string;
 }
@@ -157,7 +155,6 @@ export interface UpdateTaskInput {
   deadlineAt?: string | null;
   fixedStart?: string | null;
   fixedEnd?: string | null;
-  parentTaskId?: number | null;
   tagIds?: number[];
 }
 
@@ -165,6 +162,10 @@ export interface CreateTagInput {
   title: string;
   description?: string;
   parentIds?: number[];
+}
+
+export interface UpdateTagInput {
+  description?: string | null;
 }
 
 export interface CreateTimeBlockInput {
