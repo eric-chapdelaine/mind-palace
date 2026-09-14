@@ -38,7 +38,7 @@ pnpm build && pnpm start  # production; server also hosts apps/web/dist
 
 ## Data model (what the tables mean)
 
-- `tasks` — the unified work item: kanban column (`kanban_status`), lifecycle (`lifecycle_status`), priority + rank (rank is the drag-order tiebreaker), optional duration (a task with no estimate is never auto-scheduled), earliest/deadline/fixed windows, optional parent (hierarchy), `origin` (manual / calendar_import / recurrence).
+- `tasks` — the unified work item: kanban column (`kanban_status`), lifecycle (`lifecycle_status`), priority + rank (rank is the drag-order tiebreaker), optional duration (a task with no estimate is never auto-scheduled), earliest/deadline/fixed windows, `origin` (manual / calendar_import / recurrence). There is no parent-task column — parent/child relationships between tasks are expressed by shared tags (a parent task is mapped by a tag it and its children both carry, see `ensureTaskTag`).
 - `tags`, `tag_parents`, `task_tags` — multi-parent acyclic tag graph ("derived" tags = ancestors) and direct task assignments. `tags.public_id` starting with `mind-palace:` marks **reserved** tags that carry behavior.
 - `time_blocks`, `schedule_runs` — schedule results. Accepted blocks are **immutable** (repo enforces: accepted → only completed/missed). Schedule runs store the exact solver input/output JSON for reproducibility.
 - `recurrence_rules`, `recurrence_occurrences` — routine templates and the child tasks they generated (one per date).

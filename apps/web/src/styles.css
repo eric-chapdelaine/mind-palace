@@ -53,9 +53,10 @@ code, pre { overflow-wrap: anywhere; white-space: pre-wrap; }
 .task-meta dt { color: #666; font-size: .75rem; }
 .task-meta dd { margin: 0; font-size: .8rem; }
 .tag-row { display: flex; flex-wrap: wrap; gap: .3rem; margin: .4rem 0; }
-.tag-row span { border: 1px solid #bbb; border-radius: 999px; padding: .15rem .4rem; font-size: .75rem; }
+.tag-row span, .tag-row a { border: 1px solid #bbb; border-radius: 999px; padding: .15rem .4rem; font-size: .75rem; color: inherit; text-decoration: none; display: inline-block; }
+.tag-row a:hover { background: #eee; border-color: #888; }
 .derived-tags { opacity: .6; }
-.derived-tags span::before { content: "+ "; }
+.derived-tags span::before, .derived-tags a::before { content: "+ "; }
 
 .dashboard-sidebar { display: grid; grid-column: 2; grid-row: 1 / span 2; gap: 1rem; }
 .completed-tasks { grid-column: 1; background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: 1rem; }
@@ -73,23 +74,23 @@ code, pre { overflow-wrap: anywhere; white-space: pre-wrap; }
 .tag-results { position: absolute; z-index: 5; top: 100%; left: 0; right: 0; display: grid; border: 1px solid #aaa; background: #fff; box-shadow: 0 4px 10px #0002; }
 .tag-results button { border: 0; border-bottom: 1px solid #ddd; background: #fff; padding: .55rem; text-align: left; }
 .tag-results button:hover, .tag-results button:first-child { background: #eee; }
-.tag-hierarchy summary, .history-details summary { cursor: pointer; font-weight: 700; }
+.tag-hierarchy summary { cursor: pointer; font-weight: 700; }
 .tag-hierarchy ul { padding-left: 1.25rem; }
 .tag-hierarchy li { margin: .4rem 0; }
 .tag-hierarchy span { color: #666; }
+.tag-hierarchy a { color: inherit; text-decoration: none; font-weight: 700; }
+.tag-hierarchy a:hover { text-decoration: underline; }
 
 .detail-header, .schedule-header { display: flex; justify-content: space-between; align-items: start; gap: 2rem; border-bottom: 1px solid #ccc; padding: 1rem 0; }
 .detail-header > div:first-child, .schedule-header > div:first-child { max-width: 800px; }
 .task-type { color: #666; }
 .detail-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); gap: 1rem; padding-top: 1rem; }
+.detail-stack { display: grid; gap: 1rem; padding-top: 1rem; align-content: start; }
+.detail-stack section { background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: 1rem; display: grid; gap: .5rem; }
 .detail-main, .detail-sidebar { display: grid; gap: 1rem; align-content: start; }
 .detail-section, .detail-sidebar section { background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: 1rem; }
 .detail-sidebar section { display: grid; gap: .5rem; }
-.history-details { grid-column: 1 / -1; }
-.transition-list > div { display: grid; gap: .25rem; border-top: 1px solid #ddd; padding: .75rem 0; }
-.transition-list time { color: #666; font-size: .8rem; }
-.task-editor { margin-top: 1rem; }
-.editor-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+.task-editor { margin-top: 1rem; }.editor-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
 .editor-heading h2 { margin: 0; }
 .editor-heading span { color: #666; font-size: .8rem; }
 .markdown-description { line-height: 1.55; }
@@ -97,6 +98,14 @@ code, pre { overflow-wrap: anywhere; white-space: pre-wrap; }
 .markdown-description table { border-collapse: collapse; }
 .markdown-description th, .markdown-description td { border: 1px solid #ccc; padding: .4rem; }
 .markdown-description pre { background: #eee; padding: .75rem; }
+
+.tag-relationship-list { list-style: none; margin: 0; padding: 0; }
+.tag-relationship-list li { display: flex; align-items: center; gap: .35rem; padding: .35rem 0; border-bottom: 1px solid #eee; }
+.tag-relationship-list li:last-child { border-bottom: 0; }
+.tag-relationship-list a { color: inherit; text-decoration: none; }
+.tag-relationship-list a:hover { text-decoration: underline; }
+.tag-relationship-list span { color: #666; font-size: .8rem; }
+.tag-reserved { border: 1px solid #bbb; border-radius: 999px; padding: 0 .35rem; font-size: .7rem; }
 
 .weather-strip { display: flex; overflow-x: auto; border-bottom: 1px solid #ccc; padding: 1rem 0; }
 .weather-strip div { min-width: 110px; display: grid; gap: .25rem; border-right: 1px solid #ddd; padding: .5rem; }

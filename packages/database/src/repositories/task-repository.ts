@@ -15,6 +15,7 @@ import type {
   TimeBlockStatus,
   UpdateTaskInput,
   UpsertRecurrenceInput,
+  UpdateTagInput,
   WeatherForecast,
 } from "@mind-palace/shared";
 import { Database } from "../database.js";
@@ -91,7 +92,7 @@ const taskSummarySql = String.raw`
     t.id, t.public_id, t.title, t.priority, t.rank, t.description,
     t.kanban_status, t.lifecycle_status, t.splittable, t.duration_minutes, t.duration_estimated,
     t.earliest_start, t.deadline_at,
-    t.fixed_start, t.fixed_end, t.completed_at, t.parent_task_id, t.origin, t.updated_at,
+    t.fixed_start, t.fixed_end, t.completed_at, t.origin, t.updated_at,
     COALESCE((SELECT json_group_array(json_object(
       'id', tag.id, 'publicId', tag.public_id, 'title', tag.title, 'description', tag.description,
       'reserved', CASE WHEN tag.public_id LIKE 'mind-palace:%' THEN json('true') ELSE json('false') END
@@ -126,7 +127,6 @@ function mapTaskSummary(value: Row): TaskSummary {
     fixedStart: nullableText(value.fixed_start),
     fixedEnd: nullableText(value.fixed_end),
     completedAt: nullableText(value.completed_at),
-    parentTaskId: value.parent_task_id === null ? null : integer(value.parent_task_id),
     origin: text(value.origin),
     tags: tags.map((tag) => ({ ...tag, parentIds: [] })),
     derivedTags: derivedTags.map((tag) => ({ ...tag, parentIds: [] })),
@@ -169,15 +169,15 @@ export class TaskRepository {
         `INSERT INTO tasks
           (public_id, title, description, kanban_status, priority, rank, duration_minutes, duration_estimated,
            splittable, min_chunk_minutes, max_chunk_minutes, earliest_start, deadline_at, fixed_start, fixed_end,
-           parent_task_id, origin, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           origin, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         randomUUID(), title, input.description?.trim() || null, kanbanStatus, input.priority ?? 0,
         input.rank ?? Date.now(), input.durationMinutes ?? null, input.durationMinutes === null ? 0 : 1,
         input.splittable ? 1 : 0, input.minChunkMinutes ?? 30, input.maxChunkMinutes ?? 180,
         input.earliestStart ?? null, input.deadlineAt ?? null, input.fixedStart ?? null, input.fixedEnd ?? null,
-        input.parentTaskId ?? null, input.origin ?? "manual", timestamp, timestamp,
+        input.origin ?? "manual", timestamp, timestamp,
       );
     const taskId = insertedId(result);
     if (input.tagIds && input.tagIds.length > 0) this.setTaskTags(taskId, input.tagIds);
@@ -225,6 +225,57 @@ export class TaskRepository {
     try {
       this.insertTagParent(childId, parentId, now());
       this.database.connection.exec("COMMIT");
+    } catch (error) {
+      this.database.connection.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  updateTag(tagId: number, input: UpdateTagInput): Tag {
+    if (input.description === undefined) {
+      const tag = this.listTags().find((item) => item.id === tagId);
+      if (!tag) throw new Error("Expected database row for tag");
+      return tag;
+    }
+    const result = this.database.connection
+      .prepare("UPDATE tags SET description = ?, updated_at = ? WHERE id = ?")
+      .run(input.description?.trim() || null, now(), tagId);
+    if (result.changes !== 1) throw new Error("Expected database row for tag");
+    return this.listTags().find((item) => item.id === tagId)!;
+  }
+
+  removeTagParent(childId: number, parentId: number): void {
+    const result = this.database.connection
+      .prepare("DELETE FROM tag_parents WHERE child_tag_id = ? AND parent_tag_id = ?")
+      .run(childId, parentId);
+    if (result.changes !== 1) throw new Error("Tag relation does not exist");
+  }
+
+  /**
+   * Find-or-create the tag that maps a parent task to its work, then attach it to the task.
+   * Parent-child links between tasks are expressed through shared tags instead of a
+   * parent_task_id column; recurrence materialization uses this to stamp each occurrence
+   * (and its template) with a tag that names the parent task.
+   */
+  ensureTaskTag(taskId: number, input: { title: string; description?: string }): Tag {
+    const title = input.title.trim();
+    if (!title) throw new Error("Tag title is required");
+    const timestamp = now();
+    this.database.connection.exec("BEGIN IMMEDIATE");
+    try {
+      const existing = this.database.connection
+        .prepare("SELECT id FROM tags WHERE title = ? COLLATE NOCASE")
+        .get(title);
+      const tagId = existing
+        ? integer(row(existing, "tag").id)
+        : insertedId(this.database.connection
+            .prepare("INSERT INTO tags (public_id, title, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
+            .run(randomUUID(), title, input.description?.trim() || null, timestamp, timestamp));
+      this.database.connection
+        .prepare("INSERT OR IGNORE INTO task_tags (task_id, tag_id, source, created_at) VALUES (?, ?, 'system', ?)")
+        .run(taskId, tagId, timestamp);
+      this.database.connection.exec("COMMIT");
+      return this.listTags().find((tag) => tag.id === tagId)!;
     } catch (error) {
       this.database.connection.exec("ROLLBACK");
       throw error;
@@ -282,22 +333,6 @@ export class TaskRepository {
     if (input.deadlineAt !== undefined) add("deadline_at", input.deadlineAt);
     if (input.fixedStart !== undefined) add("fixed_start", input.fixedStart);
     if (input.fixedEnd !== undefined) add("fixed_end", input.fixedEnd);
-    if (input.parentTaskId !== undefined) {
-      if (input.parentTaskId === taskId) throw new Error("A task cannot be its own parent");
-      if (input.parentTaskId !== null) {
-        const cycle = this.database.connection
-          .prepare(
-            `WITH RECURSIVE parents(id) AS (
-               SELECT parent_task_id FROM tasks WHERE id = ? AND parent_task_id IS NOT NULL
-               UNION
-               SELECT task.parent_task_id FROM tasks task JOIN parents ON task.id = parents.id WHERE task.parent_task_id IS NOT NULL
-             ) SELECT 1 FROM parents WHERE id = ? LIMIT 1`,
-          )
-          .get(input.parentTaskId, taskId);
-        if (cycle) throw new Error("Task hierarchy cannot contain a cycle");
-      }
-      add("parent_task_id", input.parentTaskId);
-    }
     if (assignments.length > 0) {
       add("updated_at", now());
       const result = this.database.connection

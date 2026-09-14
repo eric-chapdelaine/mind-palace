@@ -37,6 +37,11 @@ export class Database {
     for (const migration of migrations) {
       if (applied.has(migration.version)) continue;
 
+      // Rebuilding a table that other tables hold foreign keys to would cascade-delete
+      // their rows while FK enforcement is on; a migration that rewrites such a table
+      // opts out of enforcement for its duration. The work still runs in one transaction.
+      const foreignKeysOff = migration.foreignKeysOff === true;
+      if (foreignKeysOff) this.connection.exec("PRAGMA foreign_keys = OFF;");
       this.connection.exec("BEGIN IMMEDIATE");
       try {
         this.connection.exec(migration.sql);
@@ -45,6 +50,8 @@ export class Database {
       } catch (error) {
         this.connection.exec("ROLLBACK");
         throw error;
+      } finally {
+        if (foreignKeysOff) this.connection.exec("PRAGMA foreign_keys = ON;");
       }
     }
   }
