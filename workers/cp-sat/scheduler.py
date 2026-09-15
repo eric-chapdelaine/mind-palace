@@ -10,6 +10,9 @@ from ortools.sat.python import cp_model
 SLOT_MINUTES = 30
 TIME_ZONE = ZoneInfo("America/New_York")
 
+# preferredDay is sent as a Python date.weekday() index: 0 = Monday .. 6 = Sunday.
+WEEKDAY_NAMES = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+
 
 def parse(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -55,14 +58,19 @@ def solve(payload: dict) -> dict:
     scheduled = {}
     starts = []
 
+    required_day_tasks: dict[int, list[dict]] = {}
     for task in candidates:
         task_id = task["id"]
         required = math.ceil(task["durationMinutes"] / SLOT_MINUTES)
+        preferred_day = task.get("preferredDay")
         scheduled[task_id] = model.new_bool_var(f"scheduled_{task_id}")
         selected[task_id] = {}
         eligible = []
         for slot_index in available_slots:
             start, end = slots[slot_index]
+            # A task pinned to a weekday may only use that weekday's slots.
+            if preferred_day is not None and start.weekday() != preferred_day:
+                continue
             if task.get("earliestStart") and start < parse(task["earliestStart"]).astimezone(TIME_ZONE):
                 continue
             if task.get("deadlineAt") and end > parse(task["deadlineAt"]).astimezone(TIME_ZONE):
@@ -70,6 +78,13 @@ def solve(payload: dict) -> dict:
             selected[task_id][slot_index] = model.new_bool_var(f"task_{task_id}_slot_{slot_index}")
             eligible.append(slot_index)
         model.add(sum(selected[task_id].values()) == required * scheduled[task_id])
+
+        # Day-pinned tasks are commitments: they must be scheduled, and only on that day.
+        # When the pinned day has already passed (no eligible slots in the horizon) the
+        # task is left unscheduled instead of making the whole model infeasible.
+        if preferred_day is not None and eligible:
+            model.add(scheduled[task_id] == 1)
+            required_day_tasks.setdefault(preferred_day, []).append(task)
 
         if eligible:
             prior = None
@@ -126,6 +141,15 @@ def solve(payload: dict) -> dict:
     solver.parameters.max_time_in_seconds = 10
     status = solver.solve(model)
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        if status == cp_model.INFEASIBLE and required_day_tasks:
+            commitments = []
+            for day_number in sorted(required_day_tasks):
+                total = sum(task["durationMinutes"] for task in required_day_tasks[day_number])
+                commitments.append(f"{WEEKDAY_NAMES[day_number]}: {total} min committed")
+            raise RuntimeError(
+                "Committed day tasks do not fit their day (days hold 07:00-23:00 in 30-minute "
+                "slots). " + ", ".join(commitments) + ". Move or remove some day tasks."
+            )
         raise RuntimeError(f"CP-SAT did not produce a feasible result: {solver.status_name(status)}")
 
     assignments = []

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import type { CreateTaskInput, KanbanStatus, Tag, TaskSummary } from "@mind-palace/shared";
+import { reservedTagPublicIds, type CreateTaskInput, type KanbanStatus, type Tag, type TaskSummary } from "@mind-palace/shared";
 import { api } from "./api";
 import { CreateTaskPanel } from "./components/CreateTaskPanel";
 import { TaskCard } from "./components/TaskCard";
@@ -20,6 +20,8 @@ export function DashboardPage() {
   const [tags, setTags] = useState<Tag[]>([]);
   const [includedTagIds, setIncludedTagIds] = useState<number[]>([]);
   const [excludedTagIds, setExcludedTagIds] = useState<number[]>([]);
+  const [selecting, setSelecting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -76,15 +78,62 @@ export function DashboardPage() {
     await load();
   }
 
+  // ---- "Add to this week" multi-select (commits picked tasks to the this-week tag) ----
+
+  const thisWeekTagId = tags.find((tag) => tag.publicId === reservedTagPublicIds.thisWeek)?.id;
+
+  function toggleSelection(taskId: number) {
+    setSelectedIds((current) => current.includes(taskId)
+      ? current.filter((id) => id !== taskId)
+      : [...current, taskId]);
+  }
+
+  function cancelSelection() {
+    setSelectedIds([]);
+    setSelecting(false);
+  }
+
+  async function addSelectedToThisWeek() {
+    if (thisWeekTagId === undefined) return;
+    try {
+      await Promise.all(selectedIds.map(async (taskId) => {
+        const task = tasks.find((item) => item.id === taskId);
+        if (!task) return;
+        const tagIds = task.tags.map((tag) => tag.id);
+        if (tagIds.includes(thisWeekTagId)) return;
+        await api.updateTask(taskId, { tagIds: [...tagIds, thisWeekTagId] });
+      }));
+      cancelSelection();
+      await load();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : String(nextError));
+    }
+  }
+
   return (
     <main className="dashboard-shell">
       <header className="masthead">
         <div><h1>Mind Palace</h1><p>Tasks and schedules.</p></div>
-        <div className="masthead-stats">
-          <div><strong>{active.length}</strong><span>open tasks</span></div>
-          <div><strong>{scheduled}</strong><span>fixed events</span></div>
+        <div className="masthead-actions">
+          <div className="masthead-stats">
+            <div><strong>{active.length}</strong><span>open tasks</span></div>
+            <div><strong>{scheduled}</strong><span>fixed events</span></div>
+          </div>
+          {selecting ? (
+            <div className="button-row">
+              <button
+                className="primary-button"
+                disabled={selectedIds.length === 0}
+                onClick={() => void addSelectedToThisWeek()}
+              >
+                Add {selectedIds.length === 0 ? "tasks" : `${selectedIds.length} task${selectedIds.length === 1 ? "" : "s"}`} to this week
+              </button>
+              <button onClick={cancelSelection}>Cancel</button>
+            </div>
+          ) : <button className="primary-button" onClick={() => setSelecting(true)}>Add to this week</button>}
         </div>
       </header>
+      {selecting && <p className="selection-hint muted">Selecting tasks to schedule this week — click task cards to toggle them.</p>}
       <nav className="view-nav">
         <div className="tag-filter">
           <label>Included tags<TagPicker tags={tags} selectedIds={includedTagIds} onChange={setIncludedTagIds} placeholder="Type to filter in" /></label>
@@ -97,7 +146,34 @@ export function DashboardPage() {
         <section className="kanban-board">
           {columns.map((column) => {
             const items = active.filter((task) => task.kanbanStatus === column.status).sort((a, b) => b.rank - a.rank);
-            return <div className="kanban-column" key={column.status} onDragOver={(event) => event.preventDefault()} onDrop={(event) => void moveTask(Number(event.dataTransfer.getData("taskId")), column.status)}><div className="kanban-heading"><h2>{column.label}</h2><span>{items.length}</span></div><div className="kanban-stack">{items.map((task) => <TaskCard key={task.id} task={task} draggable onDragStart={(event) => event.dataTransfer.setData("taskId", String(task.id))} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); void moveTask(Number(event.dataTransfer.getData("taskId")), column.status, task.id); }} />)}{items.length === 0 && <div className="column-empty">Drop tasks here</div>}</div></div>;
+            return (
+              <div
+                className="kanban-column"
+                key={column.status}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => void moveTask(Number(event.dataTransfer.getData("taskId")), column.status)}
+              >
+                <div className="kanban-heading"><h2>{column.label}</h2><span>{items.length}</span></div>
+                <div className="kanban-stack">
+                  {items.map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      draggable={!selecting}
+                      selected={selecting && selectedIds.includes(task.id)}
+                      {...(selecting ? { onCardClick: () => toggleSelection(task.id) } : {})}
+                      onDragStart={(event) => event.dataTransfer.setData("taskId", String(task.id))}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        void moveTask(Number(event.dataTransfer.getData("taskId")), column.status, task.id);
+                      }}
+                    />
+                  ))}
+                  {items.length === 0 && <div className="column-empty">Drop tasks here</div>}
+                </div>
+              </div>
+            );
           })}
         </section>
         <details className="completed-tasks"><summary>Completed ({completed.length})</summary>{completed.length === 0 ? <p className="muted">No completed tasks.</p> : <div className="completed-list">{completed.map((task) => <TaskCard key={task.id} task={task} />)}</div>}</details>
