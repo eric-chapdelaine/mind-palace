@@ -32,6 +32,9 @@ code, pre { overflow-wrap: anywhere; white-space: pre-wrap; }
 .masthead-stats span { color: #666; font-size: .8rem; }
 .view-nav, .detail-nav { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1rem 0; }
 .view-nav > div, .button-row, .detail-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.masthead-actions { display: grid; justify-items: end; gap: .5rem; }
+.selection-hint { border: 1px dashed #999; padding: .5rem 1rem; margin: 1rem 0 0; }
+.task-card.selected { outline: 2px solid #222; background: #f2f2f2; }
 .view-nav button.selected { font-weight: 700; }
 .view-nav .tag-filter { align-items: start; gap: 1rem; }
 .tag-filter label { margin: 0; min-width: 240px; }
@@ -139,6 +142,34 @@ code, pre { overflow-wrap: anywhere; white-space: pre-wrap; }
 .calendar-event button { width: max-content; padding: .1rem .3rem; }
 .calendar-event.block-proposed { border-style: dashed; }
 .calendar-event.schedule-past { opacity: .45; background: #ddd; }
+.week-tasks { padding: 1rem .5rem .5rem; }
+.week-tasks-intro h2 { margin: .15rem 0 .3rem; }
+.week-tasks-intro .muted { margin: 0; font-size: .85rem; }
+.week-picks { display: grid; gap: .4rem; background: #fbfbfb; border: 1px solid #ccc; border-radius: 4px; padding: .6rem; margin: .6rem 0; }
+.week-picks.drag-over { border-color: #222; box-shadow: 0 0 0 1px #222 inset; background: #eee; }
+.week-picks-heading { display: flex; justify-content: space-between; align-items: baseline; gap: .4rem; font-size: .8rem; text-transform: uppercase; color: #555; }
+.week-picks-heading h3 { margin: 0; }
+.week-picks-heading span { border-radius: 999px; background: #eee; color: #222; padding: .05rem .4rem; }
+.week-task-grid { display: grid; grid-template-columns: 64px repeat(7, minmax(145px, 1fr)); min-width: 1080px; border-top: 1px solid #ccc; padding-top: .6rem; }
+.week-task-gutter { border-right: 1px solid #ccc; }
+.week-task-column { background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: .55rem; display: grid; align-content: start; gap: .4rem; min-height: 200px; min-width: 0; overflow: hidden; }
+.week-task-column.drag-over { border-color: #222; box-shadow: 0 0 0 1px #222 inset; background: #eee; }
+.week-task-column h3 { display: flex; justify-content: space-between; align-items: baseline; gap: .4rem; font-size: .8rem; text-transform: uppercase; color: #555; margin: 0 0 .2rem; }
+.week-task-column h3 span:last-child { border-radius: 999px; background: #eee; color: #222; padding: .05rem .4rem; }
+.week-task-row { display: flex; align-items: center; gap: .4rem; border: 1px solid #ddd; border-radius: 3px; background: #fff; padding: .35rem .45rem; cursor: grab; overflow: hidden; }
+.week-task-row.drag-over { border-color: #222; box-shadow: 0 0 0 1px #222 inset; }
+.week-task-row a { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: none; font-size: .85rem; }
+.week-task-row a:hover { text-decoration: underline; }
+.week-task-row:hover { border-color: #888; }
+.week-task-row-scheduled { border-color: #9ccc9c; background: #f4faf4; }
+.week-task-row-scheduled a { color: #2e7d32; }
+.week-task-ok { color: #2e7d32; font-weight: 700; flex: 0 0 auto; }
+.week-task-duration { color: #666; font-size: .7rem; flex: 0 0 auto; }
+.week-task-ineligible { color: #9c6400; background: #fff4db; border: 1px solid #e8c98a; border-radius: 999px; padding: 0 .4rem; font-size: .68rem; white-space: nowrap; flex: 0 0 auto; cursor: help; }
+.week-tasks-warning { margin-top: .35rem !important; color: #9c6400; }
+.week-task-remove { border: 0; background: none; color: #888; padding: .1rem .3rem; font-size: 1rem; line-height: 1; }
+.week-task-remove:hover { color: #222; }
+.week-task-empty { color: #777; font-size: .8rem; margin: .2rem 0; }
 .unscheduled { border-top: 1px solid #ccc; margin-top: 1rem; padding-top: 1rem; display: grid; gap: .5rem; }
 .mini-block { display: grid; gap: .2rem; border-top: 1px solid #ddd; padding-top: .5rem; }
 

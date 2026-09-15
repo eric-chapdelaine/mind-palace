@@ -22,6 +22,28 @@ export type LifecycleStatus = (typeof lifecycleStatuses)[number];
 export const timeBlockStatuses = ["proposed", "accepted", "completed", "missed", "superseded"] as const;
 export type TimeBlockStatus = (typeof timeBlockStatuses)[number];
 
+/** Reserved tags that carry behavior (see AGENTS.md "tag-driven behavior"). */
+export const reservedTagPublicIds = {
+  calendarEvent: "mind-palace:calendar-event",
+  routine: "mind-palace:routine",
+  thisWeek: "mind-palace:this-week",
+} as const;
+
+/**
+ * Weekday tags in JavaScript `Date#getDay()` order: index 0 = Sunday .. index 6 = Saturday.
+ * Each one's parent is `mind-palace:this-week` (see migration 004), so a task tagged with a
+ * weekday is eligible this week and must be scheduled on that day.
+ */
+export const weekdayTagPublicIds = [
+  "mind-palace:sunday",
+  "mind-palace:monday",
+  "mind-palace:tuesday",
+  "mind-palace:wednesday",
+  "mind-palace:thursday",
+  "mind-palace:friday",
+  "mind-palace:saturday",
+] as const;
+
 export type JsonObject = Record<string, unknown>;
 
 export interface TaskSummary {

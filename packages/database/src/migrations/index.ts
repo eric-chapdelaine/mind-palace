@@ -1,6 +1,7 @@
 import { initialMigration } from "./001-initial.js";
 import { exampleTagsMigration } from "./002-example-tags.js";
 import { removeTaskParentMigration } from "./003-remove-task-parent.js";
+import { thisWeekTagsMigration } from "./004-this-week-tags.js";
 
 export interface Migration {
   version: number;
@@ -14,4 +15,5 @@ export const migrations: Migration[] = [
   initialMigration,
   exampleTagsMigration,
   removeTaskParentMigration,
+  thisWeekTagsMigration,
 ];

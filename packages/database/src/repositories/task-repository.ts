@@ -1,30 +1,29 @@
 import { randomUUID } from "node:crypto";
-import type {
-  CreateTagInput,
-  CreateTaskInput,
-  CreateTimeBlockInput,
-  HealthObservation,
-  KanbanStatus,
-  LifecycleStatus,
-  RecurrenceRule,
-  ScheduleRun,
-  Tag,
-  TaskDetail,
-  TaskSummary,
-  TimeBlock,
-  TimeBlockStatus,
-  UpdateTaskInput,
-  UpsertRecurrenceInput,
-  UpdateTagInput,
-  WeatherForecast,
+import {
+  reservedTagPublicIds,
+  weekdayTagPublicIds,
+  type CreateTagInput,
+  type CreateTaskInput,
+  type CreateTimeBlockInput,
+  type HealthObservation,
+  type KanbanStatus,
+  type LifecycleStatus,
+  type RecurrenceRule,
+  type ScheduleRun,
+  type Tag,
+  type TaskDetail,
+  type TaskSummary,
+  type TimeBlock,
+  type TimeBlockStatus,
+  type UpdateTaskInput,
+  type UpsertRecurrenceInput,
+  type UpdateTagInput,
+  type WeatherForecast,
 } from "@mind-palace/shared";
 import { Database } from "../database.js";
 import { boolean, integer, json, nullableText, row, text, type Row } from "../rows.js";
 
-export const reservedTagIds = {
-  calendarEvent: "mind-palace:calendar-event",
-  routine: "mind-palace:routine",
-} as const;
+export const reservedTagIds = reservedTagPublicIds;
 
 function now(): string {
   return new Date().toISOString();
@@ -74,6 +73,11 @@ export interface SchedulableTask {
   fixedStart: string | null;
   fixedEnd: string | null;
   tagIds: string[];
+  /**
+   * Day the task is pinned to, as a Python `date.weekday()` index (0 = Monday .. 6 = Sunday),
+   * derived from its `mind-palace:<weekday>` tag. `null` means it may land on any day.
+   */
+  preferredDay: number | null;
 }
 
 export interface RecurrenceTemplate {
@@ -497,8 +501,14 @@ export class TaskRepository {
   listSchedulableTasks(): SchedulableTask[] {
     return this.database.connection
       .prepare(
-        `SELECT task.*, COALESCE((SELECT json_group_array(tag.public_id) FROM task_tags task_tag
-          JOIN tags tag ON tag.id = task_tag.tag_id WHERE task_tag.task_id = task.id), '[]') AS tag_ids
+        `SELECT task.*,
+          COALESCE((SELECT json_group_array(tag.public_id) FROM task_tags task_tag
+            JOIN tags tag ON tag.id = task_tag.tag_id WHERE task_tag.task_id = task.id), '[]') AS tag_ids,
+          COALESCE((WITH RECURSIVE ancestors(id) AS (
+            SELECT relation.parent_tag_id FROM task_tags direct JOIN tag_parents relation ON relation.child_tag_id = direct.tag_id WHERE direct.task_id = task.id
+            UNION
+            SELECT relation.parent_tag_id FROM tag_parents relation JOIN ancestors ON relation.child_tag_id = ancestors.id
+          ) SELECT json_group_array(tag.public_id) FROM ancestors JOIN tags tag ON tag.id = ancestors.id), '[]') AS derived_tag_ids
          FROM tasks task
          WHERE task.kanban_status IN ('ready', 'in_progress') AND task.duration_estimated = 1
            AND NOT EXISTS (SELECT 1 FROM time_blocks block WHERE block.task_id = task.id AND block.status = 'accepted')
@@ -507,15 +517,29 @@ export class TaskRepository {
       .all()
       .map((value) => {
         const item = row(value, "schedulable task");
+        const tagIds = json<string[]>(item.tag_ids, []);
+        const derivedTagIds = json<string[]>(item.derived_tag_ids, []);
+        const effectiveTagIds = [...tagIds, ...derivedTagIds];
+        // Eligibility for the week is tag-driven: a task is schedulable only when it carries
+        // mind-palace:this-week, directly or through an ancestor tag (the weekday tags are
+        // children of this-week, so a day-pinned task is eligible through its day tag).
+        if (!effectiveTagIds.includes(reservedTagIds.thisWeek)) return null;
+        // weekdayTagPublicIds is in getDay() order (0 = Sunday); the Python worker wants
+        // weekday() order (0 = Monday), so translate. Tasks with several weekday tags keep
+        // the first one (UI enforces a single day per task).
+        const dayTagIndex = weekdayTagPublicIds.findIndex((id) => effectiveTagIds.includes(id));
+        const preferredDay = dayTagIndex === -1 ? null : (dayTagIndex + 6) % 7;
         return {
           id: integer(item.id), title: text(item.title), priority: integer(item.priority), rank: Number(item.rank),
           durationMinutes: integer(item.duration_minutes), splittable: boolean(item.splittable),
           minChunkMinutes: integer(item.min_chunk_minutes), maxChunkMinutes: integer(item.max_chunk_minutes),
           earliestStart: nullableText(item.earliest_start), deadlineAt: nullableText(item.deadline_at),
           fixedStart: nullableText(item.fixed_start), fixedEnd: nullableText(item.fixed_end),
-          tagIds: json<string[]>(item.tag_ids, []),
+          tagIds,
+          preferredDay,
         };
-      });
+      })
+      .filter((task): task is SchedulableTask => task !== null);
   }
 
   createScheduleRun(horizonStart: string, horizonEnd: string, input: unknown): ScheduleRun {
@@ -523,7 +547,7 @@ export class TaskRepository {
     const result = this.database.connection
       .prepare(
         `INSERT INTO schedule_runs (public_id, model_version, horizon_start, horizon_end, status, input_json, created_at)
-         VALUES (?, 'cp-sat-v0', ?, ?, 'running', ?, ?)`,
+         VALUES (?, 'cp-sat-v1', ?, ?, 'running', ?, ?)`,
       )
       .run(randomUUID(), horizonStart, horizonEnd, JSON.stringify(input), timestamp);
     return this.getScheduleRun(insertedId(result));
