@@ -46,9 +46,17 @@ code, pre { overflow-wrap: anywhere; white-space: pre-wrap; }
 .kanban-heading h2 { margin: 0 0 .5rem; }
 .kanban-stack { display: grid; gap: .6rem; }
 .column-empty { border: 1px dashed #ccc; color: #777; padding: 1.5rem .5rem; text-align: center; }
-.task-card { background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: .9rem; min-height: 160px; display: flex; flex-direction: column; text-decoration: none; transition: transform .12s ease, box-shadow .12s ease; }
+.task-card { background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: .9rem; min-height: 160px; display: flex; flex-direction: column; text-decoration: none; transition: transform .12s ease, box-shadow .12s ease; user-select: none; -webkit-user-drag: none; -moz-user-drag: none; }
+.task-card-placeholder { border: 1px dotted #999; border-radius: 4px; min-height: 160px; padding: .9rem; background: transparent; }
+.task-card-drag-ghost { opacity: .92; box-shadow: 0 10px 24px #0003; z-index: 1000; cursor: grabbing; pointer-events: none; }
+.drop-line { height: 2px; background: #111; border-radius: 2px; pointer-events: none; }
+body.dragging { user-select: none; }
+body.dragging .task-card, body.dragging .task-card-placeholder, body.dragging .kanban-column { cursor: grabbing; }
 .task-card:hover { transform: translateY(-2px); box-shadow: 0 4px 10px #0002; }
 .task-card-topline { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+.task-card-checkbox { appearance: none; width: 1.1rem; height: 1.1rem; border: 1.5px solid #c9c9c9; border-radius: 50%; background: transparent; cursor: pointer; flex: none; padding: 0; transition: border-color .12s ease, background-color .12s ease; }
+.task-card-checkbox:hover { border-color: #888; }
+.task-card-checkbox:checked { border-color: #9ab09a; background: #eef4ee url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.7 9.5 3.5' fill='none' stroke='%234f7a4f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center / .7rem; }
 .task-card h3 { font-size: 1rem; margin: .8rem 0 .5rem; }
 .task-description { color: #555; font-size: .85rem; }
 .task-priority { font-weight: 700; }
