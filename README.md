@@ -46,6 +46,96 @@ pnpm build
 pnpm start
 ```
 
+## Raspberry Pi Deployment
+
+A 64-bit Raspberry Pi OS (aarch64) can run the control plane as a headless single-owner instance, reachable over Tailscale. The web bundle is static, so it can be built on a desktop and copied over — this keeps the build toolchain (and SD-card wear) off the Pi.
+
+### Toolchain
+
+Raspberry Pi OS ships no Node, and `node:sqlite` requires Node 22.5+. Install a current Node via nvm:
+
+```sh
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+source ~/.bashrc
+nvm install 26
+```
+
+Enable pnpm through corepack; inside the repo it resolves the version pinned by `packageManager`:
+
+```sh
+corepack enable
+```
+
+> Corepack versions before ~0.30 crash with `Cannot find matching keyid`. If you hit that, use the standalone installer instead (`curl -fsSL https://get.pnpm.io/install.sh | PNPM_VERSION=10.15.1 sh -`), which also honors the `packageManager` pin.
+
+uv supplies the Python version the scheduler needs (the Pi's system Python is usually below the `>=3.11` requirement in `workers/cp-sat`):
+
+```sh
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### Install and run
+
+```sh
+cd ~/mind-palace
+pnpm install
+uv sync --project workers/cp-sat
+
+# Point at an existing database if it isn't in data/ (the repo default):
+export DATABASE_PATH=/home/emchap4/mind-palace/mind-palace.db
+pnpm db:migrate
+
+# Option A: build on the Pi (a 1 GB Pi needs its ~2 GB swap active)
+pnpm --filter @mind-palace/web build
+
+# Option B (recommended): build on a desktop from the same commit, copy the bundle
+#   git worktree add /tmp/mind-palace-build new-impl
+#   cd /tmp/mind-palace-build && pnpm install && pnpm --filter @mind-palace/web build
+#   rsync -az /tmp/mind-palace-build/apps/web/dist/ emchap4@rpi.local:~/mind-palace/apps/web/dist/
+
+HOST=0.0.0.0 DATABASE_PATH=/home/emchap4/mind-palace/mind-palace.db pnpm start
+```
+
+`nohup` does not survive reboots; run the server under systemd instead. Adjust the user and absolute paths to your Pi (`which node` / `which pnpm` reveal them):
+
+```ini
+[Unit]
+Description=Mind Palace
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+User=emchap4
+WorkingDirectory=/home/emchap4/mind-palace
+Environment=PATH=/home/emchap4/.nvm/versions/node/v26.9.0/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOST=0.0.0.0
+Environment=PORT=4310
+Environment=DATABASE_PATH=/home/emchap4/mind-palace/mind-palace.db
+ExecStart=/home/emchap4/.local/share/pnpm/bin/pnpm --filter @mind-palace/server start
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```sh
+sudo cp mind-palace.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now mind-palace
+```
+
+### Tailscale
+
+A reboot can leave the node logged out even though `tailscaled` is running, silently dropping the Pi from the tailnet. Re-login and visit the printed URL:
+
+```sh
+sudo tailscale up
+# To authenticate, visit: https://login.tailscale.com/a/<code>
+sudo tailscale status
+```
+
+The instance is then reachable from your other devices at `http://<pi-tailnet-ip>:4310`. Keep it off the public internet; the server has no accounts.
+
 ## Architecture
 
 ```text
