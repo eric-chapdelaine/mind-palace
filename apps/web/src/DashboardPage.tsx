@@ -13,7 +13,6 @@ const columns: Array<{ status: KanbanStatus; label: string }> = [
   { status: "ready", label: "Ready" },
   { status: "in_progress", label: "In progress" },
   { status: "waiting", label: "Waiting" },
-  { status: "in_review", label: "Review" },
 ];
 
 export function DashboardPage() {

@@ -3,7 +3,6 @@ export const kanbanStatuses = [
   "ready",
   "in_progress",
   "waiting",
-  "in_review",
   "completed",
   "cancelled",
 ] as const;

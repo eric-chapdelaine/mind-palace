@@ -40,8 +40,8 @@ code, pre { overflow-wrap: anywhere; white-space: pre-wrap; }
 .tag-filter label { margin: 0; min-width: 240px; }
 .mind-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 1rem; align-items: start; }
 
-.kanban-board { display: grid; grid-template-columns: repeat(5, minmax(190px, 1fr)); gap: .75rem; overflow-x: auto; }
-.kanban-column { min-width: 190px; min-height: 500px; }
+.kanban-board { display: grid; grid-template-columns: repeat(5, minmax(min-content, 1fr)); gap: .75rem; overflow-x: auto; }
+.kanban-column { min-height: 500px; }
 .kanban-heading { display: flex; justify-content: space-between; border-bottom: 1px solid #ccc; margin-bottom: .75rem; }
 .kanban-heading h2 { margin: 0 0 .5rem; }
 .kanban-stack { display: grid; gap: .6rem; }
@@ -198,7 +198,6 @@ body.dragging .task-card:hover .task-card-expand > div { opacity: 0; }
   .mind-layout { grid-template-columns: 1fr; }
   .dashboard-sidebar { grid-column: 1; grid-row: 1; grid-template-columns: 1fr 1fr; }
   .completed-tasks { grid-column: 1; }
-  .kanban-board { grid-template-columns: repeat(5, 220px); }
 }
 
 @media (max-width: 650px) {
