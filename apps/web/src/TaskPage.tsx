@@ -11,6 +11,24 @@ function formatDateTime(value: string): string {
   return new Date(value).toLocaleString();
 }
 
+/** Open markdown links in a new tab instead of navigating the SPA away. */
+function MarkdownLinks({ children }: { children: string | null | undefined }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        a: ({ href, children }) => (
+          <a href={href} target="_blank" rel="noopener noreferrer">
+            {children}
+          </a>
+        ),
+      }}
+    >
+      {children}
+    </ReactMarkdown>
+  );
+}
+
 function PlanningSection({ task }: { task: TaskDetail }) {
   return (
     <section>
@@ -113,7 +131,7 @@ export function TaskPage() {
           <h1>{task.title}</h1>
           {task.description && (
             <div className="markdown-description">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{task.description}</ReactMarkdown>
+              <MarkdownLinks>{task.description}</MarkdownLinks>
             </div>
           )}
           <TagRow tags={task.tags} links />
