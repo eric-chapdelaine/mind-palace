@@ -39,7 +39,6 @@ export function DashboardPage() {
     startX: number;
     startY: number;
     started: boolean;
-    didDrag: boolean;
     cardEl: HTMLAnchorElement;
     ghost: HTMLElement | null;
   } | null>(null);
@@ -145,7 +144,7 @@ export function DashboardPage() {
 
   // ---- Kanban drag & drop (custom pointer-driven; see the drag-session notes above) ----
 
-  const DRAG_START_DISTANCE = 4; // px of pointer movement before a press becomes a drag
+  const DRAG_START_DISTANCE = 8; // px of pointer movement before a press becomes a drag
 
   function beginCardPointerDown(event: ReactPointerEvent<HTMLAnchorElement>, taskId: number) {
     if (selecting || event.button !== 0) return;
@@ -155,7 +154,6 @@ export function DashboardPage() {
       startX: event.clientX,
       startY: event.clientY,
       started: false,
-      didDrag: false,
       cardEl: event.currentTarget,
       ghost: null,
     };
@@ -185,7 +183,6 @@ export function DashboardPage() {
       document.body.appendChild(ghost);
       session.ghost = ghost;
       session.started = true;
-      session.didDrag = true;
       document.body.classList.add("dragging");
       setDraggingId(session.taskId);
       setDraggingHeight(rect.height);
@@ -202,9 +199,15 @@ export function DashboardPage() {
     const session = dragSessionRef.current;
     if (session?.started) {
       const hint = dropHintRef.current;
-      if (hint) void moveTaskRef.current(session.taskId, hint.status, hint.beforeTaskId ?? undefined);
+      if (hint) {
+        void moveTaskRef.current(session.taskId, hint.status, hint.beforeTaskId ?? undefined);
+        // Swallow the click that follows a real drop, so a moved card doesn't navigate to its
+        // detail page. Deliberately gated on the drop itself, not on "a drag started": a firm
+        // trackpad press can drift a few px past the drag threshold without intending to drag,
+        // and swallowing that click is what forced double-clicking to open a task on macOS.
+        suppressNextClick();
+      }
     }
-    if (session?.didDrag) suppressNextClick();
     abortDrag();
   }
 
