@@ -6,6 +6,7 @@ import { CreateTaskPanel } from "./components/CreateTaskPanel";
 import { TaskCard } from "./components/TaskCard";
 import { TagHierarchy } from "./components/TagHierarchy";
 import { TagPicker } from "./components/TagPicker";
+import { readTagFilterPreferences, writeTagFilterPreferences } from "./tagFilterPreferences";
 
 const columns: Array<{ status: KanbanStatus; label: string }> = [
   { status: "inbox", label: "Inbox" },
@@ -18,8 +19,8 @@ const columns: Array<{ status: KanbanStatus; label: string }> = [
 export function DashboardPage() {
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
-  const [includedTagIds, setIncludedTagIds] = useState<number[]>([]);
-  const [excludedTagIds, setExcludedTagIds] = useState<number[]>([]);
+  const [includedTagIds, setIncludedTagIds] = useState<number[]>(() => readTagFilterPreferences().includedTagIds);
+  const [excludedTagIds, setExcludedTagIds] = useState<number[]>(() => readTagFilterPreferences().excludedTagIds);
   const [selecting, setSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +63,11 @@ export function DashboardPage() {
     const interval = window.setInterval(() => void load(), 5000);
     return () => window.clearInterval(interval);
   }, []);
+
+  // Persist the tag filter to cookies on every change so it survives browser sessions.
+  useEffect(() => {
+    writeTagFilterPreferences(includedTagIds, excludedTagIds);
+  }, [includedTagIds, excludedTagIds]);
 
   // Always-on window listeners gate on the active drag session, so re-renders never lose them.
   useEffect(() => {
