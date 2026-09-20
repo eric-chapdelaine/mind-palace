@@ -28,6 +28,9 @@ export class ScheduleService {
   }
 
   async generate(): Promise<Schedule> {
+    // Release time held by stale proposals first so listSchedulableTasks (and the solver)
+    // see an accurate remaining estimate; the new proposed blocks re-claim it below.
+    this.tasks.supersedeProposedBlocks();
     const input = {
       tasks: this.tasks.listSchedulableTasks(),
       timeBlocks: this.tasks.listTimeBlocks(),
@@ -38,7 +41,6 @@ export class ScheduleService {
     if (result.error) throw new Error(result.error);
     const run = this.tasks.createScheduleRun(result.horizonStart, result.horizonEnd, input);
     try {
-      this.tasks.supersedeProposedBlocks();
       for (const assignment of result.assignments) {
         this.tasks.createTimeBlock({ ...assignment, source: "solver", status: "proposed" }, run.id);
       }

@@ -21,6 +21,15 @@ export type LifecycleStatus = (typeof lifecycleStatuses)[number];
 export const timeBlockStatuses = ["proposed", "accepted", "completed", "missed", "superseded"] as const;
 export type TimeBlockStatus = (typeof timeBlockStatuses)[number];
 
+/**
+ * Commitment kind of a time block. `work` is the default (time set aside to make progress on
+ * a task); `calendar_event` marks a fixed appointment whose window is the block itself. New
+ * kinds are added here (and in the DB CHECK constraint) when tag-driven Quick-capture modes
+ * grow beyond calendar events.
+ */
+export const timeBlockTypes = ["work", "calendar_event"] as const;
+export type TimeBlockType = (typeof timeBlockTypes)[number];
+
 /** Reserved tags that carry behavior (see AGENTS.md "tag-driven behavior"). */
 export const reservedTagPublicIds = {
   calendarEvent: "mind-palace:calendar-event",
@@ -52,14 +61,13 @@ export interface TaskSummary {
   priority: number;
   rank: number;
   description: string | null;
-  durationMinutes: number | null;
+  /** Minutes of work not yet represented by a time block (see the tasks.duration_minutes_remaining column). */
+  durationMinutesRemaining: number | null;
   kanbanStatus: KanbanStatus;
   lifecycleStatus: LifecycleStatus;
   splittable: boolean;
   earliestStart: string | null;
   deadlineAt: string | null;
-  fixedStart: string | null;
-  fixedEnd: string | null;
   completedAt: string | null;
   origin: string;
   tags: Tag[];
@@ -92,6 +100,7 @@ export interface TimeBlock {
   startAt: string;
   endAt: string;
   status: TimeBlockStatus;
+  type: TimeBlockType;
   source: "manual" | "solver" | "calendar" | "recurrence";
   notes: string | null;
 }
@@ -149,17 +158,28 @@ export interface CreateTaskInput {
   description?: string;
   priority?: number;
   rank?: number;
-  durationMinutes?: number | null;
+  durationMinutesRemaining?: number | null;
   splittable?: boolean;
   minChunkMinutes?: number;
   maxChunkMinutes?: number;
   earliestStart?: string;
   deadlineAt?: string;
-  fixedStart?: string;
-  fixedEnd?: string;
   kanbanStatus?: KanbanStatus;
   tagIds?: number[];
   origin?: string;
+  /**
+   * Create the task together with its first time block — the Quick-capture surface for
+   * tag-driven commitment kinds (currently only calendar events). The block's minutes are
+   * subtracted from `durationMinutesRemaining` exactly like any other created block.
+   */
+  timeBlock?: TaskTimeBlockInput;
+}
+
+export interface TaskTimeBlockInput {
+  startAt: string;
+  endAt: string;
+  type?: TimeBlockType;
+  notes?: string;
 }
 
 export interface UpdateTaskInput {
@@ -168,14 +188,12 @@ export interface UpdateTaskInput {
   kanbanStatus?: KanbanStatus;
   priority?: number;
   rank?: number;
-  durationMinutes?: number | null;
+  durationMinutesRemaining?: number | null;
   splittable?: boolean;
   minChunkMinutes?: number;
   maxChunkMinutes?: number;
   earliestStart?: string | null;
   deadlineAt?: string | null;
-  fixedStart?: string | null;
-  fixedEnd?: string | null;
   tagIds?: number[];
 }
 
@@ -194,8 +212,14 @@ export interface CreateTimeBlockInput {
   startAt: string;
   endAt: string;
   status?: TimeBlockStatus;
+  type?: TimeBlockType;
   source?: TimeBlock["source"];
   notes?: string;
+}
+
+export interface UpdateTimeBlockInput {
+  startAt?: string;
+  endAt?: string;
 }
 
 export interface UpsertRecurrenceInput {

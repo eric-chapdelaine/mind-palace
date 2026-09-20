@@ -7,10 +7,12 @@ import {
   kanbanStatuses,
   lifecycleStatuses,
   timeBlockStatuses,
+  timeBlockTypes,
   type CreateTaskInput,
   type LifecycleStatus,
   type KanbanStatus,
   type TimeBlockStatus,
+  type TimeBlockType,
 } from "@mind-palace/shared";
 import { Hono } from "hono";
 import type { IntegrationService } from "../services/integration-service.js";
@@ -24,6 +26,10 @@ interface Dependencies {
   weather: WeatherService;
   integrations: IntegrationService;
   recurrence: RecurrenceService;
+}
+
+function isTimeBlockBody(value: unknown): value is { startAt: string; endAt: string; type?: string; notes?: string } {
+  return typeof value === "object" && value !== null && "startAt" in value && "endAt" in value;
 }
 
 function numberParam(value: string, name: string): number {
@@ -53,6 +59,7 @@ export function createHttpApp({ tasks, schedule, weather, integrations, recurren
   app.get("/api/weather", async (context) => context.json(await weather.getForecast()));
   app.get("/api/health-observations", (context) => context.json(tasks.listHealthObservations()));
   app.get("/api/tasks/:id", (context) => context.json(tasks.getTask(numberParam(context.req.param("id"), "task id"))));
+  app.get("/api/time-blocks/:id", (context) => context.json(tasks.getTimeBlock(numberParam(context.req.param("id"), "time block id"))));
 
   app.post("/api/tasks", async (context) => {
     const body = (await context.req.json()) as Record<string, unknown>;
@@ -62,7 +69,7 @@ export function createHttpApp({ tasks, schedule, weather, integrations, recurren
       kanbanStatus,
       priority: typeof body.priority === "number" ? body.priority : 0,
       rank: typeof body.rank === "number" ? body.rank : Date.now(),
-      durationMinutes: typeof body.durationMinutes === "number" ? body.durationMinutes : null,
+      durationMinutesRemaining: typeof body.durationMinutesRemaining === "number" ? body.durationMinutesRemaining : null,
       splittable: body.splittable === true,
       minChunkMinutes: typeof body.minChunkMinutes === "number" ? body.minChunkMinutes : 30,
       maxChunkMinutes: typeof body.maxChunkMinutes === "number" ? body.maxChunkMinutes : 180,
@@ -70,8 +77,18 @@ export function createHttpApp({ tasks, schedule, weather, integrations, recurren
       ...(typeof body.description === "string" ? { description: body.description } : {}),
       ...(typeof body.earliestStart === "string" ? { earliestStart: body.earliestStart } : {}),
       ...(typeof body.deadlineAt === "string" ? { deadlineAt: body.deadlineAt } : {}),
-      ...(typeof body.fixedStart === "string" ? { fixedStart: body.fixedStart } : {}),
-      ...(typeof body.fixedEnd === "string" ? { fixedEnd: body.fixedEnd } : {}),
+      ...(isTimeBlockBody(body.timeBlock)
+        ? {
+            timeBlock: {
+              startAt: requiredString(body.timeBlock.startAt, "timeBlock.startAt"),
+              endAt: requiredString(body.timeBlock.endAt, "timeBlock.endAt"),
+              ...(typeof body.timeBlock.type === "string" && timeBlockTypes.includes(body.timeBlock.type as TimeBlockType)
+                ? { type: body.timeBlock.type as TimeBlockType }
+                : {}),
+              ...(typeof body.timeBlock.notes === "string" ? { notes: body.timeBlock.notes } : {}),
+            },
+          }
+        : {}),
     };
     return context.json(tasks.getTask(tasks.createTask(input).id), 201);
   });
@@ -88,14 +105,12 @@ export function createHttpApp({ tasks, schedule, weather, integrations, recurren
       ...(body.kanbanStatus !== undefined ? { kanbanStatus: body.kanbanStatus as KanbanStatus } : {}),
       ...(typeof body.priority === "number" ? { priority: body.priority } : {}),
       ...(typeof body.rank === "number" ? { rank: body.rank } : {}),
-      ...(body.durationMinutes === null || typeof body.durationMinutes === "number" ? { durationMinutes: body.durationMinutes } : {}),
+      ...(body.durationMinutesRemaining === null || typeof body.durationMinutesRemaining === "number" ? { durationMinutesRemaining: body.durationMinutesRemaining } : {}),
       ...(typeof body.splittable === "boolean" ? { splittable: body.splittable } : {}),
       ...(typeof body.minChunkMinutes === "number" ? { minChunkMinutes: body.minChunkMinutes } : {}),
       ...(typeof body.maxChunkMinutes === "number" ? { maxChunkMinutes: body.maxChunkMinutes } : {}),
       ...(body.earliestStart === null || typeof body.earliestStart === "string" ? { earliestStart: body.earliestStart } : {}),
       ...(body.deadlineAt === null || typeof body.deadlineAt === "string" ? { deadlineAt: body.deadlineAt } : {}),
-      ...(body.fixedStart === null || typeof body.fixedStart === "string" ? { fixedStart: body.fixedStart } : {}),
-      ...(body.fixedEnd === null || typeof body.fixedEnd === "string" ? { fixedEnd: body.fixedEnd } : {}),
       ...(Array.isArray(body.tagIds) ? { tagIds: body.tagIds.map(Number) } : {}),
     });
     return context.json(tasks.getTask(taskId));
@@ -132,14 +147,30 @@ export function createHttpApp({ tasks, schedule, weather, integrations, recurren
     const body = (await context.req.json()) as Record<string, unknown>;
     const status = (body.status ?? "proposed") as TimeBlockStatus;
     if (!timeBlockStatuses.includes(status)) throw new Error("Invalid time block status");
+    const type = (body.type ?? "work") as TimeBlockType;
+    if (!timeBlockTypes.includes(type)) throw new Error("Invalid time block type");
     return context.json(tasks.createTimeBlock({
       taskId: numberParam(String(body.taskId), "task id"),
       startAt: requiredString(body.startAt, "startAt"),
       endAt: requiredString(body.endAt, "endAt"),
       status,
+      type,
       source: "manual",
       ...(typeof body.notes === "string" ? { notes: body.notes } : {}),
     }), 201);
+  });
+
+  app.delete("/api/time-blocks/:id", (context) => {
+    tasks.deleteTimeBlock(numberParam(context.req.param("id"), "time block id"));
+    return context.json(schedule.getSchedule());
+  });
+
+  app.patch("/api/time-blocks/:id", async (context) => {
+    const body = (await context.req.json()) as Record<string, unknown>;
+    return context.json(tasks.updateTimeBlock(numberParam(context.req.param("id"), "time block id"), {
+      ...(typeof body.startAt === "string" ? { startAt: body.startAt } : {}),
+      ...(typeof body.endAt === "string" ? { endAt: body.endAt } : {}),
+    }));
   });
 
   app.post("/api/time-blocks/:id/status", async (context) => {

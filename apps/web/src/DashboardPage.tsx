@@ -111,7 +111,10 @@ export function DashboardPage() {
   const completed = visible
     .filter((task) => task.kanbanStatus === "completed")
     .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
-  const scheduled = tasks.filter((task) => task.fixedStart || task.fixedEnd).length;
+  // Calendar-event tasks are fixed commitments: their whole window lives in an accepted block.
+  const scheduled = tasks.filter((task) =>
+    [...task.tags, ...task.derivedTags].some((tag) => tag.publicId === reservedTagPublicIds.calendarEvent),
+  ).length;
 
   async function createTask(input: CreateTaskInput) {
     const task = await api.createTask(input);

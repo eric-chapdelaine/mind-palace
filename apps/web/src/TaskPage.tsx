@@ -16,15 +16,19 @@ function PlanningSection({ task }: { task: TaskDetail }) {
     <section>
       <div className="section-label">Planning</div>
       <strong>Priority {task.priority}</strong>
-      {task.durationMinutes !== null
-        ? <span>{task.durationMinutes} minutes{task.splittable ? ", splittable" : ""}</span>
+      {task.durationMinutesRemaining !== null
+        ? <span>{task.durationMinutesRemaining} minutes remaining{task.splittable ? ", splittable" : ""}</span>
         : <span>No time estimate</span>}
       {task.deadlineAt && <span>Due {formatDateTime(task.deadlineAt)}</span>}
     </section>
   );
 }
 
-function TimeBlockSection({ task, onAcceptSchedule }: { task: TaskDetail; onAcceptSchedule: () => void }) {
+function TimeBlockSection({ task, onAcceptSchedule, onDeleteBlock }: {
+  task: TaskDetail;
+  onAcceptSchedule: () => void;
+  onDeleteBlock: (blockId: number) => void;
+}) {
   const visible = task.timeBlocks.filter((block) => block.status !== "superseded");
   if (visible.length === 0) return null;
   return (
@@ -32,8 +36,11 @@ function TimeBlockSection({ task, onAcceptSchedule }: { task: TaskDetail; onAcce
       <div className="section-label">Time blocks</div>
       {visible.map((block) => (
         <div className="mini-block" key={block.id}>
-          <strong>{formatDateTime(block.startAt)}</strong>
-          <span>{block.status}</span>
+          <Link className="mini-block-link" to={`/time-blocks/${block.id}`}>
+            <strong>{formatDateTime(block.startAt)}</strong>
+            <span>{block.type === "calendar_event" ? "calendar event · " : ""}{block.status}</span>
+          </Link>
+          <button type="button" className="mini-block-delete" onClick={() => onDeleteBlock(block.id)}>Delete block</button>
         </div>
       ))}
       {task.timeBlocks.some((block) => block.status === "proposed") && (
@@ -81,6 +88,10 @@ export function TaskPage() {
 
   async function acceptSchedule() {
     await action(() => api.acceptTaskSchedule(task!.id).then(() => api.task(id)));
+  }
+
+  async function deleteBlock(blockId: number) {
+    await action(() => api.deleteTimeBlock(blockId).then(() => api.task(id)));
   }
 
   if (!task) {
@@ -135,7 +146,7 @@ export function TaskPage() {
 
       <div className="detail-stack">
         <PlanningSection task={task} />
-        <TimeBlockSection task={task} onAcceptSchedule={() => void acceptSchedule()} />
+        <TimeBlockSection task={task} onAcceptSchedule={() => void acceptSchedule()} onDeleteBlock={(blockId) => void deleteBlock(blockId)} />
       </div>
     </main>
   );

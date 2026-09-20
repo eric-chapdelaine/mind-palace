@@ -38,9 +38,9 @@ pnpm build && pnpm start  # production; server also hosts apps/web/dist
 
 ## Data model (what the tables mean)
 
-- `tasks` — the unified work item: kanban column (`kanban_status`), lifecycle (`lifecycle_status`), priority + rank (rank is the drag-order tiebreaker), optional duration (a task with no estimate is never auto-scheduled), earliest/deadline/fixed windows, `origin` (manual / calendar_import / recurrence). There is no parent-task column — parent/child relationships between tasks are expressed by shared tags (a parent task is mapped by a tag it and its children both carry, see `ensureTaskTag`).
+- `tasks` — the unified work item: kanban column (`kanban_status`), lifecycle (`lifecycle_status`), priority + rank (rank is the drag-order tiebreaker), `duration_minutes_remaining` (time not yet represented by a time block; `NULL`/0-remaining tasks are never auto-scheduled), earliest/deadline windows, `origin` (manual / calendar_import / recurrence). There is no parent-task column — parent/child relationships between tasks are expressed by shared tags (a parent task is mapped by a tag it and its children both carry, see `ensureTaskTag`).
 - `tags`, `tag_parents`, `task_tags` — multi-parent acyclic tag graph ("derived" tags = ancestors) and direct task assignments. `tags.public_id` starting with `mind-palace:` marks **reserved** tags that carry behavior.
-- `time_blocks`, `schedule_runs` — schedule results. Accepted blocks are **immutable** (repo enforces: accepted → only completed/missed). Schedule runs store the exact solver input/output JSON for reproducibility.
+- `time_blocks`, `schedule_runs` — schedule results. Blocks carry a `type` (`work` default, `calendar_event` for fixed commitment windows) and `source` (manual / solver / calendar / recurrence); accepted blocks are **immutable** (repo enforces: accepted → only completed/missed). Creating a block subtracts its minutes from the task's `duration_minutes_remaining`; deleting or superseding gives them back. Schedule runs store the exact solver input/output JSON for reproducibility.
 - `recurrence_rules`, `recurrence_occurrences` — routine templates and the child tasks they generated (one per date).
 - `integration_accounts`, `external_task_mappings` — provider identity; mappings make calendar/garmin imports idempotent. Raw provider payloads are never stored.
 - `health_observations` — normalized Garmin activity/sleep facts.
@@ -118,7 +118,7 @@ useEffect(() => {
 ## CP-SAT worker (`workers/cp-sat/scheduler.py`)
 
 - Protocol: `ScheduleService.generate()` sends `{ tasks, timeBlocks, weather }` as JSON on stdin; worker prints one JSON object on stdout. Contract version tag: `model_version = 'cp-sat-v0'` in `createScheduleRun` — **bump it if you change the problem/solution shape**.
-- Current model: 30-minute slots, 07:00–23:00, `America/New_York`, horizon = now → end of current week. Accepted/completed blocks and `calendar_event` fixed tasks are busy. Priority dominates the objective, rank breaks ties, splitting carries a context-switch penalty; `maxChunkMinutes` caps run length.
+- Current model: 30-minute slots, 07:00–23:00, `America/New_York`, horizon = now → end of current week. Accepted/completed blocks (including `calendar_event` commitment windows) are busy. Priority dominates the objective, rank breaks ties, splitting carries a context-switch penalty; `maxChunkMinutes` caps run length.
 - Errors: print `{"error": "..."}` and `exit 1`; `ScheduleService` converts that to a thrown `Error`.
 - Never import SQLite or the TS packages in the worker.
 

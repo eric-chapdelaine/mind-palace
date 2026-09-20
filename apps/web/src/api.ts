@@ -6,7 +6,9 @@ import type {
   Tag,
   TaskDetail,
   TaskSummary,
+  TimeBlock,
   UpdateTaskInput,
+  UpdateTimeBlockInput,
   WeatherForecast,
 } from "@mind-palace/shared";
 
@@ -27,6 +29,9 @@ export const api = {
   weather: () => request<WeatherForecast[]>("/api/weather"),
   healthObservations: () => request<HealthObservation[]>("/api/health-observations"),
   task: (id: number) => request<TaskDetail>(`/api/tasks/${id}`),
+  timeBlock: (id: number) => request<TimeBlock>(`/api/time-blocks/${id}`),
+  updateTimeBlock: (id: number, input: UpdateTimeBlockInput) =>
+    request<TimeBlock>(`/api/time-blocks/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
   createTask: (input: CreateTaskInput) =>
     request<TaskDetail>("/api/tasks", { method: "POST", body: JSON.stringify(input) }),
   updateTask: (id: number, input: UpdateTaskInput) =>
@@ -43,6 +48,7 @@ export const api = {
   acceptTaskSchedule: (id: number) => request<Schedule>(`/api/tasks/${id}/accept-schedule`, { method: "POST" }),
   setTimeBlockStatus: (id: number, status: "completed" | "missed") =>
     request<Schedule>(`/api/time-blocks/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
+  deleteTimeBlock: (id: number) => request<Schedule>(`/api/time-blocks/${id}`, { method: "DELETE" }),
   refreshWeather: () => request<WeatherForecast[]>("/api/weather/refresh", { method: "POST" }),
   setLifecycle: (id: number, status: LifecycleStatus) =>
     request<TaskDetail>(`/api/tasks/${id}/lifecycle`, { method: "POST", body: JSON.stringify({ status }) }),

@@ -43,16 +43,12 @@ def solve(payload: dict) -> dict:
         cursor = next_cursor
 
     existing_blocks = [block for block in payload["timeBlocks"] if block["status"] in ("accepted", "completed")]
-    fixed_tasks = [task for task in payload["tasks"] if "mind-palace:calendar-event" in task["tagIds"]]
-    for task in fixed_tasks:
-        if task.get("fixedStart") and task.get("fixedEnd"):
-            existing_blocks.append({"startAt": task["fixedStart"], "endAt": task["fixedEnd"], "status": "accepted"})
 
     available_slots = [
         index for index, (start, end) in enumerate(slots)
         if not any(overlaps(start, end, block) for block in existing_blocks)
     ]
-    candidates = [task for task in payload["tasks"] if task not in fixed_tasks]
+    candidates = payload["tasks"]
     model = cp_model.CpModel()
     selected = {}
     scheduled = {}
@@ -61,7 +57,7 @@ def solve(payload: dict) -> dict:
     required_day_tasks: dict[int, list[dict]] = {}
     for task in candidates:
         task_id = task["id"]
-        required = math.ceil(task["durationMinutes"] / SLOT_MINUTES)
+        required = math.ceil(task["durationMinutesRemaining"] / SLOT_MINUTES)
         preferred_day = task.get("preferredDay")
         scheduled[task_id] = model.new_bool_var(f"scheduled_{task_id}")
         selected[task_id] = {}
@@ -144,7 +140,7 @@ def solve(payload: dict) -> dict:
         if status == cp_model.INFEASIBLE and required_day_tasks:
             commitments = []
             for day_number in sorted(required_day_tasks):
-                total = sum(task["durationMinutes"] for task in required_day_tasks[day_number])
+                total = sum(task["durationMinutesRemaining"] for task in required_day_tasks[day_number])
                 commitments.append(f"{WEEKDAY_NAMES[day_number]}: {total} min committed")
             raise RuntimeError(
                 "Committed day tasks do not fit their day (days hold 07:00-23:00 in 30-minute "

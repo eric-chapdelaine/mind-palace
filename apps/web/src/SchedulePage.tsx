@@ -56,10 +56,10 @@ function schedulabilityReason(task: TaskSummary): { label: string; detail: strin
       detail: `Only Ready and In progress tasks are scheduled; this one is ${task.kanbanStatus}.`,
     };
   }
-  if (task.durationMinutes === null || task.durationMinutes <= 0) {
+  if (task.durationMinutesRemaining === null || task.durationMinutesRemaining <= 0) {
     return {
       label: "no estimate",
-      detail: "Tasks without a duration estimate are never auto-scheduled. Set a duration on the task.",
+      detail: "Only tasks with time remaining are scheduled. Set a remaining estimate or release a time block.",
     };
   }
   return null;
@@ -113,7 +113,7 @@ function WeekTaskRow({ task, scheduled, removeLabel, onRemove, onDragStart, onDr
     >
       <Link to={`/tasks/${task.id}`} draggable={false}>{task.title}</Link>
       {scheduled && <span className="week-task-ok" title="Fully scheduled this week">✓</span>}
-      {task.durationMinutes !== null && <span className="week-task-duration">{task.durationMinutes}m</span>}
+      {task.durationMinutesRemaining !== null && <span className="week-task-duration">{task.durationMinutesRemaining}m</span>}
       {reason !== null && <span className="week-task-ineligible" title={reason.detail}>{reason.label}</span>}
       <button
         type="button"
@@ -338,43 +338,23 @@ export function SchedulePage() {
   // Tasks shown as proposed but that the scheduler will skip (see `schedulabilityReason`).
   const unSchedulableCount = committed.filter((task) => schedulabilityReason(task) !== null).length;
 
-  // Minutes of non-superseded, non-missed blocks per task (fixed intervals count too).
+  // Minutes of non-superseded, non-missed blocks per task; calendar events are real blocks too,
+  // so a task is fully scheduled when its blocks cover its remaining estimate (creating and
+  // deleting blocks already moves minutes in and out of `durationMinutesRemaining`).
   const blockMinutesByTask = new Map<number, number>();
   for (const block of schedule?.timeBlocks ?? []) {
     if (block.status === "superseded" || block.status === "missed") continue;
     const minutes = (new Date(block.endAt).getTime() - new Date(block.startAt).getTime()) / 60_000;
     blockMinutesByTask.set(block.taskId, (blockMinutesByTask.get(block.taskId) ?? 0) + minutes);
   }
-  for (const task of tasks) {
-    if (!task.fixedStart || !task.fixedEnd) continue;
-    const minutes = (new Date(task.fixedEnd).getTime() - new Date(task.fixedStart).getTime()) / 60_000;
-    blockMinutesByTask.set(task.id, (blockMinutesByTask.get(task.id) ?? 0) + minutes);
-  }
-  const isFullyScheduled = (task: TaskSummary): boolean => task.durationMinutes !== null
-    && (blockMinutesByTask.get(task.id) ?? 0) >= task.durationMinutes;
+  const isFullyScheduled = (task: TaskSummary): boolean => task.durationMinutesRemaining !== null
+    && (blockMinutesByTask.get(task.id) ?? 0) >= task.durationMinutesRemaining;
 
-  const timeBlocks = (schedule?.timeBlocks ?? [])
-    .filter((block) => block.status !== "superseded")
+  const visibleBlocks = (schedule?.timeBlocks ?? [])
+    .filter((block) => block.status !== "superseded" && (
+      new Date(block.startAt) < rangeEnd && new Date(block.endAt) > rangeStart
+    ))
     .map((block) => ({ ...block, key: `block-${block.id}` }));
-  const fixedBlocks = tasks
-    .filter((task) => task.fixedStart && task.fixedEnd)
-    .filter((task) => !timeBlocks.some((block) => (
-      block.taskId === task.id
-      && block.startAt === task.fixedStart
-      && block.endAt === task.fixedEnd
-    )))
-    .map((task) => ({
-      key: `fixed-${task.id}`,
-      taskId: task.id,
-      startAt: task.fixedStart!,
-      endAt: task.fixedEnd!,
-      status: "accepted" as const,
-      source: "calendar" as const,
-      id: 0,
-    }));
-  const visibleBlocks = [...timeBlocks, ...fixedBlocks].filter((block) => (
-    new Date(block.startAt) < rangeEnd && new Date(block.endAt) > rangeStart
-  ));
   const rangeLabel = `${rangeStart.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",

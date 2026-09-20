@@ -70,7 +70,7 @@ export function TaskCard({ task, selected = false, checked = false, onToggleComp
           {task.description && <p className="task-description">{truncate(task.description)}</p>}
           <TagRow tags={task.derivedTags} derived />
           <dl className="task-meta">
-            {task.durationMinutes !== null && <div><dt>Estimate</dt><dd>{task.durationMinutes} min</dd></div>}
+            {task.durationMinutesRemaining !== null && <div><dt>Remaining</dt><dd>{task.durationMinutesRemaining} min</dd></div>}
             <div><dt>{task.kanbanStatus === "completed" ? "Completed" : "Updated"}</dt><dd>{new Date(task.completedAt ?? task.updatedAt).toLocaleDateString()}</dd></div>
           </dl>
         </div>

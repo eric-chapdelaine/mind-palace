@@ -15,7 +15,9 @@ import {
   type TaskSummary,
   type TimeBlock,
   type TimeBlockStatus,
+  type TimeBlockType,
   type UpdateTaskInput,
+  type UpdateTimeBlockInput,
   type UpsertRecurrenceInput,
   type UpdateTagInput,
   type WeatherForecast,
@@ -24,6 +26,14 @@ import { Database } from "../database.js";
 import { boolean, integer, json, nullableText, row, text, type Row } from "../rows.js";
 
 export const reservedTagIds = reservedTagPublicIds;
+
+/**
+ * Reserved tag each time block type requires on its task. Add an entry here (and a value in
+ * the `time_blocks.type` CHECK constraint) to grow Quick-capture into more commitment kinds.
+ */
+const timeBlockTypeRequiredTag: Partial<Record<TimeBlockType, string>> = {
+  calendar_event: reservedTagIds.calendarEvent,
+};
 
 function now(): string {
   return new Date().toISOString();
@@ -54,6 +64,7 @@ function mapTimeBlock(value: Row): TimeBlock {
     startAt: text(value.start_at),
     endAt: text(value.end_at),
     status: text(value.status) as TimeBlockStatus,
+    type: text(value.type) as TimeBlockType,
     source: text(value.source) as TimeBlock["source"],
     notes: nullableText(value.notes),
   };
@@ -64,14 +75,12 @@ export interface SchedulableTask {
   title: string;
   priority: number;
   rank: number;
-  durationMinutes: number;
+  durationMinutesRemaining: number;
   splittable: boolean;
   minChunkMinutes: number;
   maxChunkMinutes: number;
   earliestStart: string | null;
   deadlineAt: string | null;
-  fixedStart: string | null;
-  fixedEnd: string | null;
   tagIds: string[];
   /**
    * Day the task is pinned to, as a Python `date.weekday()` index (0 = Monday .. 6 = Sunday),
@@ -86,7 +95,7 @@ export interface RecurrenceTemplate {
   description: string | null;
   priority: number;
   rank: number;
-  durationMinutes: number;
+  durationMinutesRemaining: number;
   splittable: boolean;
   tagIds: number[];
 }
@@ -94,9 +103,9 @@ export interface RecurrenceTemplate {
 const taskSummarySql = String.raw`
   SELECT
     t.id, t.public_id, t.title, t.priority, t.rank, t.description,
-    t.kanban_status, t.lifecycle_status, t.splittable, t.duration_minutes, t.duration_estimated,
+    t.kanban_status, t.lifecycle_status, t.splittable, t.duration_minutes_remaining, t.duration_estimated,
     t.earliest_start, t.deadline_at,
-    t.fixed_start, t.fixed_end, t.completed_at, t.origin, t.updated_at,
+    t.completed_at, t.origin, t.updated_at,
     COALESCE((SELECT json_group_array(json_object(
       'id', tag.id, 'publicId', tag.public_id, 'title', tag.title, 'description', tag.description,
       'reserved', CASE WHEN tag.public_id LIKE 'mind-palace:%' THEN json('true') ELSE json('false') END
@@ -122,14 +131,12 @@ function mapTaskSummary(value: Row): TaskSummary {
     priority: integer(value.priority),
     rank: Number(value.rank),
     description: nullableText(value.description),
-    durationMinutes: boolean(value.duration_estimated) ? integer(value.duration_minutes) : null,
+    durationMinutesRemaining: boolean(value.duration_estimated) ? integer(value.duration_minutes_remaining) : null,
     kanbanStatus: text(value.kanban_status) as KanbanStatus,
     lifecycleStatus: text(value.lifecycle_status) as LifecycleStatus,
     splittable: boolean(value.splittable),
     earliestStart: nullableText(value.earliest_start),
     deadlineAt: nullableText(value.deadline_at),
-    fixedStart: nullableText(value.fixed_start),
-    fixedEnd: nullableText(value.fixed_end),
     completedAt: nullableText(value.completed_at),
     origin: text(value.origin),
     tags: tags.map((tag) => ({ ...tag, parentIds: [] })),
@@ -161,30 +168,50 @@ export class TaskRepository {
   }
 
   createTask(input: CreateTaskInput): TaskDetail {
+    if (input.timeBlock) {
+      for (const [type, requiredTag] of Object.entries(timeBlockTypeRequiredTag)) {
+        if (input.timeBlock.type === type && !(input.tagIds ?? []).includes(this.tagId(requiredTag))) {
+          throw new Error(`A ${type} time block requires the matching reserved tag on the task`);
+        }
+      }
+    }
     const timestamp = now();
     const title = input.title.trim();
     if (!title) throw new Error("A task title is required");
     const kanbanStatus = input.kanbanStatus ?? "inbox";
     const lifecycleStatus =
       kanbanStatus === "completed" ? "completed" : kanbanStatus === "cancelled" ? "cancelled" : "active";
+    // A task created together with a calendar_event block has no work left outside that block.
+    const durationMinutesRemaining =
+      input.timeBlock?.type === "calendar_event" ? 0 : input.durationMinutesRemaining ?? null;
 
     const result = this.database.connection
       .prepare(
         `INSERT INTO tasks
-          (public_id, title, description, kanban_status, priority, rank, duration_minutes, duration_estimated,
-           splittable, min_chunk_minutes, max_chunk_minutes, earliest_start, deadline_at, fixed_start, fixed_end,
+          (public_id, title, description, kanban_status, priority, rank, duration_minutes_remaining, duration_estimated,
+           splittable, min_chunk_minutes, max_chunk_minutes, earliest_start, deadline_at,
            origin, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         randomUUID(), title, input.description?.trim() || null, kanbanStatus, input.priority ?? 0,
-        input.rank ?? Date.now(), input.durationMinutes ?? null, input.durationMinutes === null ? 0 : 1,
+        input.rank ?? Date.now(), durationMinutesRemaining, durationMinutesRemaining === null ? 0 : 1,
         input.splittable ? 1 : 0, input.minChunkMinutes ?? 30, input.maxChunkMinutes ?? 180,
-        input.earliestStart ?? null, input.deadlineAt ?? null, input.fixedStart ?? null, input.fixedEnd ?? null,
+        input.earliestStart ?? null, input.deadlineAt ?? null,
         input.origin ?? "manual", timestamp, timestamp,
       );
     const taskId = insertedId(result);
     if (input.tagIds && input.tagIds.length > 0) this.setTaskTags(taskId, input.tagIds);
+    if (input.timeBlock) {
+      // Commitment blocks are accepted from creation (like provider imports) so the solver
+      // treats them as busy; add more type->creation semantics here as kinds grow.
+      const commitmentBlock = input.timeBlock.type === "calendar_event";
+      this.createTimeBlock({
+        taskId,
+        ...input.timeBlock,
+        ...(commitmentBlock ? { status: "accepted" as const, source: "calendar" as const } : {}),
+      });
+    }
     return this.getTask(taskId);
   }
 
@@ -326,17 +353,15 @@ export class TaskRepository {
     }
     if (input.priority !== undefined) add("priority", input.priority);
     if (input.rank !== undefined) add("rank", input.rank);
-    if (input.durationMinutes !== undefined) {
-      add("duration_estimated", input.durationMinutes === null ? 0 : 1);
-      if (input.durationMinutes !== null) add("duration_minutes", input.durationMinutes);
+    if (input.durationMinutesRemaining !== undefined) {
+      add("duration_estimated", input.durationMinutesRemaining === null ? 0 : 1);
+      if (input.durationMinutesRemaining !== null) add("duration_minutes_remaining", input.durationMinutesRemaining);
     }
     if (input.splittable !== undefined) add("splittable", input.splittable ? 1 : 0);
     if (input.minChunkMinutes !== undefined) add("min_chunk_minutes", input.minChunkMinutes);
     if (input.maxChunkMinutes !== undefined) add("max_chunk_minutes", input.maxChunkMinutes);
     if (input.earliestStart !== undefined) add("earliest_start", input.earliestStart);
     if (input.deadlineAt !== undefined) add("deadline_at", input.deadlineAt);
-    if (input.fixedStart !== undefined) add("fixed_start", input.fixedStart);
-    if (input.fixedEnd !== undefined) add("fixed_end", input.fixedEnd);
     if (assignments.length > 0) {
       add("updated_at", now());
       const result = this.database.connection
@@ -374,27 +399,106 @@ export class TaskRepository {
   createTimeBlock(input: CreateTimeBlockInput, scheduleRunId: number | null = null): TimeBlock {
     if (new Date(input.endAt) <= new Date(input.startAt)) throw new Error("Time block end must be after start");
     const timestamp = now();
-    const result = this.database.connection
+    const minutes = Math.round((new Date(input.endAt).getTime() - new Date(input.startAt).getTime()) / 60_000);
+    this.database.connection.exec("BEGIN IMMEDIATE");
+    try {
+      const result = this.database.connection
+        .prepare(
+          `INSERT INTO time_blocks
+            (public_id, task_id, schedule_run_id, start_at, end_at, status, type, source, notes, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          randomUUID(), input.taskId, scheduleRunId, input.startAt, input.endAt, input.status ?? "proposed",
+          input.type ?? "work", input.source ?? "manual", input.notes?.trim() || null, timestamp, timestamp,
+        );
+      const id = insertedId(result);
+      // Held time comes out of the task's remaining estimate (floor at 0); deleted or
+      // superseded blocks give it back (see deleteTimeBlock / supersedeProposedBlocks).
+      this.adjustRemainingMinutes(input.taskId, -minutes);
+      this.database.connection.exec("COMMIT");
+      return mapTimeBlock(row(this.database.connection.prepare("SELECT * FROM time_blocks WHERE id = ?").get(id), "time block"));
+    } catch (error) {
+      this.database.connection.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  deleteTimeBlock(id: number): void {
+    const value = this.database.connection.prepare("SELECT * FROM time_blocks WHERE id = ?").get(id);
+    const block = row(value, "time block");
+    const minutes = Math.round((new Date(text(block.end_at)).getTime() - new Date(text(block.start_at)).getTime()) / 60_000);
+    this.database.connection.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.connection.prepare("DELETE FROM time_blocks WHERE id = ?").run(id);
+      // Deleting a block releases its time back to the task's remaining estimate.
+      this.adjustRemainingMinutes(integer(block.task_id), minutes);
+      this.database.connection.exec("COMMIT");
+    } catch (error) {
+      this.database.connection.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  getTimeBlock(id: number): TimeBlock {
+    return mapTimeBlock(row(this.database.connection.prepare("SELECT * FROM time_blocks WHERE id = ?").get(id), "time block"));
+  }
+
+  /** Move a block's window; the task's remaining estimate rebalances to the new held minutes. */
+  updateTimeBlock(id: number, input: UpdateTimeBlockInput): TimeBlock {
+    const current = this.getTimeBlock(id);
+    const startAt = input.startAt ?? current.startAt;
+    const endAt = input.endAt ?? current.endAt;
+    if (new Date(endAt) <= new Date(startAt)) throw new Error("Time block end must be after start");
+    const oldMinutes = Math.round((new Date(current.endAt).getTime() - new Date(current.startAt).getTime()) / 60_000);
+    const newMinutes = Math.round((new Date(endAt).getTime() - new Date(startAt).getTime()) / 60_000);
+    this.database.connection.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.connection
+        .prepare("UPDATE time_blocks SET start_at = ?, end_at = ?, updated_at = ? WHERE id = ?")
+        .run(startAt, endAt, now(), id);
+      // Release the old window's minutes, then hold the new window's (same as delete + create).
+      this.adjustRemainingMinutes(current.taskId, oldMinutes - newMinutes);
+      this.database.connection.exec("COMMIT");
+    } catch (error) {
+      this.database.connection.exec("ROLLBACK");
+      throw error;
+    }
+    return this.getTimeBlock(id);
+  }
+
+  /** Add `deltaMinutes` (can be negative) to a task's remaining estimate; NULL stays NULL (no estimate). */
+  private adjustRemainingMinutes(taskId: number, deltaMinutes: number): void {
+    // Calendar-event tasks never hold work time: their whole commitment is the block, so the
+    // remaining estimate stays at whatever it is (0 from creation) no matter how the block changes.
+    const isCalendarEvent = this.database.connection
       .prepare(
-        `INSERT INTO time_blocks
-          (public_id, task_id, schedule_run_id, start_at, end_at, status, source, notes, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `SELECT 1 FROM task_tags tt JOIN tags t ON t.id = tt.tag_id
+         WHERE tt.task_id = ? AND t.public_id = ? LIMIT 1`,
       )
-      .run(
-        randomUUID(), input.taskId, scheduleRunId, input.startAt, input.endAt, input.status ?? "proposed",
-        input.source ?? "manual", input.notes?.trim() || null, timestamp, timestamp,
-      );
-    return mapTimeBlock(row(this.database.connection.prepare("SELECT * FROM time_blocks WHERE id = ?").get(insertedId(result)), "time block"));
+      .get(taskId, reservedTagIds.calendarEvent);
+    if (isCalendarEvent) return;
+    this.database.connection
+      .prepare(
+        `UPDATE tasks SET
+           duration_minutes_remaining = CASE
+             WHEN duration_minutes_remaining IS NULL THEN NULL
+             ELSE MAX(0, duration_minutes_remaining + ?)
+           END,
+           updated_at = ?
+         WHERE id = ?`,
+      )
+      .run(Math.round(deltaMinutes), now(), taskId);
   }
 
   upsertCalendarTimeBlock(taskId: number, startAt: string, endAt: string): TimeBlock {
     const existing = this.database.connection
       .prepare("SELECT id FROM time_blocks WHERE task_id = ? AND source = 'calendar' ORDER BY id DESC LIMIT 1")
       .get(taskId);
-    if (!existing) return this.createTimeBlock({ taskId, startAt, endAt, status: "accepted", source: "calendar" });
+    if (!existing) return this.createTimeBlock({ taskId, startAt, endAt, status: "accepted", type: "calendar_event", source: "calendar" });
     const id = integer(row(existing, "calendar time block").id);
     this.database.connection
-      .prepare("UPDATE time_blocks SET start_at = ?, end_at = ?, status = 'accepted', updated_at = ? WHERE id = ?")
+      .prepare("UPDATE time_blocks SET start_at = ?, end_at = ?, status = 'accepted', type = 'calendar_event', updated_at = ? WHERE id = ?")
       .run(startAt, endAt, now(), id);
     return mapTimeBlock(row(this.database.connection.prepare("SELECT * FROM time_blocks WHERE id = ?").get(id), "calendar time block"));
   }
@@ -428,9 +532,29 @@ export class TaskRepository {
   }
 
   supersedeProposedBlocks(): void {
-    this.database.connection
-      .prepare("UPDATE time_blocks SET status = 'superseded', updated_at = ? WHERE status = 'proposed'")
-      .run(now());
+    this.database.connection.exec("BEGIN IMMEDIATE");
+    try {
+      // Un-accepted proposals hold time against the task's remaining estimate; releasing them
+      // gives that time back so a fresh generate() starts from an accurate remaining amount.
+      const minutesByTask = new Map<number, number>();
+      const proposed = this.database.connection
+        .prepare("SELECT id, task_id, start_at, end_at FROM time_blocks WHERE status = 'proposed'")
+        .all();
+      for (const value of proposed) {
+        const block = row(value, "proposed block");
+        const minutes = Math.round((new Date(text(block.end_at)).getTime() - new Date(text(block.start_at)).getTime()) / 60_000);
+        const taskId = integer(block.task_id);
+        minutesByTask.set(taskId, (minutesByTask.get(taskId) ?? 0) + minutes);
+      }
+      this.database.connection
+        .prepare("UPDATE time_blocks SET status = 'superseded', updated_at = ? WHERE status = 'proposed'")
+        .run(now());
+      for (const [taskId, minutes] of minutesByTask) this.adjustRemainingMinutes(taskId, minutes);
+      this.database.connection.exec("COMMIT");
+    } catch (error) {
+      this.database.connection.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   upsertRecurrence(taskId: number, input: UpsertRecurrenceInput): RecurrenceRule {
@@ -466,7 +590,7 @@ export class TaskRepository {
   listRecurrenceTemplates(): RecurrenceTemplate[] {
     return this.database.connection
       .prepare(
-        `SELECT rule.*, task.title, task.description, task.priority, task.rank, task.duration_minutes, task.splittable,
+        `SELECT rule.*, task.title, task.description, task.priority, task.rank, task.duration_minutes_remaining, task.splittable,
           COALESCE((SELECT json_group_array(task_tag.tag_id) FROM task_tags task_tag WHERE task_tag.task_id = task.id), '[]') AS tag_ids
          FROM recurrence_rules rule JOIN tasks task ON task.id = rule.task_id WHERE rule.active = 1`,
       )
@@ -480,7 +604,7 @@ export class TaskRepository {
             localStartTime: nullableText(item.local_start_time), nextOccurrenceDate: text(item.next_occurrence_date), active: boolean(item.active),
           },
           title: text(item.title), description: nullableText(item.description), priority: integer(item.priority),
-          rank: Number(item.rank), durationMinutes: integer(item.duration_minutes), splittable: boolean(item.splittable),
+          rank: Number(item.rank), durationMinutesRemaining: integer(item.duration_minutes_remaining), splittable: boolean(item.splittable),
           tagIds: json<number[]>(item.tag_ids, []),
         };
       });
@@ -511,7 +635,7 @@ export class TaskRepository {
           ) SELECT json_group_array(tag.public_id) FROM ancestors JOIN tags tag ON tag.id = ancestors.id), '[]') AS derived_tag_ids
          FROM tasks task
          WHERE task.kanban_status IN ('ready', 'in_progress') AND task.duration_estimated = 1
-           AND NOT EXISTS (SELECT 1 FROM time_blocks block WHERE block.task_id = task.id AND block.status = 'accepted')
+           AND task.duration_minutes_remaining > 0
          ORDER BY task.priority DESC, task.rank DESC`,
       )
       .all()
@@ -531,10 +655,9 @@ export class TaskRepository {
         const preferredDay = dayTagIndex === -1 ? null : (dayTagIndex + 6) % 7;
         return {
           id: integer(item.id), title: text(item.title), priority: integer(item.priority), rank: Number(item.rank),
-          durationMinutes: integer(item.duration_minutes), splittable: boolean(item.splittable),
+          durationMinutesRemaining: integer(item.duration_minutes_remaining), splittable: boolean(item.splittable),
           minChunkMinutes: integer(item.min_chunk_minutes), maxChunkMinutes: integer(item.max_chunk_minutes),
           earliestStart: nullableText(item.earliest_start), deadlineAt: nullableText(item.deadline_at),
-          fixedStart: nullableText(item.fixed_start), fixedEnd: nullableText(item.fixed_end),
           tagIds,
           preferredDay,
         };
@@ -547,7 +670,7 @@ export class TaskRepository {
     const result = this.database.connection
       .prepare(
         `INSERT INTO schedule_runs (public_id, model_version, horizon_start, horizon_end, status, input_json, created_at)
-         VALUES (?, 'cp-sat-v1', ?, ?, 'running', ?, ?)`,
+         VALUES (?, 'cp-sat-v2', ?, ?, 'running', ?, ?)`,
       )
       .run(randomUUID(), horizonStart, horizonEnd, JSON.stringify(input), timestamp);
     return this.getScheduleRun(insertedId(result));

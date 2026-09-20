@@ -33,7 +33,7 @@ export class RecurrenceService {
             ...(template.description ? { description: template.description } : {}),
             priority: template.priority,
             rank: template.rank,
-            durationMinutes: template.durationMinutes,
+            durationMinutesRemaining: template.durationMinutesRemaining,
             splittable: template.splittable,
             earliestStart: `${occurrenceDate}T00:00:00-04:00`,
             deadlineAt: `${occurrenceDate}T23:59:59-04:00`,

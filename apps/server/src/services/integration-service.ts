@@ -33,9 +33,8 @@ export class IntegrationService {
       this.tasks.updateTask(taskId, {
         title: event.title,
         description: event.description ?? null,
-        fixedStart: event.startAt,
-        fixedEnd: event.endAt,
-        durationMinutes: Math.max(30, Math.ceil((new Date(event.endAt).getTime() - new Date(event.startAt).getTime()) / 60_000)),
+        // A calendar event's whole window lives in its time block, so nothing remains to schedule.
+        durationMinutesRemaining: 0,
         tagIds: [calendarTagId],
       });
       this.tasks.upsertCalendarTimeBlock(taskId, event.startAt, event.endAt);

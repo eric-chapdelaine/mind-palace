@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { DashboardPage } from "./DashboardPage";
 import { TaskPage } from "./TaskPage";
+import { TimeBlockPage } from "./TimeBlockPage";
 import { SchedulePage } from "./SchedulePage";
 import { TagPage } from "./TagPage";
 
@@ -10,6 +11,7 @@ export function App() {
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/tasks/:id" element={<TaskPage />} />
+        <Route path="/time-blocks/:id" element={<TimeBlockPage />} />
         <Route path="/tags/:id" element={<TagPage />} />
         <Route path="/schedule" element={<SchedulePage />} />
       </Routes>
