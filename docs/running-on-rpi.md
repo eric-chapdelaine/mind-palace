@@ -39,14 +39,14 @@ entry in `~/.ssh/config`).
 
 ## 1. Clone the repo on the Pi
 
-The default branch is not necessarily `new-impl`, so check it out
-explicitly:
+The default branch is `main` — check it out explicitly so the Pi
+follows a named branch:
 
 ```sh
 ssh pi@rpi
 git clone git@github.com:eric-chapdelaine/mind-palace.git ~/mind-palace
 cd ~/mind-palace
-git checkout -b new-impl --track origin/new-impl
+git checkout main
 ```
 
 ## 2. Install the toolchain and dependencies (once)
@@ -113,7 +113,7 @@ Create `/etc/systemd/system/mind-palace.service`:
 
 ```ini
 [Unit]
-Description=Mind Palace (new-impl)
+Description=Mind Palace
 After=network-online.target tailscaled.service
 Wants=network-online.target
 
@@ -179,7 +179,7 @@ hashed asset names bust caches, but `index.html` itself can be cached.
 ssh pi@rpi
 sudo systemctl stop mind-palace.service
 cd ~/mind-palace
-git pull --ff-only origin new-impl
+git pull --ff-only origin main
 # Only if the pull changed package.json/pnpm-lock.yaml:
 #   pnpm install
 # Only if the pull changed workers/cp-sat/pyproject.toml or uv.lock:
@@ -190,7 +190,7 @@ journalctl -u mind-palace.service -f
 
 # --- on the dev machine, only if the pull touched apps/web/** ---
 cd ~/mind-palace-dev                 # wherever your checkout lives
-git pull --ff-only origin new-impl
+git pull --ff-only origin main
 pnpm --filter @mind-palace/web build
 rsync -az --delete apps/web/dist/ pi@rpi:/home/pi/mind-palace/apps/web/dist/
 ```
@@ -200,7 +200,7 @@ the Pi; frontend changes need build+rsync from the dev machine** (a
 backend-only update doesn't need the rsync, and a frontend-only update
 doesn't need the restart — but doing the whole flow is always safe). Check
 what's incoming first with
-`git fetch origin && git log --oneline HEAD..origin/new-impl`.
+`git fetch origin && git log --oneline HEAD..origin/main`.
 `schema_migrations` is append-only: never edit an applied migration; add a
 new `00N-*` file instead.
 
