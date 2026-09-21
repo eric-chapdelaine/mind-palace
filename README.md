@@ -89,7 +89,7 @@ pnpm db:migrate
 pnpm --filter @mind-palace/web build
 
 # Option B (recommended): build on a desktop from the same commit, copy the bundle
-#   git worktree add /tmp/mind-palace-build new-impl
+#   git worktree add /tmp/mind-palace-build main
 #   cd /tmp/mind-palace-build && pnpm install && pnpm --filter @mind-palace/web build
 #   rsync -az /tmp/mind-palace-build/apps/web/dist/ emchap4@rpi.local:~/mind-palace/apps/web/dist/
 
