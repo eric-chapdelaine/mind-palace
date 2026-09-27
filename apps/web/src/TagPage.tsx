@@ -155,9 +155,6 @@ export function TagPage() {
               {paths.length > 3 && <div className="tag-breadcrumb muted">+{paths.length - 3} more paths</div>}
             </div>
           )}
-          {tag.description
-            ? <div className="markdown-description"><ReactMarkdown remarkPlugins={[remarkGfm]}>{tag.description}</ReactMarkdown></div>
-            : <p className="muted">No description yet — add one with “Edit tag details”.</p>}
         </div>
         <div className="detail-actions">
           <button onClick={() => setEditing((current) => !current)}>
@@ -178,12 +175,19 @@ export function TagPage() {
         />
       )}
 
-      <div className="detail-main">
-        <section>
-          <div className="section-label">Hierarchy</div>
-          <TagHierarchy tags={tags} focusId={tag.id} />
-        </section>
-        <TaggedTaskList tasks={taggedTasks} derivedTasks={derivedTasks} label={tag.type === "goal" ? "Subtasks" : "Tasks tagged"} />
+      <div className="detail-grid">
+        <div className="detail-main">
+          {tag.description
+            ? <section className="detail-section markdown-description"><ReactMarkdown remarkPlugins={[remarkGfm]}>{tag.description}</ReactMarkdown></section>
+            : <section className="detail-section"><p className="muted">No description yet — add one with “Edit tag details”.</p></section>}
+          <TaggedTaskList tasks={taggedTasks} derivedTasks={derivedTasks} label={tag.type === "goal" ? "Subtasks" : "Tasks tagged"} />
+        </div>
+        <div className="detail-sidebar">
+          <section>
+            <div className="section-label">Hierarchy</div>
+            <TagHierarchy tags={tags} focusId={tag.id} />
+          </section>
+        </div>
       </div>
     </main>
   );

@@ -126,16 +126,17 @@ body.dragging .task-card:hover .task-card-expand > div { opacity: 0; }
 .detail-header, .schedule-header { display: flex; justify-content: space-between; align-items: start; gap: 2rem; border-bottom: 1px solid #ccc; padding: 1rem 0; }
 .detail-header > div:first-child, .schedule-header > div:first-child { max-width: 800px; }
 .task-type { color: #666; }
-.detail-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); gap: 1rem; padding-top: 1rem; }
-.detail-stack { display: grid; gap: 1rem; padding-top: 1rem; align-content: start; }
-.detail-stack section { background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: 1rem; display: grid; gap: .5rem; }
+.detail-grid { display: grid; grid-template-areas: "main sidebar"; grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); gap: 1rem; padding-top: 1rem; }
 .detail-main, .detail-sidebar { display: grid; gap: 1rem; align-content: start; }
+.detail-main { grid-area: main; }
+.detail-sidebar { grid-area: sidebar; }
 .detail-section, .detail-sidebar section { background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: 1rem; }
 .detail-sidebar section { display: grid; gap: .5rem; }
 .task-editor { margin-top: 1rem; }.editor-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
 .editor-heading h2 { margin: 0; }
 .editor-heading span { color: #666; font-size: .8rem; }
 .markdown-description { line-height: 1.55; }
+.markdown-description > :first-child { margin-top: 0; }
 .markdown-description > :last-child { margin-bottom: 0; }
 .markdown-description table { border-collapse: collapse; }
 .markdown-description th, .markdown-description td { border: 1px solid #ccc; padding: .4rem; }
@@ -244,6 +245,7 @@ body.dragging .task-card:hover .task-card-expand > div { opacity: 0; }
   .masthead, .detail-header, .schedule-header { align-items: start; flex-direction: column; }
   .masthead-stats { display: none; }
   .dashboard-sidebar, .detail-grid { grid-template-columns: 1fr; }
+  .detail-grid { grid-template-areas: "sidebar" "main"; }
   .calendar-toolbar { grid-template-columns: 1fr; }
   .calendar-toolbar > span { text-align: left; }
 }
@@ -267,5 +269,5 @@ body.dragging .task-card:hover .task-card-expand > div { opacity: 0; }
   /* Masthead nav stacks; tag filters stretch to full width. */
   .view-nav { flex-direction: column; align-items: stretch; }
   .tag-filter label { min-width: 0; }
-  .detail-grid { grid-template-columns: 1fr; }
+  .detail-grid { grid-template-columns: 1fr; grid-template-areas: "sidebar" "main"; }
 }

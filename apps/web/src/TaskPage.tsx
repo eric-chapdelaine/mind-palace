@@ -141,11 +141,6 @@ export function TaskPage() {
             <span className="task-type">{task.kanbanStatus.replace("_", " ")}</span>
           </div>
           <h1>{task.title}</h1>
-          {task.description && (
-            <div className="markdown-description">
-              <MarkdownLinks>{task.description}</MarkdownLinks>
-            </div>
-          )}
           <TagRow tags={task.tags} links />
           <TaskBreadcrumbs task={task} allTags={tags} />
         </div>
@@ -175,9 +170,18 @@ export function TaskPage() {
         />
       )}
 
-      <div className="detail-stack">
-        <PlanningSection task={task} />
-        <TimeBlockSection task={task} onAcceptSchedule={() => void acceptSchedule()} onDeleteBlock={(blockId) => void deleteBlock(blockId)} />
+      <div className="detail-grid">
+        <div className="detail-main">
+          {task.description && (
+            <section className="detail-section markdown-description">
+              <MarkdownLinks>{task.description}</MarkdownLinks>
+            </section>
+          )}
+          <TimeBlockSection task={task} onAcceptSchedule={() => void acceptSchedule()} onDeleteBlock={(blockId) => void deleteBlock(blockId)} />
+        </div>
+        <div className="detail-sidebar">
+          <PlanningSection task={task} />
+        </div>
       </div>
     </main>
   );
