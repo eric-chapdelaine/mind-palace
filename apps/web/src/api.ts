@@ -4,6 +4,7 @@ import type {
   LifecycleStatus,
   Schedule,
   Tag,
+  TagType,
   TaskDetail,
   TaskSummary,
   TimeBlock,
@@ -36,9 +37,9 @@ export const api = {
     request<TaskDetail>("/api/tasks", { method: "POST", body: JSON.stringify(input) }),
   updateTask: (id: number, input: UpdateTaskInput) =>
     request<TaskDetail>(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
-  createTag: (input: { title: string; description?: string; parentIds?: number[] }) =>
+  createTag: (input: { title: string; description?: string; parentIds?: number[]; type?: TagType | null }) =>
     request<Tag>("/api/tags", { method: "POST", body: JSON.stringify(input) }),
-  updateTag: (id: number, input: { description?: string | null }) =>
+  updateTag: (id: number, input: { title?: string; description?: string | null; type?: TagType | null; isArchived?: boolean }) =>
     request<Tag>(`/api/tags/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
   addTagParent: (id: number, parentId: number) =>
     request<Tag[]>(`/api/tags/${id}/parents`, { method: "POST", body: JSON.stringify({ parentId }) }),
@@ -52,4 +53,5 @@ export const api = {
   refreshWeather: () => request<WeatherForecast[]>("/api/weather/refresh", { method: "POST" }),
   setLifecycle: (id: number, status: LifecycleStatus) =>
     request<TaskDetail>(`/api/tasks/${id}/lifecycle`, { method: "POST", body: JSON.stringify({ status }) }),
+  convertTaskToTag: (id: number) => request<Tag>(`/api/tasks/${id}/convert-to-tag`, { method: "POST" }),
 };

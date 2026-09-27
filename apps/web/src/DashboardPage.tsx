@@ -324,6 +324,7 @@ export function DashboardPage() {
           <label>Excluded tags<TagPicker tags={tags} selectedIds={excludedTagIds} onChange={setExcludedTagIds} placeholder="Type to filter out" /></label>
         </div>
         <Link to="/schedule">Weekly schedule</Link>
+        <Link to="/tags">All tags</Link>
       </nav>
       {error && <div className="error-banner">{error}</div>}
       <div className="mind-layout">

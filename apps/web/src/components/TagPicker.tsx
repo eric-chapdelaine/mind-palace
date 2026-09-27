@@ -1,7 +1,7 @@
 import { useState, type KeyboardEvent } from "react";
 import type { Tag } from "@mind-palace/shared";
 
-function fuzzyScore(title: string, query: string): number {
+export function fuzzyScore(title: string, query: string): number {
   const candidate = title.toLowerCase();
   const needle = query.toLowerCase();
   if (candidate === needle) return 1_000;
@@ -31,7 +31,7 @@ export function TagPicker({ tags, selectedIds, onChange, onCreateTag, placeholde
   const selected = selectedIds.map((id) => tags.find((tag) => tag.id === id)).filter((tag): tag is Tag => Boolean(tag));
   const matches = query.trim()
     ? tags
-      .filter((tag) => !selectedIds.includes(tag.id))
+      .filter((tag) => !tag.isArchived && !selectedIds.includes(tag.id))
       .map((tag) => ({ tag, score: fuzzyScore(tag.title, query.trim()) }))
       .filter((match) => match.score >= 0)
       .sort((a, b) => b.score - a.score || a.tag.title.localeCompare(b.tag.title))

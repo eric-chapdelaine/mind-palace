@@ -135,6 +135,23 @@ body.dragging .task-card:hover .task-card-expand > div { opacity: 0; }
 .tag-relationship-list a:hover { text-decoration: underline; }
 .tag-relationship-list span { color: #666; font-size: .8rem; }
 .tag-reserved { border: 1px solid #bbb; border-radius: 999px; padding: 0 .35rem; font-size: .7rem; }
+.tag-type-badge { border: 1px solid #9ab; border-radius: 999px; padding: 0 .35rem; font-size: .7rem; background: #eef4fa; color: #346; }
+.archived-tag { opacity: .55; }
+
+/* Tags directory page (all tags + archived spoiler). */
+.tags-section { margin-top: 1.5rem; display: grid; gap: .6rem; }
+.tags-search { max-width: 480px; margin-top: 1rem; }
+.tags-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; }
+.tags-list li { background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: .6rem .8rem; display: grid; gap: .2rem; }
+.tags-list-title, .archived-list-title { font-weight: 700; color: inherit; text-decoration: none; }
+.tags-list-title:hover, .archived-list-title:hover { text-decoration: underline; }
+.tags-list-description { color: #666; font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.archived-section { background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: 1rem; margin-top: 1rem; }
+.archived-section summary { cursor: pointer; font-weight: 700; }
+.archived-list { list-style: none; margin: .75rem 0 0; padding: 0; display: grid; gap: .4rem; }
+.archived-list li { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; border-bottom: 1px solid #eee; padding: .3rem 0; }
+.archived-list li:last-child { border-bottom: 0; }
+.archived-list time { color: #666; font-size: .8rem; flex: none; }
 
 .weather-strip { display: flex; overflow-x: auto; border-bottom: 1px solid #ccc; padding: 1rem 0; }
 .weather-strip div { min-width: 110px; display: grid; gap: .25rem; border-right: 1px solid #ddd; padding: .5rem; }

@@ -11,6 +11,7 @@ import {
   type RecurrenceRule,
   type ScheduleRun,
   type Tag,
+  type TagType,
   type TaskDetail,
   type TaskSummary,
   type TimeBlock,
@@ -52,6 +53,9 @@ function mapTag(value: Row, parentIds: number[] = []): Tag {
     description: nullableText(value.description),
     parentIds,
     reserved: publicId.startsWith("mind-palace:"),
+    type: value.type === null || value.type === undefined ? null : (text(value.type) as TagType),
+    isArchived: boolean(value.is_archived),
+    updatedAt: text(value.updated_at),
   };
 }
 
@@ -108,6 +112,7 @@ const taskSummarySql = String.raw`
     t.completed_at, t.origin, t.updated_at,
     COALESCE((SELECT json_group_array(json_object(
       'id', tag.id, 'publicId', tag.public_id, 'title', tag.title, 'description', tag.description,
+      'type', tag.type, 'isArchived', CASE WHEN tag.is_archived = 1 THEN json('true') ELSE json('false') END, 'updatedAt', tag.updated_at,
       'reserved', CASE WHEN tag.public_id LIKE 'mind-palace:%' THEN json('true') ELSE json('false') END
     )) FROM task_tags task_tag JOIN tags tag ON tag.id = task_tag.tag_id WHERE task_tag.task_id = t.id), '[]') AS tags_json,
     COALESCE((WITH RECURSIVE ancestors(id) AS (
@@ -116,6 +121,7 @@ const taskSummarySql = String.raw`
       SELECT relation.parent_tag_id FROM tag_parents relation JOIN ancestors ON relation.child_tag_id = ancestors.id
     ) SELECT json_group_array(json_object(
       'id', tag.id, 'publicId', tag.public_id, 'title', tag.title, 'description', tag.description,
+      'type', tag.type, 'isArchived', CASE WHEN tag.is_archived = 1 THEN json('true') ELSE json('false') END, 'updatedAt', tag.updated_at,
       'reserved', CASE WHEN tag.public_id LIKE 'mind-palace:%' THEN json('true') ELSE json('false') END
     )) FROM ancestors JOIN tags tag ON tag.id = ancestors.id), '[]') AS derived_tags_json
   FROM tasks t
@@ -239,8 +245,8 @@ export class TaskRepository {
     this.database.connection.exec("BEGIN IMMEDIATE");
     try {
       const result = this.database.connection
-        .prepare("INSERT INTO tags (public_id, title, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
-        .run(randomUUID(), title, input.description?.trim() || null, timestamp, timestamp);
+        .prepare("INSERT INTO tags (public_id, title, description, type, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+        .run(randomUUID(), title, input.description?.trim() || null, input.type ?? null, timestamp, timestamp);
       const id = insertedId(result);
       for (const parentId of new Set(input.parentIds ?? [])) this.insertTagParent(id, parentId, timestamp);
       this.database.connection.exec("COMMIT");
@@ -263,16 +269,65 @@ export class TaskRepository {
   }
 
   updateTag(tagId: number, input: UpdateTagInput): Tag {
-    if (input.description === undefined) {
-      const tag = this.listTags().find((item) => item.id === tagId);
-      if (!tag) throw new Error("Expected database row for tag");
-      return tag;
+    const assignments: string[] = [];
+    const values: Array<string | number | null> = [];
+    const add = (column: string, value: string | number | null) => {
+      assignments.push(`${column} = ?`);
+      values.push(value);
+    };
+    if (input.title !== undefined) {
+      const trimmedTitle = input.title.trim();
+      if (!trimmedTitle) throw new Error("Tag title is required");
+      const sameTitle = this.database.connection
+        .prepare("SELECT id FROM tags WHERE title = ? COLLATE NOCASE AND id <> ?")
+        .get(trimmedTitle, tagId);
+      if (sameTitle) throw new Error(`A tag named "${trimmedTitle}" already exists`);
+      add("title", trimmedTitle);
     }
-    const result = this.database.connection
-      .prepare("UPDATE tags SET description = ?, updated_at = ? WHERE id = ?")
-      .run(input.description?.trim() || null, now(), tagId);
-    if (result.changes !== 1) throw new Error("Expected database row for tag");
+    if (input.description !== undefined) add("description", input.description?.trim() || null);
+    if (input.type !== undefined) add("type", input.type);
+    if (input.isArchived !== undefined) add("is_archived", input.isArchived ? 1 : 0);
+    if (assignments.length > 0) {
+      add("updated_at", now());
+      const result = this.database.connection
+        .prepare(`UPDATE tags SET ${assignments.join(", ")} WHERE id = ?`)
+        .run(...values, tagId);
+      if (result.changes !== 1) throw new Error("Expected database row for tag");
+    }
     return this.listTags().find((item) => item.id === tagId)!;
+  }
+
+  /**
+   * Expand a task into a goal: create (or reuse) a tag named after the task, mark it a goal,
+   * and attach it to the task so the task becomes its first subtask. Parent/child links
+   * between tasks are expressed through shared tags (see ensureTaskTag), so this conversion
+   * is the moment a task grows a subtask container — later tasks tagged with the goal are
+   * its subtasks.
+   */
+  convertTaskToTag(taskId: number): Tag {
+    const task = row(this.database.connection.prepare("SELECT title, description FROM tasks WHERE id = ?").get(taskId), "task");
+    const title = text(task.title);
+    const timestamp = now();
+    this.database.connection.exec("BEGIN IMMEDIATE");
+    try {
+      // Reuse a same-named tag when one exists so re-running conversion accumulates subtasks
+      // instead of duplicating goals; the fresh insert copies the task's description once.
+      const existing = this.database.connection.prepare("SELECT id FROM tags WHERE title = ? COLLATE NOCASE").get(title);
+      const tagId = existing
+        ? integer(row(existing, "tag").id)
+        : insertedId(this.database.connection
+            .prepare("INSERT INTO tags (public_id, title, description, type, created_at, updated_at) VALUES (?, ?, ?, 'goal', ?, ?)")
+            .run(randomUUID(), title, nullableText(task.description), timestamp, timestamp));
+      this.database.connection.prepare("UPDATE tags SET type = 'goal', updated_at = ? WHERE id = ?").run(timestamp, tagId);
+      this.database.connection
+        .prepare("INSERT OR IGNORE INTO task_tags (task_id, tag_id, source, created_at) VALUES (?, ?, 'system', ?)")
+        .run(taskId, tagId, timestamp);
+      this.database.connection.exec("COMMIT");
+      return this.listTags().find((tag) => tag.id === tagId)!;
+    } catch (error) {
+      this.database.connection.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   removeTagParent(childId: number, parentId: number): void {

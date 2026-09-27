@@ -1,6 +1,6 @@
 import type { Tag, TaskDetail } from "@mind-palace/shared";
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "./api";
@@ -70,6 +70,7 @@ function TimeBlockSection({ task, onAcceptSchedule, onDeleteBlock }: {
 
 export function TaskPage() {
   const id = Number(useParams().id);
+  const navigate = useNavigate();
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [tags, setTags] = useState<Tag[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -112,6 +113,16 @@ export function TaskPage() {
     await action(() => api.deleteTimeBlock(blockId).then(() => api.task(id)));
   }
 
+  async function convertToTag() {
+    try {
+      const tag = await api.convertTaskToTag(id);
+      setError(null);
+      navigate(`/tags/${tag.id}`);
+    } catch (convertError) {
+      setError(convertError instanceof Error ? convertError.message : String(convertError));
+    }
+  }
+
   if (!task) {
     return <main className="detail-shell"><Link to="/">Back</Link>{error ? <div className="error-banner">{error}</div> : <p>Loading...</p>}</main>;
   }
@@ -141,6 +152,7 @@ export function TaskPage() {
           <button onClick={() => setEditing((current) => !current)}>
             {editing ? "Close editor" : "Edit task"}
           </button>
+          <button onClick={() => void convertToTag()}>Convert to tag</button>
           {task.kanbanStatus !== "completed" && (
             <button className="primary-button" onClick={() => void action(() => api.updateTask(id, { kanbanStatus: "completed" }))}>
               Mark completed

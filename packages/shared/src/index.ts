@@ -30,6 +30,14 @@ export type TimeBlockStatus = (typeof timeBlockStatuses)[number];
 export const timeBlockTypes = ["work", "calendar_event"] as const;
 export type TimeBlockType = (typeof timeBlockTypes)[number];
 
+/**
+ * Tag kinds, owned via the tags.type column (nullable; most tags have no type). A `goal` tag
+ * is a container: tasks carrying it (directly or through a descendant tag) are its subtasks.
+ * Convert a task into a goal with POST /api/tasks/:id/convert-to-tag.
+ */
+export const tagTypes = ["goal"] as const;
+export type TagType = (typeof tagTypes)[number];
+
 /** Reserved tags that carry behavior (see AGENTS.md "tag-driven behavior"). */
 export const reservedTagPublicIds = {
   calendarEvent: "mind-palace:calendar-event",
@@ -90,6 +98,11 @@ export interface Tag {
   description: string | null;
   parentIds: number[];
   reserved: boolean;
+  /** `goal` marks a task container created by converting a task; everything else is null. */
+  type: TagType | null;
+  /** Archived tags are hidden from tag search/auto-complete (completed or otherwise retired goals). */
+  isArchived: boolean;
+  updatedAt: string;
 }
 
 export interface TimeBlock {
@@ -201,10 +214,14 @@ export interface CreateTagInput {
   title: string;
   description?: string;
   parentIds?: number[];
+  type?: TagType | null;
 }
 
 export interface UpdateTagInput {
+  title?: string;
   description?: string | null;
+  type?: TagType | null;
+  isArchived?: boolean;
 }
 
 export interface CreateTimeBlockInput {

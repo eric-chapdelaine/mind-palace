@@ -6,11 +6,13 @@ import type { TaskRepository } from "@mind-palace/database";
 import {
   kanbanStatuses,
   lifecycleStatuses,
+  tagTypes,
   timeBlockStatuses,
   timeBlockTypes,
   type CreateTaskInput,
   type LifecycleStatus,
   type KanbanStatus,
+  type TagType,
   type TimeBlockStatus,
   type TimeBlockType,
 } from "@mind-palace/shared";
@@ -118,17 +120,28 @@ export function createHttpApp({ tasks, schedule, weather, integrations, recurren
 
   app.post("/api/tags", async (context) => {
     const body = (await context.req.json()) as Record<string, unknown>;
+    const rawType = body.type ?? null;
+    if (rawType !== null && !tagTypes.includes(rawType as TagType)) throw new Error("Invalid tag type");
+    const type: TagType | null = rawType === null ? null : (rawType as TagType);
     return context.json(tasks.createTag({
       title: requiredString(body.title, "title"),
       ...(typeof body.description === "string" ? { description: body.description } : {}),
       parentIds: Array.isArray(body.parentIds) ? body.parentIds.map(Number) : [],
+      type,
     }), 201);
   });
 
   app.patch("/api/tags/:id", async (context) => {
+    const tagId = numberParam(context.req.param("id"), "tag id");
     const body = (await context.req.json()) as Record<string, unknown>;
-    return context.json(tasks.updateTag(numberParam(context.req.param("id"), "tag id"), {
+    if (body.type !== undefined && body.type !== null && !tagTypes.includes(body.type as TagType)) {
+      throw new Error("Invalid tag type");
+    }
+    return context.json(tasks.updateTag(tagId, {
+      ...(typeof body.title === "string" ? { title: requiredString(body.title, "title") } : {}),
       ...(body.description === null || typeof body.description === "string" ? { description: body.description } : {}),
+      ...(body.type === null || typeof body.type === "string" ? { type: body.type as TagType | null } : {}),
+      ...(typeof body.isArchived === "boolean" ? { isArchived: body.isArchived } : {}),
     }));
   });
 
@@ -223,6 +236,11 @@ export function createHttpApp({ tasks, schedule, weather, integrations, recurren
     if (!lifecycleStatuses.includes(body.status as LifecycleStatus)) throw new Error("Invalid lifecycle status");
     tasks.setTaskLifecycle(taskId, body.status as LifecycleStatus);
     return context.json(tasks.getTask(taskId));
+  });
+
+  app.post("/api/tasks/:id/convert-to-tag", (context) => {
+    const taskId = numberParam(context.req.param("id"), "task id");
+    return context.json(tasks.convertTaskToTag(taskId));
   });
 
   const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../web/dist");

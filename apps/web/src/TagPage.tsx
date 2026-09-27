@@ -9,9 +9,10 @@ import { TagPicker } from "./components/TagPicker";
 function TagEditor({ tag, tags, onSave, onCancel }: {
   tag: Tag;
   tags: Tag[];
-  onSave: (description: string, parentIds: number[]) => Promise<void>;
+  onSave: (title: string, description: string, parentIds: number[]) => Promise<void>;
   onCancel: () => void;
 }) {
+  const [title, setTitle] = useState(tag.title);
   const [description, setDescription] = useState(tag.description ?? "");
   const [parentIds, setParentIds] = useState(tag.parentIds);
   const [busy, setBusy] = useState(false);
@@ -20,7 +21,7 @@ function TagEditor({ tag, tags, onSave, onCancel }: {
     event.preventDefault();
     setBusy(true);
     try {
-      await onSave(description, parentIds);
+      await onSave(title, description, parentIds);
     } finally {
       setBusy(false);
     }
@@ -28,6 +29,7 @@ function TagEditor({ tag, tags, onSave, onCancel }: {
 
   return <form className="task-editor detail-section" onSubmit={submit}>
     <div className="editor-heading"><h2>Edit tag details</h2><span>Descriptions support Markdown.</span></div>
+    <label>Title<input required value={title} onChange={(event) => setTitle(event.target.value)} /></label>
     <label>Description<textarea rows={6} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
     <label>Parent tags<TagPicker tags={tags} selectedIds={parentIds} onChange={setParentIds} placeholder="Type to add a parent tag" /></label>
     <div className="button-row"><button className="primary-button" disabled={busy}>{busy ? "Saving..." : "Save changes"}</button><button type="button" onClick={onCancel}>Cancel</button></div>
@@ -52,16 +54,23 @@ function RelatedTagList({ title, tags, empty }: { title: string; tags: Tag[]; em
   );
 }
 
-function TaggedTaskList({ tasks }: { tasks: TaskSummary[] }) {
+function TaggedTaskList({ tasks, derivedTasks, label }: { tasks: TaskSummary[]; derivedTasks: TaskSummary[]; label: string }) {
+  const total = tasks.length + derivedTasks.length;
   return (
     <section>
-      <div className="section-label">Tasks tagged</div>
-      {tasks.length === 0 ? <p className="muted">No tasks carry this tag directly.</p> : (
+      <div className="section-label">{label} ({total})</div>
+      {total === 0 ? <p className="muted">No tasks carry this tag yet.</p> : (
         <ul className="tag-relationship-list">
           {tasks.map((task) => (
             <li key={task.id}>
               <Link to={`/tasks/${task.id}`}>{task.title}</Link>
               <span>{task.kanbanStatus.replace("_", " ")}</span>
+            </li>
+          ))}
+          {derivedTasks.map((task) => (
+            <li key={task.id}>
+              <Link to={`/tasks/${task.id}`}>{task.title}</Link>
+              <span>{task.kanbanStatus.replace("_", " ")} · via child tag</span>
             </li>
           ))}
         </ul>
@@ -99,7 +108,10 @@ export function TagPage() {
     ? tag.parentIds.map((parentId) => tags.find((item) => item.id === parentId)).filter((item): item is Tag => Boolean(item))
     : [];
   const children = tags.filter((item) => item.parentIds.includes(id));
+  // A task carries this tag directly (task.tags) or through one of its own tags' parents
+  // (task.derivedTags are ancestor tags) — both count as work under the tag.
   const taggedTasks = tasks.filter((task) => task.tags.some((taskTag) => taskTag.id === id));
+  const derivedTasks = tasks.filter((task) => task.derivedTags.some((taskTag) => taskTag.id === id));
 
   async function action(operation: () => Promise<void>) {
     try {
@@ -110,14 +122,20 @@ export function TagPage() {
     }
   }
 
-  async function saveTag(description: string, parentIds: number[]) {
-    await api.updateTag(id, { description });
+  async function saveTag(title: string, description: string, parentIds: number[]) {
+    await api.updateTag(id, { title, description });
     const removed = tag!.parentIds.filter((parentId) => !parentIds.includes(parentId));
     const added = parentIds.filter((parentId) => !tag!.parentIds.includes(parentId));
     for (const parentId of removed) await api.removeTagParent(id, parentId);
     for (const parentId of added) await api.addTagParent(id, parentId);
     setEditing(false);
     await load();
+  }
+
+  async function toggleArchive() {
+    await action(async () => {
+      await api.updateTag(id, { isArchived: !tag!.isArchived });
+    });
   }
 
   if (tags.length === 0 && !error) {
@@ -138,6 +156,8 @@ export function TagPage() {
         <div>
           <div className="task-card-topline">
             <span className="task-type">{tag.reserved ? "reserved tag" : "tag"}</span>
+            {tag.type && <span className="tag-type-badge">{tag.type}</span>}
+            {tag.isArchived && <span className="tag-reserved">archived</span>}
           </div>
           <h1>{tag.title}</h1>
           {tag.description
@@ -148,6 +168,9 @@ export function TagPage() {
           <button onClick={() => setEditing((current) => !current)}>
             {editing ? "Close editor" : "Edit tag details"}
           </button>
+          <button onClick={() => void toggleArchive()}>
+            {tag.isArchived ? "Unarchive tag" : "Archive tag"}
+          </button>
         </div>
       </header>
 
@@ -156,14 +179,14 @@ export function TagPage() {
           tag={tag}
           tags={tags}
           onCancel={() => setEditing(false)}
-          onSave={(description, parentIds) => action(() => saveTag(description, parentIds))}
+          onSave={(title, description, parentIds) => action(() => saveTag(title, description, parentIds))}
         />
       )}
 
       <div className="detail-grid">
         <div className="detail-main">
           <RelatedTagList title="Child tags" tags={children} empty="This tag has no children." />
-          <TaggedTaskList tasks={taggedTasks} />
+          <TaggedTaskList tasks={taggedTasks} derivedTasks={derivedTasks} label={tag.type === "goal" ? "Subtasks" : "Tasks tagged"} />
         </div>
 
         <aside className="detail-sidebar">

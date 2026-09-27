@@ -3,6 +3,7 @@ import { DashboardPage } from "./DashboardPage";
 import { TaskPage } from "./TaskPage";
 import { TimeBlockPage } from "./TimeBlockPage";
 import { SchedulePage } from "./SchedulePage";
+import { TagsPage } from "./TagsPage";
 import { TagPage } from "./TagPage";
 
 export function App() {
@@ -12,6 +13,7 @@ export function App() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/tasks/:id" element={<TaskPage />} />
         <Route path="/time-blocks/:id" element={<TimeBlockPage />} />
+        <Route path="/tags" element={<TagsPage />} />
         <Route path="/tags/:id" element={<TagPage />} />
         <Route path="/schedule" element={<SchedulePage />} />
       </Routes>
