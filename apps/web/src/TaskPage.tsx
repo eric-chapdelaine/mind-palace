@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "./api";
 import { TagRow } from "./components/TagRow";
+import { TaskBreadcrumbs } from "./components/TaskBreadcrumbs";
 import { TaskEditor } from "./components/TaskEditor";
 
 function formatDateTime(value: string): string {
@@ -147,6 +148,7 @@ export function TaskPage() {
           )}
           <TagRow tags={task.tags} links />
           <TagRow tags={task.derivedTags} derived links />
+          <TaskBreadcrumbs task={task} allTags={tags} />
         </div>
         <div className="detail-actions">
           <button onClick={() => setEditing((current) => !current)}>

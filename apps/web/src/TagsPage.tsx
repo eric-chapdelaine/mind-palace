@@ -18,7 +18,7 @@ function TagBadges({ tag }: { tag: Tag }) {
   );
 }
 
-function TagListLinks({ tags }: { tags: Tag[] }) {
+function TagList({ tags }: { tags: Tag[] }) {
   return (
     <ul className="tags-list">
       {tags.map((tag) => (
@@ -127,7 +127,7 @@ export function TagsPage() {
               <div className="section-label">Matching tags ({matching.length}) — best match first</div>
               {matching.length === 0
                 ? <p className="muted">No tags match “{trimmedQuery}”.</p>
-                : <TagListLinks tags={matching} />}
+                : <TagList tags={matching} />}
             </section>
           )
           : (
@@ -136,12 +136,12 @@ export function TagsPage() {
                 <div className="section-label">Leaf tags ({leaves.length}) — most recently active first</div>
                 {leaves.length === 0
                   ? <p className="muted">Every tag has children; nothing is a leaf right now.</p>
-                  : <TagListLinks tags={leaves} />}
+                  : <TagList tags={leaves} />}
               </section>
               {structureTags.length > 0 && (
                 <section className="tags-section">
                   <div className="section-label">Tags with children ({structureTags.length})</div>
-                  <TagListLinks tags={structureTags} />
+                  <TagList tags={structureTags} />
                 </section>
               )}
             </>

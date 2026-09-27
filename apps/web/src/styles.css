@@ -104,11 +104,25 @@ body.dragging .task-card:hover .task-card-expand > div { opacity: 0; }
 .tag-results button { border: 0; border-bottom: 1px solid #ddd; background: #fff; padding: .55rem; text-align: left; }
 .tag-results button:hover, .tag-results button:first-child { background: #eee; }
 .tag-hierarchy summary { cursor: pointer; font-weight: 700; }
-.tag-hierarchy ul { padding-left: 1.25rem; }
-.tag-hierarchy li { margin: .4rem 0; }
-.tag-hierarchy span { color: #666; }
-.tag-hierarchy a { color: inherit; text-decoration: none; font-weight: 700; }
-.tag-hierarchy a:hover { text-decoration: underline; }
+
+/* Tag hierarchy outline. Space, not edges, carries structure. */
+.hierarchy { list-style: none; margin: .6rem 0 0; padding: 0; }
+.hierarchy-children { list-style: none; margin: 0; padding: 0 0 .2rem 1.1rem; border-left: 1px solid #e5e5e5; }
+.hierarchy-row { display: flex; align-items: baseline; gap: .4rem; padding: .2rem 0; }
+.hierarchy-row a { color: inherit; text-decoration: none; font-weight: 700; }
+.hierarchy-row a:hover { text-decoration: underline; }
+.hierarchy-toggle { border: 0; background: none; padding: 0 .3rem; color: #999; font-size: .7rem; line-height: 1; cursor: pointer; align-self: center; }
+.hierarchy-toggle:disabled { cursor: default; color: #d0d0d0; }
+.hierarchy-node.focused > .hierarchy-row { background: #eef3f8; border-radius: .35rem; padding: .2rem .4rem; }
+.hierarchy-node.focused > .hierarchy-row a { font-weight: 800; }
+
+/* Breadcrumbs: one line per ancestor path on tag pages and tasks. */
+.tag-breadcrumb { color: #888; font-size: .9rem; margin-top: .5rem; }
+.tag-breadcrumb a:hover { text-decoration: underline; }
+.tag-breadcrumbs .tag-breadcrumb + .tag-breadcrumb { margin-top: .15rem; }
+.task-breadcrumbs { color: #888; font-size: .85rem; margin-top: .5rem; }
+.task-breadcrumbs a:hover { text-decoration: underline; }
+.task-card-expand .task-breadcrumbs { margin-top: .35rem; }
 
 .detail-header, .schedule-header { display: flex; justify-content: space-between; align-items: start; gap: 2rem; border-bottom: 1px solid #ccc; padding: 1rem 0; }
 .detail-header > div:first-child, .schedule-header > div:first-child { max-width: 800px; }

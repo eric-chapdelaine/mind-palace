@@ -4,7 +4,7 @@ import { reservedTagPublicIds, type CreateTaskInput, type KanbanStatus, type Tag
 import { api } from "./api";
 import { CreateTaskPanel } from "./components/CreateTaskPanel";
 import { TaskCard } from "./components/TaskCard";
-import { TagHierarchy } from "./components/TagHierarchy";
+import { TagHierarchyPanel } from "./components/TagHierarchy";
 import { TagPicker } from "./components/TagPicker";
 import { readTagFilterPreferences, writeTagFilterPreferences } from "./tagFilterPreferences";
 
@@ -343,6 +343,7 @@ export function DashboardPage() {
                       ) : (
                         <TaskCard
                           task={task}
+                          allTags={tags}
                           selected={selecting && selectedIds.includes(task.id)}
                           {...(selecting ? { onCardClick: () => toggleSelection(task.id) } : {})}
                           onPointerDown={(event) => beginCardPointerDown(event, task.id)}
@@ -359,8 +360,8 @@ export function DashboardPage() {
             );
           })}
         </section>
-        <details className="completed-tasks"><summary>Completed ({completed.length})</summary>{completed.length === 0 ? <p className="muted">No completed tasks.</p> : <div className="completed-list">{completed.map((task) => <TaskCard key={task.id} task={task} checked onToggleComplete={() => void toggleComplete(task)} />)}</div>}</details>
-        <aside className="dashboard-sidebar"><CreateTaskPanel tags={tags} onCreateTask={createTask} onCreateTag={createTag} /><TagHierarchy tags={tags} /></aside>
+        <details className="completed-tasks"><summary>Completed ({completed.length})</summary>{completed.length === 0 ? <p className="muted">No completed tasks.</p> : <div className="completed-list">{completed.map((task) => <TaskCard key={task.id} task={task} allTags={tags} checked onToggleComplete={() => void toggleComplete(task)} />)}</div>}</details>
+        <aside className="dashboard-sidebar"><CreateTaskPanel tags={tags} onCreateTask={createTask} onCreateTag={createTag} /><TagHierarchyPanel tags={tags} /></aside>
       </div>
     </main>
   );

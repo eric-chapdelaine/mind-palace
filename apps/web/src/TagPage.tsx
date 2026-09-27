@@ -4,7 +4,9 @@ import { Link, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "./api";
+import { TagHierarchy } from "./components/TagHierarchy";
 import { TagPicker } from "./components/TagPicker";
+import { tagPaths } from "./lib/tagTree";
 
 function TagEditor({ tag, tags, onSave, onCancel }: {
   tag: Tag;
@@ -34,24 +36,6 @@ function TagEditor({ tag, tags, onSave, onCancel }: {
     <label>Parent tags<TagPicker tags={tags} selectedIds={parentIds} onChange={setParentIds} placeholder="Type to add a parent tag" /></label>
     <div className="button-row"><button className="primary-button" disabled={busy}>{busy ? "Saving..." : "Save changes"}</button><button type="button" onClick={onCancel}>Cancel</button></div>
   </form>;
-}
-
-function RelatedTagList({ title, tags, empty }: { title: string; tags: Tag[]; empty: string }) {
-  return (
-    <section>
-      <div className="section-label">{title}</div>
-      {tags.length === 0 ? <p className="muted">{empty}</p> : (
-        <ul className="tag-relationship-list">
-          {tags.map((tag) => (
-            <li key={tag.id}>
-              <Link to={`/tags/${tag.id}`}>{tag.title}</Link>
-              {tag.reserved && <span className="tag-reserved">reserved</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
 }
 
 function TaggedTaskList({ tasks, derivedTasks, label }: { tasks: TaskSummary[]; derivedTasks: TaskSummary[]; label: string }) {
@@ -104,10 +88,9 @@ export function TagPage() {
   }, [id]);
 
   const tag = tags.find((item) => item.id === id);
-  const parents = tag
-    ? tag.parentIds.map((parentId) => tags.find((item) => item.id === parentId)).filter((item): item is Tag => Boolean(item))
-    : [];
-  const children = tags.filter((item) => item.parentIds.includes(id));
+  // Breadcrumbs: one root → … → this tag line per ancestor path — a multi-parent tag has
+  // several paths, and each gets its own line so both branches are visible at a glance.
+  const paths = tag ? tagPaths(tags, tag) : [];
   // A task carries this tag directly (task.tags) or through one of its own tags' parents
   // (task.derivedTags are ancestor tags) — both count as work under the tag.
   const taggedTasks = tasks.filter((task) => task.tags.some((taskTag) => taskTag.id === id));
@@ -160,6 +143,18 @@ export function TagPage() {
             {tag.isArchived && <span className="tag-reserved">archived</span>}
           </div>
           <h1>{tag.title}</h1>
+          {paths.some((path) => path.length > 1) && (
+            <div className="tag-breadcrumbs">
+              {paths.slice(0, 3).map((path, index) => (
+                <div className="tag-breadcrumb" key={index}>
+                  {path.slice(0, -1).map((crumb, crumbIndex) => (
+                    <span key={crumb.id}>{crumbIndex > 0 && " › "}<Link to={`/tags/${crumb.id}`}>{crumb.title}</Link></span>
+                  ))}
+                </div>
+              ))}
+              {paths.length > 3 && <div className="tag-breadcrumb muted">+{paths.length - 3} more paths</div>}
+            </div>
+          )}
           {tag.description
             ? <div className="markdown-description"><ReactMarkdown remarkPlugins={[remarkGfm]}>{tag.description}</ReactMarkdown></div>
             : <p className="muted">No description yet — add one with “Edit tag details”.</p>}
@@ -183,15 +178,12 @@ export function TagPage() {
         />
       )}
 
-      <div className="detail-grid">
-        <div className="detail-main">
-          <RelatedTagList title="Child tags" tags={children} empty="This tag has no children." />
-          <TaggedTaskList tasks={taggedTasks} derivedTasks={derivedTasks} label={tag.type === "goal" ? "Subtasks" : "Tasks tagged"} />
-        </div>
-
-        <aside className="detail-sidebar">
-          <RelatedTagList title="Parent tags" tags={parents} empty="This tag has no parents." />
-        </aside>
+      <div className="detail-main">
+        <section>
+          <div className="section-label">Hierarchy</div>
+          <TagHierarchy tags={tags} focusId={tag.id} />
+        </section>
+        <TaggedTaskList tasks={taggedTasks} derivedTasks={derivedTasks} label={tag.type === "goal" ? "Subtasks" : "Tasks tagged"} />
       </div>
     </main>
   );

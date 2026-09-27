@@ -1,7 +1,8 @@
-import type { TaskSummary } from "@mind-palace/shared";
+import type { Tag, TaskSummary } from "@mind-palace/shared";
 import { Link } from "react-router-dom";
 import type { PointerEvent } from "react";
 import { TagRow } from "./TagRow";
+import { TaskBreadcrumbs } from "./TaskBreadcrumbs";
 
 /** Max direct tags shown on the collapsed card line; extras collapse into "+N". */
 const MAX_INLINE_TAGS = 2;
@@ -14,10 +15,12 @@ function truncate(text: string, maxChars = 140): string {
   return `${cut.slice(0, lastSpace > 0 ? lastSpace : maxChars).trimEnd()}…`;
 }
 
-export function TaskCard({ task, selected = false, checked = false, onToggleComplete, onCardClick, onPointerDown }: {
+export function TaskCard({ task, selected = false, checked = false, allTags, onToggleComplete, onCardClick, onPointerDown }: {
   task: TaskSummary;
   selected?: boolean;
   checked?: boolean;
+  /** Full tag list when the parent page has it — enables the goal breadcrumbs on the card. */
+  allTags?: Tag[];
   onToggleComplete?: () => void;
   onCardClick?: () => void;
   onPointerDown?: (event: PointerEvent<HTMLAnchorElement>) => void;
@@ -69,6 +72,7 @@ export function TaskCard({ task, selected = false, checked = false, onToggleComp
         <div>
           {task.description && <p className="task-description">{truncate(task.description)}</p>}
           <TagRow tags={task.derivedTags} derived />
+          {allTags && <TaskBreadcrumbs task={task} allTags={allTags} max={3} />}
           <dl className="task-meta">
             {task.durationMinutesRemaining !== null && <div><dt>Remaining</dt><dd>{task.durationMinutesRemaining} min</dd></div>}
             <div><dt>{task.kanbanStatus === "completed" ? "Completed" : "Updated"}</dt><dd>{new Date(task.completedAt ?? task.updatedAt).toLocaleDateString()}</dd></div>
