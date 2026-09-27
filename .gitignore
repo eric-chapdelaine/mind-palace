@@ -3,5 +3,15 @@ dist/
 .venv/
 __pycache__/
 data/
+
+# local database (config default: data/mind-palace.db) + any stray copies
+*.db
+*.db-shm
+*.db-wal
+*.db.bak
+
+# secrets — never commit
+.env
+
 *.log
 .DS_Store
