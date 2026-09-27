@@ -28,17 +28,16 @@ export function TaskBreadcrumbs({ task, allTags, max = Infinity, className }: {
   return (
     <div className={`task-breadcrumbs${className ? ` ${className}` : ""}`}>
       {visible.map((path, index) => (
-        <span key={index}>
-          {index > 0 && "; "}
+        <div className="task-breadcrumbs-path" key={index}>
           {path.slice(0, -1).map((crumb, crumbIndex) => (
             <span key={crumb.id}>
               {crumbIndex > 0 && " › "}
               <Link to={`/tags/${crumb.id}`}>{crumb.title}</Link>
             </span>
           ))}
-        </span>
+        </div>
       ))}
-      {hidden > 0 && <span className="muted">; +{hidden} more</span>}
+      {hidden > 0 && <div className="task-breadcrumbs-path muted">+{hidden} more</div>}
     </div>
   );
 }

@@ -147,7 +147,6 @@ export function TaskPage() {
             </div>
           )}
           <TagRow tags={task.tags} links />
-          <TagRow tags={task.derivedTags} derived links />
           <TaskBreadcrumbs task={task} allTags={tags} />
         </div>
         <div className="detail-actions">

@@ -1,7 +1,6 @@
 import type { Tag, TaskSummary } from "@mind-palace/shared";
 import { Link } from "react-router-dom";
 import type { PointerEvent } from "react";
-import { TagRow } from "./TagRow";
 import { TaskBreadcrumbs } from "./TaskBreadcrumbs";
 
 /** Max direct tags shown on the collapsed card line; extras collapse into "+N". */
@@ -42,7 +41,7 @@ export function TaskCard({ task, selected = false, checked = false, allTags, onT
       to={`/tasks/${task.id}`}
     >
       {/* Collapsed line: priority, title, and the directly-assigned tags. Everything else
-          (description, estimate, updated, derived tags) lives in the expand-on-hover block. */}
+          (description, estimate, updated, goal breadcrumbs) lives in the expand-on-hover block. */}
       <div className="task-card-line">
         <span className="task-priority">P{task.priority}:</span>
         <h3>{task.title}</h3>
@@ -71,7 +70,6 @@ export function TaskCard({ task, selected = false, checked = false, allTags, onT
       <div className="task-card-expand">
         <div>
           {task.description && <p className="task-description">{truncate(task.description)}</p>}
-          <TagRow tags={task.derivedTags} derived />
           {allTags && <TaskBreadcrumbs task={task} allTags={allTags} max={3} />}
           <dl className="task-meta">
             {task.durationMinutesRemaining !== null && <div><dt>Remaining</dt><dd>{task.durationMinutesRemaining} min</dd></div>}
