@@ -137,14 +137,12 @@ export function TaskPage() {
 
   return (
     <main className="detail-shell">
-      <nav className="detail-nav">
-        <span>{task.publicId.slice(0, 8)}</span>
-      </nav>
       {error && <div className="error-banner">{error}</div>}
       <header className="detail-header">
         <div>
           <div className="task-card-topline">
             <span className="task-type">{task.kanbanStatus.replace("_", " ")}</span>
+            <span className="detail-public-id">{task.publicId.slice(0, 8)}</span>
           </div>
           <h1>{task.title}</h1>
           <TagRow tags={task.tags} links />

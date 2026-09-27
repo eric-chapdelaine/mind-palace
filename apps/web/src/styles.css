@@ -72,6 +72,7 @@ body.dragging .task-card { transform: none; box-shadow: none; }
 body.dragging .task-card:hover .task-card-expand { grid-template-rows: 0fr; }
 body.dragging .task-card:hover .task-card-expand > div { opacity: 0; }
 .task-card-topline { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+.detail-public-id { color: #888; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .75rem; }
 .task-card-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem .5rem; min-width: 0; }
 .task-card-line h3 { min-width: 0; }
 .task-card-inline-tag { border: 1px solid #bbb; border-radius: 999px; padding: .05rem .4rem; font-size: .72rem; color: #555; line-height: 1.5; white-space: nowrap; }

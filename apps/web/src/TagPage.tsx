@@ -137,9 +137,6 @@ export function TagPage() {
 
   return (
     <main className="detail-shell">
-      <nav className="detail-nav">
-        <span>{tag.publicId.slice(0, 8)}</span>
-      </nav>
       {error && <div className="error-banner">{error}</div>}
       <header className="detail-header">
         <div>
@@ -147,6 +144,7 @@ export function TagPage() {
             <span className="task-type">{tag.reserved ? "reserved tag" : "tag"}</span>
             {tag.type && <span className="tag-type-badge">{tag.type}</span>}
             {tag.isArchived && <span className="tag-reserved">archived</span>}
+            <span className="detail-public-id">{tag.publicId.slice(0, 8)}</span>
           </div>
           <h1>{tag.title}</h1>
           {paths.some((path) => path.length > 1) && (
