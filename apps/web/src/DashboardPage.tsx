@@ -1,5 +1,4 @@
 import { Fragment, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Link } from "react-router-dom";
 import { reservedTagPublicIds, type CreateTaskInput, type KanbanStatus, type Tag, type TaskSummary } from "@mind-palace/shared";
 import { api } from "./api";
 import { CreateTaskPanel } from "./components/CreateTaskPanel";
@@ -297,11 +296,14 @@ export function DashboardPage() {
   return (
     <main className="dashboard-shell">
       <header className="masthead">
-        <div><h1>Mind Palace</h1><p>Tasks and schedules.</p></div>
+        <div className="tag-filter">
+          <label>Included tags<TagPicker tags={tags} selectedIds={includedTagIds} onChange={setIncludedTagIds} placeholder="Type to filter in" /></label>
+          <label>Excluded tags<TagPicker tags={tags} selectedIds={excludedTagIds} onChange={setExcludedTagIds} placeholder="Type to filter out" /></label>
+        </div>
         <div className="masthead-actions">
           <div className="masthead-stats">
-            <div><strong>{active.length}</strong><span>open tasks</span></div>
-            <div><strong>{scheduled}</strong><span>fixed events</span></div>
+            <span><strong>{active.length}</strong> open tasks</span>
+            <span><strong>{scheduled}</strong> fixed events</span>
           </div>
           {selecting ? (
             <div className="button-row">
@@ -318,14 +320,6 @@ export function DashboardPage() {
         </div>
       </header>
       {selecting && <p className="selection-hint muted">Selecting tasks to schedule this week — click task cards to toggle them.</p>}
-      <nav className="view-nav">
-        <div className="tag-filter">
-          <label>Included tags<TagPicker tags={tags} selectedIds={includedTagIds} onChange={setIncludedTagIds} placeholder="Type to filter in" /></label>
-          <label>Excluded tags<TagPicker tags={tags} selectedIds={excludedTagIds} onChange={setExcludedTagIds} placeholder="Type to filter out" /></label>
-        </div>
-        <Link to="/schedule">Weekly schedule</Link>
-        <Link to="/tags">All tags</Link>
-      </nav>
       {error && <div className="error-banner">{error}</div>}
       <div className="mind-layout">
         <section className="kanban-board">

@@ -366,7 +366,6 @@ export function SchedulePage() {
 
   return <main className="schedule-shell">
     <nav className="detail-nav">
-      <Link to="/">Back to board</Link>
       <span>America/New_York</span>
     </nav>
     <header className="schedule-header">

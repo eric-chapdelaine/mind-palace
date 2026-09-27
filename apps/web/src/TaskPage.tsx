@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "./api";
+import { useCrumbTitle } from "./components/Breadcrumbs";
 import { TagRow } from "./components/TagRow";
 import { TaskBreadcrumbs } from "./components/TaskBreadcrumbs";
 import { TaskEditor } from "./components/TaskEditor";
@@ -91,6 +92,12 @@ export function TaskPage() {
     }
   }
 
+  // Name this page's crumb once its title is known (also refreshes it when the task is renamed).
+  const registerCrumbTitle = useCrumbTitle();
+  useEffect(() => {
+    if (task) registerCrumbTitle(`/tasks/${id}`, task.title);
+  }, [task, id, registerCrumbTitle]);
+
   useEffect(() => {
     void load();
     const interval = window.setInterval(() => void load(), 2000);
@@ -125,13 +132,12 @@ export function TaskPage() {
   }
 
   if (!task) {
-    return <main className="detail-shell"><Link to="/">Back</Link>{error ? <div className="error-banner">{error}</div> : <p>Loading...</p>}</main>;
+    return <main className="detail-shell">{error ? <div className="error-banner">{error}</div> : <p>Loading...</p>}</main>;
   }
 
   return (
     <main className="detail-shell">
       <nav className="detail-nav">
-        <Link to="/">Back to board</Link>
         <span>{task.publicId.slice(0, 8)}</span>
       </nav>
       {error && <div className="error-banner">{error}</div>}

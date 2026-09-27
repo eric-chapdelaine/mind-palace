@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "./api";
+import { useCrumbTitle } from "./components/Breadcrumbs";
 import { TagHierarchy } from "./components/TagHierarchy";
 import { TagPicker } from "./components/TagPicker";
 import { tagPaths } from "./lib/tagTree";
@@ -121,17 +122,22 @@ export function TagPage() {
     });
   }
 
+  // Name this page's crumb once its title is known (also refreshes it when the tag is renamed).
+  const registerCrumbTitle = useCrumbTitle();
+  useEffect(() => {
+    if (tag) registerCrumbTitle(`/tags/${id}`, tag.title);
+  }, [tag, id, registerCrumbTitle]);
+
   if (tags.length === 0 && !error) {
-    return <main className="detail-shell"><Link to="/">Back</Link><p>Loading...</p></main>;
+    return <main className="detail-shell"><p>Loading...</p></main>;
   }
   if (!tag) {
-    return <main className="detail-shell"><Link to="/">Back</Link><div className="error-banner">Tag not found.</div></main>;
+    return <main className="detail-shell"><div className="error-banner">Tag not found.</div></main>;
   }
 
   return (
     <main className="detail-shell">
       <nav className="detail-nav">
-        <Link to="/">Back to board</Link>
         <span>{tag.publicId.slice(0, 8)}</span>
       </nav>
       {error && <div className="error-banner">{error}</div>}

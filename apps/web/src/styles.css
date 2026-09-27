@@ -24,21 +24,35 @@ code, pre { overflow-wrap: anywhere; white-space: pre-wrap; }
 .section-label, .eyebrow { color: #666; font-size: .85rem; }
 
 .dashboard-shell, .detail-shell, .schedule-shell { max-width: 1600px; margin: 0 auto; padding: 1.5rem; }
-.masthead { display: flex; justify-content: space-between; align-items: end; gap: 2rem; border-bottom: 1px solid #ccc; padding-bottom: 1rem; }
-.masthead p { color: #666; margin: 0; }
-.masthead-stats { display: flex; gap: 1.5rem; }
-.masthead-stats div { display: grid; }
-.masthead-stats strong { font-size: 1.25rem; }
-.masthead-stats span { color: #666; font-size: .8rem; }
-.view-nav, .detail-nav { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1rem 0; }
-.view-nav > div, .button-row, .detail-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
-.masthead-actions { display: grid; justify-items: end; gap: .5rem; }
+.masthead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; padding-bottom: 1rem; }
+.masthead-actions { display: flex; align-items: center; gap: 1.5rem; }
+.masthead-stats { display: flex; align-items: center; gap: 1.5rem; }
+.masthead-stats span { color: #666; font-size: .85rem; white-space: nowrap; }
+.masthead-stats strong { color: #222; font-size: 1rem; margin-right: .15rem; }
+.detail-nav { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1rem 0; }
+.button-row, .detail-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .selection-hint { border: 1px dashed #999; padding: .5rem 1rem; margin: 1rem 0 0; }
 .task-card.selected { outline: 2px solid #222; background: #f2f2f2; }
-.view-nav button.selected { font-weight: 700; }
-.view-nav .tag-filter { align-items: start; gap: 1rem; }
+.tag-filter { display: flex; flex-wrap: wrap; align-items: start; gap: 1rem; }
 .tag-filter label { margin: 0; min-width: 240px; }
 .mind-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 1rem; align-items: start; }
+
+/* App shell: compact top navigation bar + breadcrumb trail on every page. */
+.app-layout { display: flex; flex-direction: column; min-height: 100vh; }
+.app-topbar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .6rem 1.5rem; background: #fff; border-bottom: 1px solid #ccc; }
+.app-brand { font-weight: 800; font-size: 1.05rem; white-space: nowrap; }
+.app-topbar nav { display: flex; flex-wrap: wrap; gap: .25rem; }
+.app-topbar nav a { text-decoration: none; color: #444; font-weight: 600; padding: .45rem .7rem; border-radius: 4px; }
+.app-topbar nav a:hover { background: #eee; }
+.app-topbar nav a.active { background: #222; color: #fff; }
+.app-content { flex: 1 1 auto; min-width: 0; }
+.breadcrumbs { max-width: 1600px; width: 100%; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; padding: 1.1rem 1.5rem 0; color: #666; font-size: .85rem; }
+.breadcrumb { display: inline-flex; align-items: center; gap: .35rem; }
+.breadcrumb-sep { color: #aaa; }
+.breadcrumb a, .breadcrumb-current { display: inline-block; min-width: 0; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.breadcrumb a { color: #666; text-decoration: none; }
+.breadcrumb a:hover { text-decoration: underline; color: #222; }
+.breadcrumb-current { font-weight: 600; color: #222; }
 
 .kanban-board { display: grid; grid-template-columns: repeat(5, minmax(min-content, 1fr)); gap: .75rem; overflow-x: auto; }
 .kanban-column { min-height: 500px; }
@@ -242,7 +256,10 @@ body.dragging .task-card:hover .task-card-expand > div { opacity: 0; }
 
 @media (max-width: 650px) {
   .dashboard-shell, .detail-shell, .schedule-shell { padding: 1rem; }
+  .app-topbar { padding: .5rem 1rem; }
+  .breadcrumbs { padding: .8rem 1rem 0; }
   .masthead, .detail-header, .schedule-header { align-items: start; flex-direction: column; }
+  .masthead { align-items: flex-end; }
   .masthead-stats { display: none; }
   .dashboard-sidebar, .detail-grid { grid-template-columns: 1fr; }
   .detail-grid { grid-template-areas: "sidebar" "main"; }
@@ -266,8 +283,9 @@ body.dragging .task-card:hover .task-card-expand > div { opacity: 0; }
   /* Side-by-side form fields stack for thumbs; larger inputs stop iOS auto-zoom on focus. */
   .form-pair { grid-template-columns: 1fr; }
   input, textarea, select { font-size: 16px; }
-  /* Masthead nav stacks; tag filters stretch to full width. */
-  .view-nav { flex-direction: column; align-items: stretch; }
+  /* Masthead row wraps; tag filters go full width, actions stay right. */
+  .masthead { justify-content: flex-end; }
+  .tag-filter { flex-direction: column; align-items: stretch; width: 100%; }
   .tag-filter label { min-width: 0; }
   .detail-grid { grid-template-columns: 1fr; grid-template-areas: "sidebar" "main"; }
 }

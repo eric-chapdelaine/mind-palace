@@ -98,7 +98,6 @@ export function TagsPage() {
   return (
     <main className="detail-shell">
       <nav className="detail-nav">
-        <Link to="/">Back to board</Link>
         <span>{tags.length} tags</span>
       </nav>
       {error && <div className="error-banner">{error}</div>}

@@ -1,6 +1,6 @@
 import type { TaskDetail, TimeBlock, UpdateTimeBlockInput } from "@mind-palace/shared";
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { api } from "./api";
 
 function toLocalDateTime(value: string): string {
@@ -85,7 +85,6 @@ export function TimeBlockPage() {
   return (
     <main className="detail-shell">
       <nav className="detail-nav">
-        <Link to={`/tasks/${task.id}`}>Back to {task.title}</Link>
         <span>{block.publicId.slice(0, 8)}</span>
       </nav>
       {error && <div className="error-banner">{error}</div>}
