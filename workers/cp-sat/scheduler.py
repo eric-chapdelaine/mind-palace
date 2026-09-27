@@ -1,7 +1,7 @@
 import json
 import math
 import sys
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from ortools.sat.python import cp_model
@@ -28,8 +28,10 @@ def scheduling_horizon(now: datetime) -> tuple[datetime, datetime]:
     rounded = local.replace(minute=minute, second=0, microsecond=0)
     if local.minute >= 30:
         rounded += timedelta(hours=1)
-    end_date = local.date() + timedelta(days=6 - local.weekday())
-    return rounded, datetime.combine(end_date + timedelta(days=1), time.min, TIME_ZONE)
+    # Horizon is always a full 7 days (matching the web app's default week view), never
+    # just the tail of the current week: a task pinned to a later weekday must have
+    # eligible slots even when the schedule is generated on, say, a Sunday.
+    return rounded, rounded + timedelta(days=7)
 
 
 def solve(payload: dict) -> dict:

@@ -88,6 +88,10 @@ export function Breadcrumbs() {
     setCrumbs(trail.slice());
   }, [location.pathname]);
 
+  // A single crumb is just the current page repeated (e.g. “Schedule” in the top nav) —
+  // no trail to navigate back through, so it only eats vertical space. Hide it.
+  if (crumbs.length === 1) return null;
+
   return (
     <nav className="breadcrumbs" aria-label="Breadcrumbs">
       {crumbs.map((path, index) => {

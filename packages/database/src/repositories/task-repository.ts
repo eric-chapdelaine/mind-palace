@@ -725,7 +725,7 @@ export class TaskRepository {
     const result = this.database.connection
       .prepare(
         `INSERT INTO schedule_runs (public_id, model_version, horizon_start, horizon_end, status, input_json, created_at)
-         VALUES (?, 'cp-sat-v2', ?, ?, 'running', ?, ?)`,
+         VALUES (?, 'cp-sat-v3', ?, ?, 'running', ?, ?)`,
       )
       .run(randomUUID(), horizonStart, horizonEnd, JSON.stringify(input), timestamp);
     return this.getScheduleRun(insertedId(result));
