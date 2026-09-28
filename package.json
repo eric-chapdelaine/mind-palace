@@ -5,6 +5,7 @@
   "packageManager": "pnpm@10.15.1",
   "scripts": {
     "dev": "concurrently --kill-others --names server,web \"pnpm --filter @mind-palace/server dev\" \"pnpm --filter @mind-palace/web dev\"",
+    "tui": "pnpm --filter @mind-palace/tui dev",
     "build": "pnpm --recursive build",
     "typecheck": "pnpm --recursive typecheck",
     "db:migrate": "pnpm --filter @mind-palace/server db:migrate",
