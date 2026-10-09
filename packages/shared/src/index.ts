@@ -137,15 +137,82 @@ export interface WeatherForecast {
   expiresAt: string;
 }
 
-export interface HealthObservation {
+/**
+ * A night of sleep pulled from Garmin Connect. `calendarDate` is the local date the sleep
+ * belongs to (the morning you woke up); `startAt`/`endAt` are the in-bed window as ISO UTC.
+ * Extra provider metrics live in `details` so the columns stay stable as new data is added.
+ */
+export interface SleepSession {
   id: number;
   publicId: string;
-  source: string;
-  kind: "activity" | "sleep";
+  externalId: string;
+  calendarDate: string;
   startAt: string;
   endAt: string;
-  externalId: string | null;
+  sleepScore: number | null;
+  totalSleepMinutes: number | null;
+  deepSleepMinutes: number | null;
+  lightSleepMinutes: number | null;
+  remSleepMinutes: number | null;
+  awakeMinutes: number | null;
+  avgHeartRate: number | null;
+  avgStress: number | null;
+  notes: string | null;
   details: JsonObject;
+}
+
+/**
+ * A recorded Garmin activity (run, ride, lift, ...). `providerTitle` is Garmin's name and is
+ * refreshed on every sync; `title` is the owner's override (falls back to `providerTitle`
+ * when null) and is never overwritten by a sync. `details` holds extra provider metrics.
+ */
+export interface HealthActivity {
+  id: number;
+  publicId: string;
+  externalId: string;
+  providerTitle: string;
+  title: string | null;
+  notes: string | null;
+  activityType: string;
+  activityDate: string;
+  startAt: string;
+  endAt: string;
+  durationMinutes: number | null;
+  movingMinutes: number | null;
+  distanceMeters: number | null;
+  calories: number | null;
+  avgHeartRate: number | null;
+  maxHeartRate: number | null;
+  details: JsonObject;
+}
+
+/** The provider-owned half of a health row — what the Garmin worker may write. */
+export type SleepSessionProviderInput = Omit<SleepSession, "id" | "publicId" | "notes">;
+export type HealthActivityProviderInput = Omit<HealthActivity, "id" | "publicId" | "title" | "notes">;
+
+export interface UpdateSleepSessionInput {
+  notes?: string | null;
+}
+
+export interface UpdateHealthActivityInput {
+  title?: string | null;
+  notes?: string | null;
+}
+
+/** Result of a manual or scheduled Garmin Connect sync. */
+export interface GarminSyncResult {
+  sleepImported: number;
+  activitiesImported: number;
+  sleepFrom: string;
+  activitiesFrom: string;
+  syncedAt: string;
+}
+
+/** Last-known state of the Garmin connection, shown next to the sync button. */
+export interface GarminSyncStatus {
+  lastSyncedAt: string | null;
+  lastError: string | null;
+  status: "configured" | "healthy" | "error" | "disabled";
 }
 
 export interface ScheduleRun {

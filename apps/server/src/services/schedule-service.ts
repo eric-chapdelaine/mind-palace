@@ -1,8 +1,8 @@
-import { spawn } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { TaskRepository } from "@mind-palace/database";
 import type { Schedule } from "@mind-palace/shared";
+import { runPythonWorker } from "./worker.js";
 
 interface SolverResult {
   horizonStart: string;
@@ -36,9 +36,7 @@ export class ScheduleService {
       timeBlocks: this.tasks.listTimeBlocks(),
       weather: this.tasks.listWeather(),
     };
-    const stdout = await this.runSolver(input);
-    const result = JSON.parse(stdout) as SolverResult;
-    if (result.error) throw new Error(result.error);
+    const result = await this.runSolver(input);
     const run = this.tasks.createScheduleRun(result.horizonStart, result.horizonEnd, input);
     try {
       for (const assignment of result.assignments) {
@@ -52,25 +50,13 @@ export class ScheduleService {
     return this.getSchedule();
   }
 
-  private runSolver(input: unknown): Promise<string> {
-    return new Promise((resolvePromise, reject) => {
-      const child = spawn(
-        "uv",
-        ["run", "--project", this.workerDirectory, "python", resolve(this.workerDirectory, "scheduler.py")],
-        { stdio: ["pipe", "pipe", "pipe"] },
-      );
-      let stdout = "";
-      let stderr = "";
-      const timeout = setTimeout(() => child.kill("SIGTERM"), 30_000);
-      child.stdout.setEncoding("utf8").on("data", (chunk: string) => { stdout += chunk; });
-      child.stderr.setEncoding("utf8").on("data", (chunk: string) => { stderr += chunk; });
-      child.once("error", (error) => { clearTimeout(timeout); reject(error); });
-      child.once("close", (code) => {
-        clearTimeout(timeout);
-        if (code === 0) resolvePromise(stdout);
-        else reject(new Error(stderr.trim() || stdout.trim() || `CP-SAT worker exited with ${code}`));
-      });
-      child.stdin.end(JSON.stringify(input));
+  private runSolver(input: unknown): Promise<SolverResult> {
+    return runPythonWorker<SolverResult>({
+      directory: this.workerDirectory,
+      script: "scheduler.py",
+      input,
+      timeoutMs: 30_000,
+      label: "CP-SAT worker",
     });
   }
 }

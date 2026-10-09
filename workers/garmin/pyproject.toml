@@ -1,0 +1,5 @@
+[project]
+name = "mind-palace-garmin"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["garminconnect==0.2.38", "garth==0.5.21"]

@@ -17,6 +17,7 @@ import {
   type TimeBlockType,
 } from "@mind-palace/shared";
 import { Hono } from "hono";
+import type { GarminService } from "../services/garmin-service.js";
 import type { IntegrationService } from "../services/integration-service.js";
 import type { ScheduleService } from "../services/schedule-service.js";
 import type { WeatherService } from "../services/weather-service.js";
@@ -27,6 +28,7 @@ interface Dependencies {
   schedule: ScheduleService;
   weather: WeatherService;
   integrations: IntegrationService;
+  garmin: GarminService;
   recurrence: RecurrenceService;
 }
 
@@ -45,7 +47,14 @@ function requiredString(value: unknown, name: string): string {
   return value.trim();
 }
 
-export function createHttpApp({ tasks, schedule, weather, integrations, recurrence }: Dependencies): Hono {
+/** Optional user text: absent → undefined (leave unchanged), null/blank → null (clear), else trimmed. */
+function optionalText(value: unknown): string | null | undefined {
+  if (value === null) return null;
+  if (typeof value !== "string") return undefined;
+  return value.trim() || null;
+}
+
+export function createHttpApp({ tasks, schedule, weather, integrations, garmin, recurrence }: Dependencies): Hono {
   const app = new Hono();
 
   app.onError((error, context) => {
@@ -59,7 +68,14 @@ export function createHttpApp({ tasks, schedule, weather, integrations, recurren
   app.get("/api/tags", (context) => context.json(tasks.listTags()));
   app.get("/api/schedule", (context) => context.json(schedule.getSchedule()));
   app.get("/api/weather", async (context) => context.json(await weather.getForecast()));
-  app.get("/api/health-observations", (context) => context.json(tasks.listHealthObservations()));
+  app.get("/api/health-observations", (context) =>
+    context.json(tasks.listSleepSessions(context.req.query("from"), context.req.query("to"))));
+  app.get("/api/health-activities", (context) =>
+    context.json(tasks.listHealthActivities(context.req.query("from"), context.req.query("to"))));
+  app.get("/api/health-observations/:id", (context) =>
+    context.json(tasks.getSleepSession(numberParam(context.req.param("id"), "sleep session id"))));
+  app.get("/api/health-activities/:id", (context) =>
+    context.json(tasks.getHealthActivity(numberParam(context.req.param("id"), "activity id"))));
   app.get("/api/tasks/:id", (context) => context.json(tasks.getTask(numberParam(context.req.param("id"), "task id"))));
   app.get("/api/time-blocks/:id", (context) => context.json(tasks.getTimeBlock(numberParam(context.req.param("id"), "time block id"))));
 
@@ -224,10 +240,26 @@ export function createHttpApp({ tasks, schedule, weather, integrations, recurren
     return context.json(integrations.importCalendar(requiredString(body.accountId, "accountId"), body.events as never));
   });
 
-  app.post("/api/integrations/garmin/import", async (context) => {
+  app.post("/api/integrations/garmin/sync", async (context) => context.json(await garmin.sync()));
+  app.get("/api/integrations/garmin/status", (context) => context.json(garmin.status()));
+
+  app.patch("/api/health-observations/:id", async (context) => {
     const body = (await context.req.json()) as Record<string, unknown>;
-    if (!Array.isArray(body.observations)) throw new Error("observations must be an array");
-    return context.json(integrations.importGarmin(body.observations as never));
+    const notes = optionalText(body.notes);
+    return context.json(tasks.updateSleepSession(
+      numberParam(context.req.param("id"), "sleep session id"),
+      { ...(notes !== undefined ? { notes } : {}) },
+    ));
+  });
+
+  app.patch("/api/health-activities/:id", async (context) => {
+    const body = (await context.req.json()) as Record<string, unknown>;
+    const title = optionalText(body.title);
+    const notes = optionalText(body.notes);
+    return context.json(tasks.updateHealthActivity(
+      numberParam(context.req.param("id"), "activity id"),
+      { ...(title !== undefined ? { title } : {}), ...(notes !== undefined ? { notes } : {}) },
+    ));
   });
 
   app.post("/api/tasks/:id/lifecycle", async (context) => {

@@ -284,6 +284,19 @@ body.dragging .task-card:hover .task-card-expand > div { opacity: 0; }
 .calendar-event button { width: max-content; padding: .1rem .3rem; }
 .calendar-event.block-proposed { border-style: dashed; }
 .calendar-event.schedule-past { opacity: .45; background: #ddd; }
+/* Garmin context (sleep / recorded activities) sits over the work layer but stays click-through,
+   so scheduled blocks underneath remain interactive while the health window is still visible. */
+.calendar-event.health-event { z-index: 2; border-width: 1px; border-left-width: 4px; text-decoration: none; }
+.calendar-event.health-event:hover { filter: brightness(.96); box-shadow: 0 1px 4px #0002; }
+.calendar-event.sleep-event { background: #e9e4fac9; border-color: #6f5bb5; color: #3d2f75; }
+.calendar-event.activity-event { background: #dff0dfc9; border-color: #2e7d32; color: #1f5a23; }
+.calendar-event.health-event time, .calendar-event.health-event span { color: inherit; opacity: .85; }
+.garmin-sync { display: flex; align-items: center; gap: .5rem; margin-left: auto; }
+.garmin-sync-error { color: #a33; font-size: .85rem; }
+.health-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .25rem 1rem; margin: 0; }
+.health-metric { display: grid; gap: .1rem; border-bottom: 1px solid #eee; padding: .35rem 0; }
+.health-metric dt { color: #666; font-size: .78rem; }
+.health-metric dd { margin: 0; font-weight: 600; }
 .week-picks { display: grid; gap: .4rem; background: #fbfbfb; border: 1px solid #ccc; border-radius: 4px; padding: .6rem; margin: .6rem 0; }
 .week-picks.drag-over { border-color: #222; box-shadow: 0 0 0 1px #222 inset; background: #eee; }
 .week-task-row { display: flex; align-items: center; gap: .4rem; border: 1px solid #ddd; border-radius: 3px; background: #fff; padding: .35rem .45rem; cursor: grab; overflow: hidden; }

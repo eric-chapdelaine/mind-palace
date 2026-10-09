@@ -3,6 +3,8 @@ import { DashboardPage } from "./DashboardPage";
 import { TaskPage } from "./TaskPage";
 import { TimeBlockPage } from "./TimeBlockPage";
 import { SchedulePage } from "./SchedulePage";
+import { HealthActivityPage } from "./HealthActivityPage";
+import { HealthObservationPage } from "./HealthObservationPage";
 import { TagsPage } from "./TagsPage";
 import { TagPage } from "./TagPage";
 import { Breadcrumbs, CrumbTitleProvider, resetTrail } from "./components/Breadcrumbs";
@@ -58,6 +60,8 @@ export function App() {
           <Route path="/tags" element={<TagsPage />} />
           <Route path="/tags/:id" element={<TagPage />} />
           <Route path="/schedule" element={<SchedulePage />} />
+          <Route path="/health_activity/:id" element={<HealthActivityPage />} />
+          <Route path="/health_observation/:id" element={<HealthObservationPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

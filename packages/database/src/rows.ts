@@ -19,6 +19,11 @@ export function integer(value: unknown): number {
   return Number(value);
 }
 
+/** Nullable numeric column: SQLite returns loosely-typed values (null, integer, or real). */
+export function nullableNumber(value: unknown): number | null {
+  return value === null || value === undefined ? null : Number(value);
+}
+
 export function boolean(value: unknown): boolean {
   return Number(value) === 1;
 }

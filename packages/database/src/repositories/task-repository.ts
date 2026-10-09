@@ -5,11 +5,15 @@ import {
   type CreateTagInput,
   type CreateTaskInput,
   type CreateTimeBlockInput,
-  type HealthObservation,
+  type GarminSyncStatus,
+  type HealthActivity,
+  type HealthActivityProviderInput,
   type KanbanStatus,
   type LifecycleStatus,
   type RecurrenceRule,
   type ScheduleRun,
+  type SleepSession,
+  type SleepSessionProviderInput,
   type Tag,
   type TagType,
   type TaskDetail,
@@ -19,12 +23,14 @@ import {
   type TimeBlockType,
   type UpdateTaskInput,
   type UpdateTimeBlockInput,
+  type UpdateHealthActivityInput,
+  type UpdateSleepSessionInput,
   type UpsertRecurrenceInput,
   type UpdateTagInput,
   type WeatherForecast,
 } from "@mind-palace/shared";
 import { Database } from "../database.js";
-import { boolean, integer, json, nullableText, row, text, type Row } from "../rows.js";
+import { boolean, integer, json, nullableNumber, nullableText, row, text, type Row } from "../rows.js";
 
 export const reservedTagIds = reservedTagPublicIds;
 
@@ -71,6 +77,49 @@ function mapTimeBlock(value: Row): TimeBlock {
     type: text(value.type) as TimeBlockType,
     source: text(value.source) as TimeBlock["source"],
     notes: nullableText(value.notes),
+  };
+}
+
+function mapSleepSession(value: Row): SleepSession {
+  return {
+    id: integer(value.id),
+    publicId: text(value.public_id),
+    externalId: text(value.external_id),
+    calendarDate: text(value.calendar_date),
+    startAt: text(value.start_at),
+    endAt: text(value.end_at),
+    sleepScore: nullableNumber(value.sleep_score),
+    totalSleepMinutes: nullableNumber(value.total_sleep_minutes),
+    deepSleepMinutes: nullableNumber(value.deep_sleep_minutes),
+    lightSleepMinutes: nullableNumber(value.light_sleep_minutes),
+    remSleepMinutes: nullableNumber(value.rem_sleep_minutes),
+    awakeMinutes: nullableNumber(value.awake_minutes),
+    avgHeartRate: nullableNumber(value.avg_heart_rate),
+    avgStress: nullableNumber(value.avg_stress),
+    notes: nullableText(value.notes),
+    details: json(value.details_json, {}),
+  };
+}
+
+function mapHealthActivity(value: Row): HealthActivity {
+  return {
+    id: integer(value.id),
+    publicId: text(value.public_id),
+    externalId: text(value.external_id),
+    providerTitle: text(value.provider_title),
+    title: nullableText(value.title),
+    notes: nullableText(value.notes),
+    activityType: text(value.activity_type),
+    activityDate: text(value.activity_date),
+    startAt: text(value.start_at),
+    endAt: text(value.end_at),
+    durationMinutes: nullableNumber(value.duration_minutes),
+    movingMinutes: nullableNumber(value.moving_minutes),
+    distanceMeters: nullableNumber(value.distance_meters),
+    calories: nullableNumber(value.calories),
+    avgHeartRate: nullableNumber(value.avg_heart_rate),
+    maxHeartRate: nullableNumber(value.max_heart_rate),
+    details: json(value.details_json, {}),
   };
 }
 
@@ -799,29 +848,159 @@ export class TaskRepository {
       });
   }
 
-  upsertHealthObservation(input: Omit<HealthObservation, "id" | "publicId">): HealthObservation {
-    const result = this.database.connection
-      .prepare(
-        `INSERT INTO health_observations (public_id, source, kind, start_at, end_at, external_id, details_json, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(source, external_id) DO UPDATE SET kind = excluded.kind, start_at = excluded.start_at,
-           end_at = excluded.end_at, details_json = excluded.details_json
-         RETURNING id`,
-      )
-      .get(randomUUID(), input.source, input.kind, input.startAt, input.endAt, input.externalId, JSON.stringify(input.details), now());
-    const id = integer(row(result, "health observation").id);
-    return this.listHealthObservations().find((item) => item.id === id)!;
+  /**
+   * Insert or refresh sleep sessions keyed by Garmin's sleep id. Returns how many rows were
+   * written in this batch; re-syncing a night overwrites it in place rather than duplicating.
+   */
+  upsertSleepSessions(sessions: SleepSessionProviderInput[]): number {
+    const statement = this.database.connection.prepare(
+      `INSERT INTO sleep_sessions
+        (public_id, external_id, calendar_date, start_at, end_at, sleep_score, total_sleep_minutes,
+         deep_sleep_minutes, light_sleep_minutes, rem_sleep_minutes, awake_minutes, avg_heart_rate,
+         avg_stress, details_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(external_id) DO UPDATE SET calendar_date = excluded.calendar_date, start_at = excluded.start_at,
+         end_at = excluded.end_at, sleep_score = excluded.sleep_score, total_sleep_minutes = excluded.total_sleep_minutes,
+         deep_sleep_minutes = excluded.deep_sleep_minutes, light_sleep_minutes = excluded.light_sleep_minutes,
+         rem_sleep_minutes = excluded.rem_sleep_minutes, awake_minutes = excluded.awake_minutes,
+         avg_heart_rate = excluded.avg_heart_rate, avg_stress = excluded.avg_stress,
+         details_json = excluded.details_json, updated_at = excluded.updated_at`,
+    );
+    const timestamp = now();
+    this.database.connection.exec("BEGIN IMMEDIATE");
+    try {
+      for (const session of sessions) statement.run(
+        randomUUID(), session.externalId, session.calendarDate, session.startAt, session.endAt,
+        session.sleepScore, session.totalSleepMinutes, session.deepSleepMinutes, session.lightSleepMinutes,
+        session.remSleepMinutes, session.awakeMinutes, session.avgHeartRate, session.avgStress,
+        JSON.stringify(session.details), timestamp, timestamp,
+      );
+      this.database.connection.exec("COMMIT");
+    } catch (error) {
+      this.database.connection.exec("ROLLBACK");
+      throw error;
+    }
+    return sessions.length;
   }
 
-  listHealthObservations(): HealthObservation[] {
-    return this.database.connection.prepare("SELECT * FROM health_observations ORDER BY start_at DESC").all().map((value) => {
-      const item = row(value, "health observation");
-      return {
-        id: integer(item.id), publicId: text(item.public_id), source: text(item.source),
-        kind: text(item.kind) as HealthObservation["kind"], startAt: text(item.start_at), endAt: text(item.end_at),
-        externalId: nullableText(item.external_id), details: json(item.details_json, {}),
-      };
-    });
+  listSleepSessions(from?: string, to?: string): SleepSession[] {
+    const values = from && to
+      ? this.database.connection.prepare("SELECT * FROM sleep_sessions WHERE end_at > ? AND start_at < ? ORDER BY start_at").all(from, to)
+      : this.database.connection.prepare("SELECT * FROM sleep_sessions ORDER BY start_at").all();
+    return values.map((value) => mapSleepSession(row(value, "sleep session")));
+  }
+
+  /** Most recent local sleep date already stored; the sync starts here to pick up corrections. */
+  latestSleepDate(): string | null {
+    const value = this.database.connection.prepare("SELECT MAX(calendar_date) AS date FROM sleep_sessions").get();
+    return nullableText(row(value, "latest sleep date").date);
+  }
+
+  getSleepSession(id: number): SleepSession {
+    return mapSleepSession(row(
+      this.database.connection.prepare("SELECT * FROM sleep_sessions WHERE id = ?").get(id),
+      "sleep session",
+    ));
+  }
+
+  /** Only the owner's notes are editable; Garmin fields stay sync-owned. */
+  updateSleepSession(id: number, input: UpdateSleepSessionInput): SleepSession {
+    const current = this.getSleepSession(id);
+    this.database.connection
+      .prepare("UPDATE sleep_sessions SET notes = ?, updated_at = ? WHERE id = ?")
+      .run(input.notes === undefined ? current.notes : input.notes, now(), id);
+    return this.getSleepSession(id);
+  }
+
+  /** Insert or refresh activities keyed by Garmin's activity id (idempotent re-sync). */
+  upsertHealthActivities(activities: HealthActivityProviderInput[]): number {
+    const statement = this.database.connection.prepare(
+      `INSERT INTO health_activities
+        (public_id, external_id, provider_title, activity_type, activity_date, start_at, end_at, duration_minutes,
+         moving_minutes, distance_meters, calories, avg_heart_rate, max_heart_rate, details_json,
+         created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(external_id) DO UPDATE SET provider_title = excluded.provider_title, activity_type = excluded.activity_type,
+         activity_date = excluded.activity_date, start_at = excluded.start_at, end_at = excluded.end_at,
+         duration_minutes = excluded.duration_minutes, moving_minutes = excluded.moving_minutes,
+         distance_meters = excluded.distance_meters, calories = excluded.calories,
+         avg_heart_rate = excluded.avg_heart_rate, max_heart_rate = excluded.max_heart_rate,
+         details_json = excluded.details_json, updated_at = excluded.updated_at`,
+    );
+    const timestamp = now();
+    this.database.connection.exec("BEGIN IMMEDIATE");
+    try {
+      for (const activity of activities) statement.run(
+        randomUUID(), activity.externalId, activity.providerTitle, activity.activityType, activity.activityDate,
+        activity.startAt, activity.endAt, activity.durationMinutes, activity.movingMinutes,
+        activity.distanceMeters, activity.calories, activity.avgHeartRate, activity.maxHeartRate,
+        JSON.stringify(activity.details), timestamp, timestamp,
+      );
+      this.database.connection.exec("COMMIT");
+    } catch (error) {
+      this.database.connection.exec("ROLLBACK");
+      throw error;
+    }
+    return activities.length;
+  }
+
+  listHealthActivities(from?: string, to?: string): HealthActivity[] {
+    const values = from && to
+      ? this.database.connection.prepare("SELECT * FROM health_activities WHERE end_at > ? AND start_at < ? ORDER BY start_at").all(from, to)
+      : this.database.connection.prepare("SELECT * FROM health_activities ORDER BY start_at").all();
+    return values.map((value) => mapHealthActivity(row(value, "health activity")));
+  }
+
+  /** Most recent local activity date already stored; the sync starts here to pick up edits. */
+  latestActivityDate(): string | null {
+    const value = this.database.connection.prepare("SELECT MAX(activity_date) AS date FROM health_activities").get();
+    return nullableText(row(value, "latest activity date").date);
+  }
+
+  getHealthActivity(id: number): HealthActivity {
+    return mapHealthActivity(row(
+      this.database.connection.prepare("SELECT * FROM health_activities WHERE id = ?").get(id),
+      "health activity",
+    ));
+  }
+
+  /** Title and notes are owner-owned; a sync refreshes provider fields without touching them. */
+  updateHealthActivity(id: number, input: UpdateHealthActivityInput): HealthActivity {
+    const current = this.getHealthActivity(id);
+    this.database.connection
+      .prepare("UPDATE health_activities SET title = ?, notes = ?, updated_at = ? WHERE id = ?")
+      .run(
+        input.title === undefined ? current.title : input.title,
+        input.notes === undefined ? current.notes : input.notes,
+        now(), id,
+      );
+    return this.getHealthActivity(id);
+  }
+
+  getGarminStatus(): GarminSyncStatus {
+    const value = this.database.connection
+      .prepare("SELECT status, last_synced_at, last_error FROM integration_accounts WHERE kind = 'garmin' LIMIT 1")
+      .get();
+    if (!value) return { lastSyncedAt: null, lastError: null, status: "configured" };
+    const item = row(value, "garmin integration account");
+    return {
+      lastSyncedAt: nullableText(item.last_synced_at),
+      lastError: nullableText(item.last_error),
+      status: text(item.status) as GarminSyncStatus["status"],
+    };
+  }
+
+  markGarminSynced(error: string | null): void {
+    const timestamp = now();
+    this.database.connection
+      .prepare(
+        `INSERT INTO integration_accounts (kind, external_account_id, status, last_synced_at, last_error, created_at, updated_at)
+         VALUES ('garmin', 'default', ?, ?, ?, ?, ?)
+         ON CONFLICT(kind, external_account_id) DO UPDATE SET status = excluded.status,
+           last_synced_at = excluded.last_synced_at, last_error = excluded.last_error,
+           updated_at = excluded.updated_at`,
+      )
+      .run(error ? "error" : "healthy", timestamp, error, timestamp, timestamp);
   }
 
   ensureIntegrationAccount(kind: "google_calendar" | "garmin" | "weather", externalAccountId: string): number {

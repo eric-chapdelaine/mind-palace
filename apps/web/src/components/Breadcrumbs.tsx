@@ -75,6 +75,8 @@ function crumbLabel(path: string, titles: ReadonlyMap<string, string>): string {
     return title ? `Task: ${title}` : `Task ${id}`;
   }
   if (head === "time-blocks") return id ? `Time block ${id}` : "Time blocks";
+  if (head === "health_activity") return titles.get(path) ?? `Activity ${id}`;
+  if (head === "health_observation") return titles.get(path) ?? "Sleep";
   return path;
 }
 

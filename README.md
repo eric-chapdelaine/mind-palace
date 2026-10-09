@@ -16,7 +16,7 @@ Mind Palace is a single-owner task manager and weekly scheduler. Everything sche
 - Per-task schedule acceptance; accepted blocks are immutable.
 - Routine templates and independently completable child occurrences.
 - Google Calendar normalization into tagged tasks through an import endpoint.
-- Garmin activity and sleep normalization into permanent health observations.
+- Garmin Connect sleep and activity sync into dedicated health tables, shown as context on the calendar.
 - Boston hourly weather cached for eight hours from the National Weather Service.
 
 V0 has no application accounts or login. Each owner runs an independent instance. Bind the server only to localhost or a controlled Tailscale interface.
@@ -33,6 +33,7 @@ V0 has no application accounts or login. Each owner runs an independent instance
 ```sh
 pnpm install
 uv sync --project workers/cp-sat
+uv sync --project workers/garmin
 pnpm db:migrate
 pnpm dev
 ```
@@ -56,8 +57,9 @@ TypeScript/Hono control plane
 SQLite in WAL mode
      |
      +-- Python CP-SAT process
+     +-- Python Garmin sync process
      +-- NWS weather adapter
-     +-- normalized calendar/Garmin imports
+     +-- normalized calendar imports
 ```
 
 Only the TypeScript control plane writes SQLite. The CP-SAT worker accepts JSON through standard input and returns JSON through standard output.
@@ -69,10 +71,26 @@ Only the TypeScript control plane writes SQLite. The CP-SAT worker accepts JSON 
 - `packages/database`: migrations and repositories. See `packages/database/README.md`.
 - `packages/shared`: shared TypeScript API contracts.
 - `workers/cp-sat`: Python OR-Tools worker. See `workers/cp-sat/README.md`.
+- `workers/garmin`: Python Garmin Connect sync worker (sleep + activities).
 
 ## Integration State
 
-Weather fetching and CP-SAT scheduling are operational. Google Calendar and Garmin use normalized import endpoints in v0, allowing provider-specific OAuth and polling to be added without changing the domain model. Raw provider payloads are not retained.
+Weather fetching and CP-SAT scheduling are operational. Google Calendar uses a normalized import endpoint in v0, allowing provider-specific OAuth and polling to be added without changing the domain model. Garmin Connect syncs sleep and recorded activities through the Python worker and stores only normalized rows in `sleep_sessions` / `health_activities`; raw provider payloads are not retained.
+
+## Garmin Connect
+
+Authentication reuses the existing Garmin token stores, so the server never handles a password:
+
+```sh
+python -c "import garth; garth.login(); garth.save('~/.garminconnect')"
+```
+
+The worker reads `~/.garminconnect` (falling back to `~/.garth`). `POST /api/integrations/garmin/sync` is incremental: it asks the database for the newest stored sleep and activity dates and fetches only from there forward. The Schedule page has a **Sync Garmin** button, and a daily cron job can drive the same endpoint:
+
+```sh
+# every day at 06:00, after the overnight sleep has synced
+0 6 * * * curl -fsS -X POST http://127.0.0.1:4310/api/integrations/garmin/sync >/dev/null
+```
 
 ## Configuration
 
@@ -80,7 +98,7 @@ Weather fetching and CP-SAT scheduling are operational. Google Calendar and Garm
 
 ## Data Retention
 
-- Tasks, blocks, health observations, and schedule runs: indefinite.
+- Tasks, blocks, sleep sessions, health activities, and schedule runs: indefinite.
 - Raw calendar payloads: not stored.
 - Weather: eight-hour cache.
 - Solver snapshots: intended 90-day retention; automated cleanup is deferred until enough data exists to validate the policy.

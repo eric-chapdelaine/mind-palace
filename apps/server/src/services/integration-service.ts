@@ -1,6 +1,6 @@
 import type { TaskRepository } from "@mind-palace/database";
 import { reservedTagIds } from "@mind-palace/database";
-import type { HealthObservation, TaskDetail } from "@mind-palace/shared";
+import type { TaskDetail } from "@mind-palace/shared";
 
 export interface CalendarImportEvent {
   id: string;
@@ -41,10 +41,5 @@ export class IntegrationService {
       imported.push(this.tasks.getTask(taskId));
     }
     return imported;
-  }
-
-  importGarmin(observations: Array<Omit<HealthObservation, "id" | "publicId" | "source">>): HealthObservation[] {
-    for (const observation of observations) this.tasks.upsertHealthObservation({ ...observation, source: "garmin-connect-api" });
-    return this.tasks.listHealthObservations();
   }
 }

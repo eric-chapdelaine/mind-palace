@@ -43,7 +43,7 @@ pnpm build && pnpm start  # production; server also hosts apps/web/dist
 - `time_blocks`, `schedule_runs` — schedule results. Blocks carry a `type` (`work` default, `calendar_event` for fixed commitment windows) and `source` (manual / solver / calendar / recurrence); accepted blocks are **immutable** (repo enforces: accepted → only completed/missed). Creating a block subtracts its minutes from the task's `duration_minutes_remaining`; deleting or superseding gives them back. Schedule runs store the exact solver input/output JSON for reproducibility.
 - `recurrence_rules`, `recurrence_occurrences` — routine templates and the child tasks they generated (one per date).
 - `integration_accounts`, `external_task_mappings` — provider identity; mappings make calendar/garmin imports idempotent. Raw provider payloads are never stored.
-- `health_observations` — normalized Garmin activity/sleep facts.
+- `sleep_sessions`, `health_activities` — normalized Garmin Connect facts (one table per health domain: a night's sleep and a recorded activity). Populated only by the Garmin sync service (`GarminService` + `workers/garmin/`); shown as read-only context in the schedule and on `/health_observation/:id` / `/health_activity/:id`, never schedulable tasks. Garmin-owned columns (including `health_activities.provider_title`) are refreshed on every sync, while `health_activities.title` and both tables' `notes` are owner-owned and never overwritten by a sync. `health_observations` (migration 001) is the earlier generic table and is no longer written.
 - `weather_forecasts` — 8-hour Boston forecast cache.
 
 ## Backend conventions

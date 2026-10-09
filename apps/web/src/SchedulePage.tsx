@@ -1,7 +1,10 @@
 import {
   reservedTagPublicIds,
   weekdayTagPublicIds,
+  type GarminSyncStatus,
+  type HealthActivity,
   type Schedule,
+  type SleepSession,
   type Tag,
   type TaskSummary,
   type TimeBlockStatus,
@@ -11,6 +14,7 @@ import {
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from "react";
 import { Link } from "react-router-dom";
 import { api } from "./api";
+import { formatClock, formatMinutes } from "./lib/health";
 
 const DAY_START_HOUR = 8;
 const DAY_END_HOUR = 20; // 8am-8pm: the useful day the calendar should fit without scrolling
@@ -85,6 +89,54 @@ function sameIds(left: number[], right: number[]): boolean {
 }
 
 const terminalStatuses = new Set(["completed", "cancelled"]);
+
+/** Clip a health window to one day column and convert it to calendar pixels. */
+function healthEventLayout(startAt: string, endAt: string, day: Date, dayEnd: Date, hourHeight: number) {
+  const start = new Date(Math.max(new Date(startAt).getTime(), day.getTime()));
+  const end = new Date(Math.min(new Date(endAt).getTime(), dayEnd.getTime()));
+  return {
+    top: (start.getHours() * 60 + start.getMinutes()) * hourHeight / 60,
+    height: Math.max(16, (end.getTime() - start.getTime()) / 3_600_000 * hourHeight),
+  };
+}
+
+/**
+ * Read-only Garmin context (sleep / recorded activities) overlaid on the day column. It has no
+ * accept/delete affordances: health events are observed facts, not editable time blocks.
+ */
+function HealthEvent({ kind, startAt, endAt, href, title, subtitle, day, dayEnd, hourHeight }: {
+  kind: "sleep" | "activity";
+  startAt: string;
+  endAt: string;
+  href: string;
+  title: string;
+  subtitle: string;
+  day: Date;
+  dayEnd: Date;
+  hourHeight: number;
+}) {
+  const { top, height } = healthEventLayout(startAt, endAt, day, dayEnd, hourHeight);
+  const compact = height < 40;
+  // Show the true in-bed window, not the day-clipped midnight edge, so a night that began the
+  // previous evening still reads as "11:06 PM - 8:02 AM" on the wake-day column.
+  const startLabel = formatClock(startAt);
+  const endLabel = formatClock(endAt);
+  const timeLabel = kind === "sleep" || !compact ? `${startLabel} - ${endLabel}` : startLabel;
+  return (
+    <Link
+      to={href}
+      className={`calendar-event health-event ${kind}-event${compact ? " calendar-event-compact" : ""}`}
+      style={{ top, height }}
+      title={`${title} · ${startLabel} - ${endLabel}${subtitle ? ` · ${subtitle}` : ""}`}
+    >
+      <div className="calendar-event-summary">
+        <time>{timeLabel}</time>
+        <strong>{title}</strong>
+      </div>
+      {!compact && subtitle && <span>{subtitle}</span>}
+    </Link>
+  );
+}
 
 function WeekTaskRow({ task, scheduled, removeLabel, onRemove, onDragStart, onDragEnd, onCardDrop, dragOver, onDragEnter, onDragLeave }: {
   task: TaskSummary;
@@ -204,8 +256,12 @@ export function SchedulePage() {
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [weather, setWeather] = useState<WeatherForecast[]>([]);
+  const [sleepSessions, setSleepSessions] = useState<SleepSession[]>([]);
+  const [healthActivities, setHealthActivities] = useState<HealthActivity[]>([]);
+  const [garminStatus, setGarminStatus] = useState<GarminSyncStatus | null>(null);
   const [rangeStart, setRangeStart] = useState(() => startOfDay(new Date()));
   const [busy, setBusy] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [dragOverRow, setDragOverRow] = useState<number | null>(null);
@@ -237,6 +293,41 @@ export function SchedulePage() {
   useEffect(() => {
     void load();
   }, []);
+
+  async function loadHealth() {
+    const from = addDays(rangeStart, -1).toISOString();
+    const to = addDays(rangeStart, 8).toISOString();
+    try {
+      const [nextSleep, nextActivities, nextStatus] = await Promise.all([
+        api.healthObservations(from, to),
+        api.healthActivities(from, to),
+        api.garminStatus(),
+      ]);
+      setSleepSessions(nextSleep);
+      setHealthActivities(nextActivities);
+      setGarminStatus(nextStatus);
+      setError(null);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : String(loadError));
+    }
+  }
+
+  // Health context follows the visible week (borrowing a day on each side for overnight windows).
+  useEffect(() => {
+    void loadHealth();
+  }, [rangeStart]);
+
+  async function syncGarmin() {
+    setSyncing(true);
+    try {
+      await api.garminSync();
+      await loadHealth();
+    } catch (syncError) {
+      setError(syncError instanceof Error ? syncError.message : String(syncError));
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   /** Fit the day scale: (visible box height − sticky head) ÷ the 8am-8pm window. */
   useEffect(() => {
@@ -461,6 +552,16 @@ export function SchedulePage() {
       <button className="primary-button" disabled={busy} onClick={() => void generate()}>
         {busy ? "Optimizing..." : "Generate schedule"}
       </button>
+      <div className="garmin-sync">
+        <button onClick={() => void syncGarmin()} disabled={syncing}>
+          {syncing ? "Syncing Garmin..." : "Sync Garmin"}
+        </button>
+        {garminStatus?.lastError
+          ? <span className="garmin-sync-error" title={garminStatus.lastError}>Garmin error</span>
+          : garminStatus?.lastSyncedAt
+            ? <span className="muted">Synced {new Date(garminStatus.lastSyncedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+            : <span className="muted">Never synced</span>}
+      </div>
     </section>
     <div className={`schedule-body${sidebarCollapsed ? " schedule-body-collapsed" : ""}`}>
       <div
@@ -569,6 +670,41 @@ export function SchedulePage() {
                 className="elapsed-time"
                 style={{ height: elapsedMinutes * hourHeight / 60 }}
               />}
+              {sleepSessions
+                .filter((session) => new Date(session.startAt) < dayEnd && new Date(session.endAt) > day)
+                .map((session) => <HealthEvent
+                  key={`sleep-${session.publicId}`}
+                  kind="sleep"
+                  startAt={session.startAt}
+                  endAt={session.endAt}
+                  href={`/health_observation/${session.id}`}
+                  title="Sleep"
+                  subtitle={[
+                    session.sleepScore !== null ? `Score ${session.sleepScore}` : "",
+                    formatMinutes(session.totalSleepMinutes),
+                  ].filter(Boolean).join(" \u00b7 ")}
+                  day={day}
+                  dayEnd={dayEnd}
+                  hourHeight={hourHeight}
+                />)}
+              {healthActivities
+                .filter((activity) => new Date(activity.startAt) < dayEnd && new Date(activity.endAt) > day)
+                .map((activity) => <HealthEvent
+                  key={`activity-${activity.publicId}`}
+                  kind="activity"
+                  startAt={activity.startAt}
+                  endAt={activity.endAt}
+                  href={`/health_activity/${activity.id}`}
+                  title={activity.title ?? activity.providerTitle}
+                  subtitle={[
+                    activity.activityType,
+                    formatMinutes(activity.movingMinutes) ? `${formatMinutes(activity.movingMinutes)} moving` : "",
+                    activity.calories !== null ? `${Math.round(activity.calories)} cal` : "",
+                  ].filter(Boolean).join(" \u00b7 ")}
+                  day={day}
+                  dayEnd={dayEnd}
+                  hourHeight={hourHeight}
+                />)}
               {blocks.map((block) => {
                 const start = new Date(Math.max(new Date(block.startAt).getTime(), day.getTime()));
                 const end = new Date(Math.min(new Date(block.endAt).getTime(), dayEnd.getTime()));

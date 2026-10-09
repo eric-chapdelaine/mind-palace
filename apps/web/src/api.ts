@@ -1,17 +1,27 @@
 import type {
   CreateTaskInput,
-  HealthObservation,
+  GarminSyncResult,
+  GarminSyncStatus,
+  HealthActivity,
   LifecycleStatus,
   Schedule,
+  SleepSession,
   Tag,
   TagType,
   TaskDetail,
   TaskSummary,
   TimeBlock,
+  UpdateHealthActivityInput,
+  UpdateSleepSessionInput,
   UpdateTaskInput,
   UpdateTimeBlockInput,
   WeatherForecast,
 } from "@mind-palace/shared";
+
+function withRange(path: string, from?: string, to?: string): string {
+  if (!from || !to) return path;
+  return `${path}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -28,7 +38,16 @@ export const api = {
   tags: () => request<Tag[]>("/api/tags"),
   schedule: () => request<Schedule>("/api/schedule"),
   weather: () => request<WeatherForecast[]>("/api/weather"),
-  healthObservations: () => request<HealthObservation[]>("/api/health-observations"),
+  healthObservations: (from?: string, to?: string) => request<SleepSession[]>(withRange("/api/health-observations", from, to)),
+  healthObservation: (id: number) => request<SleepSession>(`/api/health-observations/${id}`),
+  updateHealthObservation: (id: number, input: UpdateSleepSessionInput) =>
+    request<SleepSession>(`/api/health-observations/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+  healthActivities: (from?: string, to?: string) => request<HealthActivity[]>(withRange("/api/health-activities", from, to)),
+  healthActivity: (id: number) => request<HealthActivity>(`/api/health-activities/${id}`),
+  updateHealthActivity: (id: number, input: UpdateHealthActivityInput) =>
+    request<HealthActivity>(`/api/health-activities/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+  garminSync: () => request<GarminSyncResult>("/api/integrations/garmin/sync", { method: "POST" }),
+  garminStatus: () => request<GarminSyncStatus>("/api/integrations/garmin/status"),
   task: (id: number) => request<TaskDetail>(`/api/tasks/${id}`),
   timeBlock: (id: number) => request<TimeBlock>(`/api/time-blocks/${id}`),
   updateTimeBlock: (id: number, input: UpdateTimeBlockInput) =>
