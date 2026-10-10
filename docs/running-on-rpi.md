@@ -344,8 +344,8 @@ is nothing to disable if you don't want it. The generic endpoint
 
 5. **Syncing is already scheduled.** The first sync pulls a short lookback
    window (7 days of sleep, 30 days of activities); later syncs fetch only
-   from the newest stored date forward, so a daily job stays cheap. The
-   server runs it in-process once a day (`garmin-sync` in
+   from the newest stored date forward, so the daily job stays cheap. The
+   server runs it in-process at 11:00 `America/New_York` (`garmin-sync` in
    `apps/server/src/jobs.ts`) — there is no crontab to add. Inspect it with:
 
    ```sh

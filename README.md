@@ -100,11 +100,11 @@ Recurring background work is declared in `apps/server/src/jobs.ts` and run in-pr
 server, so the schedule is versioned with the repo instead of living in a machine's crontab. Add
 an entry to that array to schedule new work; `GET /api/jobs` reports each job's last run and error.
 
-Jobs must be idempotent and cheap when there is nothing to do, because a restart can fire
-`runOnStart` and an interval tick can land at any moment. Current jobs:
+Jobs must be idempotent and cheap when there is nothing to do, because a pinned time or interval
+tick can land at any moment and `runOnStart` can fire on a restart. Current jobs:
 
-- `weather-refresh` — hourly cache-aware check; hits NWS only once the eight-hour cache expires.
-- `garmin-sync` — daily; no-ops until a Garmin token store exists.
+- `weather-refresh` — pinned at 00:00, 08:00, 16:00 `America/New_York` (matches the eight-hour cache).
+- `garmin-sync` — pinned at 11:00 `America/New_York`; no-ops until a Garmin token store exists.
 
 The nightly database backup is deliberately *not* here: it runs on the dev machine and needs
 `Persistent=true`, so it stays a systemd user timer (see `docs/running-on-rpi.md` §8).
