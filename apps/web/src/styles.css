@@ -33,6 +33,9 @@ code, pre { overflow-wrap: anywhere; white-space: pre-wrap; }
 .button-row, .detail-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .selection-hint { border: 1px dashed #999; padding: .5rem 1rem; margin: 1rem 0 0; }
 .task-card.selected { outline: 2px solid #222; background: #f2f2f2; }
+/* The subject task of a multi-select action (TaskCard `highlighted`) — visually distinct from pickable cards. */
+.task-card.highlighted { border-color: #c9a227; background: #fdf9ec; outline: 2px solid #e6ce87; }
+.task-card-highlight-tag { border: 1px solid #c9a227; border-radius: 999px; background: #f7edc9; color: #7a6110; font-size: .72rem; padding: .05rem .4rem; white-space: nowrap; }
 .tag-filter { display: flex; flex-wrap: wrap; align-items: start; gap: 1rem; }
 .tag-filter label { margin: 0; min-width: 240px; }
 .mind-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 1rem; align-items: start; }
@@ -325,6 +328,17 @@ body.dragging .task-card:hover .task-card-expand > div { opacity: 0; }
 .mini-block-link:hover strong { text-decoration: underline; }
 .mini-block-delete { justify-self: start; border: 0; background: none; color: #986; padding: 0; font-size: .8rem; cursor: pointer; }
 .mini-block-delete:hover { color: #a33; text-decoration: underline; }
+
+/* Task dependency links on the detail page (see TaskPage DependencySection). */
+.dependency-group { display: grid; gap: .3rem; margin-top: .5rem; }
+.dependency-group-label { color: #666; font-size: .8rem; }
+.dependency-list { list-style: none; margin: 0; padding: 0; }
+.dependency-row { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .3rem 0; border-bottom: 1px solid #eee; }
+.dependency-row:last-child { border-bottom: 0; }
+.dependency-row a { color: inherit; text-decoration: none; display: flex; align-items: baseline; gap: .4rem; min-width: 0; }
+.dependency-row a:hover { text-decoration: underline; }
+.dependency-status { color: #666; font-size: .75rem; flex: none; }
+.dependency-empty { color: #666; font-size: .85rem; margin: .3rem 0 0; }
 
 @media (max-width: 1050px) {
   .mind-layout { grid-template-columns: 1fr; }

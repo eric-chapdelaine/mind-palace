@@ -7,6 +7,7 @@ import { fixedTimeToTimeBlockTypeMigration } from "./006-fixed-time-to-time-bloc
 import { goalTagsMigration } from "./007-goal-tags.js";
 import { sleepAndActivitiesMigration } from "./008-sleep-and-activities.js";
 import { healthEditableFieldsMigration } from "./009-health-editable-fields.js";
+import { taskDependenciesMigration } from "./010-task-dependencies.js";
 
 export interface Migration {
   version: number;
@@ -26,4 +27,5 @@ export const migrations: Migration[] = [
   goalTagsMigration,
   sleepAndActivitiesMigration,
   healthEditableFieldsMigration,
+  taskDependenciesMigration,
 ];

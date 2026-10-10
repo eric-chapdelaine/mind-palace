@@ -55,6 +55,7 @@ def solve(payload: dict) -> dict:
     selected = {}
     scheduled = {}
     starts = []
+    eligible_slots: dict[int, list[int]] = {}
 
     required_day_tasks: dict[int, list[dict]] = {}
     for task in candidates:
@@ -75,6 +76,7 @@ def solve(payload: dict) -> dict:
                 continue
             selected[task_id][slot_index] = model.new_bool_var(f"task_{task_id}_slot_{slot_index}")
             eligible.append(slot_index)
+        eligible_slots[task_id] = eligible
         model.add(sum(selected[task_id].values()) == required * scheduled[task_id])
 
         # Day-pinned tasks are commitments: they must be scheduled, and only on that day.
@@ -105,6 +107,33 @@ def solve(payload: dict) -> dict:
                     window = eligible[offset:offset + run_length + 1]
                     if window[-1] - window[0] == run_length:
                         model.add(sum(selected[task_id][index] for index in window) <= run_length)
+
+    # Dependencies (task dependsOnTaskIds -> must be done first): when both tasks are
+    # scheduled, every slot of the prerequisite must sit at-or-before every slot of the task
+    # that depends on it (the 30-minute occupancy constraint keeps them from sharing a slot,
+    # so "at-or-before" is in practice "strictly before"). The constraint is conditional on
+    # the prerequisite being scheduled, so an unschedulable prerequisite never blocks its
+    # dependents from being scheduled at all.
+    task_by_id = {task["id"]: task for task in candidates}
+    for task in candidates:
+        task_id = task["id"]
+        for dependency_id in task.get("dependsOnTaskIds", []):
+            prerequisite = task_by_id.get(dependency_id)
+            if prerequisite is None:
+                # The prerequisite is not part of this scheduling run (no estimate, completed,
+                # or not in the ready/in_progress kanban states) - nothing to order against.
+                continue
+            prereq_required = math.ceil(prerequisite["durationMinutesRemaining"] / SLOT_MINUTES)
+            prereq_slots = eligible_slots[dependency_id]
+            for slot_index in eligible_slots[task_id]:
+                prereq_prefix = sum(
+                    selected[dependency_id][prereq_index]
+                    for prereq_index in prereq_slots
+                    if prereq_index <= slot_index
+                )
+                model.add(
+                    prereq_prefix >= prereq_required * (selected[task_id][slot_index] + scheduled[dependency_id] - 1)
+                )
 
     for slot_index in available_slots:
         occupants = [variables[slot_index] for variables in selected.values() if slot_index in variables]

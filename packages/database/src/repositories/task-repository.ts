@@ -135,6 +135,8 @@ export interface SchedulableTask {
   earliestStart: string | null;
   deadlineAt: string | null;
   tagIds: string[];
+  /** Tasks this task depends on (by id); the solver orders them before this task when both are scheduled. */
+  dependsOnTaskIds: number[];
   /**
    * Day the task is pinned to, as a Python `date.weekday()` index (0 = Monday .. 6 = Sunday),
    * derived from its `mind-palace:<weekday>` tag. `null` means it may land on any day.
@@ -212,6 +214,7 @@ export class TaskRepository {
 
   getTask(id: number): TaskDetail {
     const task = row(this.database.connection.prepare("SELECT * FROM tasks WHERE id = ?").get(id), "task");
+    const { dependsOn, dependents } = this.listTaskDependencies(id);
     return {
       ...mapTaskSummary(row(this.database.connection.prepare(`${taskSummarySql} WHERE t.id = ?`).get(id), "task")),
       minChunkMinutes: task.min_chunk_minutes === null ? 30 : integer(task.min_chunk_minutes),
@@ -219,7 +222,82 @@ export class TaskRepository {
       createdAt: text(task.created_at),
       timeBlocks: this.listTimeBlocksForTask(id),
       recurrence: this.listRecurrence(id),
+      dependsOn,
+      dependents,
     };
+  }
+
+  /**
+   * The tasks this one depends on (must be done first) and the tasks that depend on it.
+   * Both are plain task summaries so the API consumers can link to them directly.
+   */
+  listTaskDependencies(taskId: number): { dependsOn: TaskSummary[]; dependents: TaskSummary[] } {
+    const dependsOn = this.database.connection
+      .prepare(
+        `${taskSummarySql} JOIN (SELECT depends_on_task_id AS dep_task_id FROM task_dependencies WHERE task_id = ?) dep ON dep.dep_task_id = t.id
+         ORDER BY t.priority DESC, t.title COLLATE NOCASE`,
+      )
+      .all(taskId)
+      .map((value) => mapTaskSummary(row(value, "task dependency")));
+    const dependents = this.database.connection
+      .prepare(
+        `${taskSummarySql} JOIN (SELECT task_id AS dep_task_id FROM task_dependencies WHERE depends_on_task_id = ?) dep ON dep.dep_task_id = t.id
+         ORDER BY t.priority DESC, t.title COLLATE NOCASE`,
+      )
+      .all(taskId)
+      .map((value) => mapTaskSummary(row(value, "task dependent")));
+    return { dependsOn, dependents };
+  }
+
+  /**
+   * Link `taskId` to `dependsOnTaskId`: the latter must be done before the former. Hard
+   * invariant: the dependency graph stays acyclic, so the repo rejects anything that would
+   * form a cycle (which the scheduler could never honor). Callers own the transaction.
+   */
+  private insertTaskDependency(taskId: number, dependsOnTaskId: number): void {
+    if (taskId === dependsOnTaskId) throw new Error("A task cannot depend on itself");
+    const tasks = this.database.connection.prepare("SELECT id FROM tasks WHERE id IN (?, ?)").all(taskId, dependsOnTaskId);
+    if (tasks.length !== 2) throw new Error("Expected both tasks to exist");
+    // Adding the edge taskId -> dependsOnTaskId closes a cycle iff dependsOnTaskId already
+    // transitively requires taskId, so walk prerequisites starting from dependsOnTaskId.
+    const createsCycle = this.database.connection
+      .prepare(
+        `WITH RECURSIVE requires(id) AS (
+           SELECT depends_on_task_id FROM task_dependencies WHERE task_id = ?
+           UNION
+           SELECT d.depends_on_task_id FROM task_dependencies d JOIN requires ON d.task_id = requires.id
+         ) SELECT 1 FROM requires WHERE id = ? LIMIT 1`,
+      )
+      .get(dependsOnTaskId, taskId);
+    if (createsCycle) throw new Error("Task dependencies cannot contain a cycle");
+    this.database.connection
+      .prepare("INSERT OR IGNORE INTO task_dependencies (task_id, depends_on_task_id, created_at) VALUES (?, ?, ?)")
+      .run(taskId, dependsOnTaskId, now());
+  }
+
+  /**
+   * Replace the whole depends-on set for one task (the task editor saves the list it shows,
+   * same shape as `setTaskTags`). Drops current links first so every insert is cycle-checked
+   * against the fresh graph; the whole swap is one transaction.
+   */
+  setTaskDependencies(taskId: number, dependsOnTaskIds: number[]): void {
+    const uniqueIds = [...new Set(dependsOnTaskIds)];
+    this.database.connection.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.connection.prepare("DELETE FROM task_dependencies WHERE task_id = ?").run(taskId);
+      for (const dependsOnTaskId of uniqueIds) this.insertTaskDependency(taskId, dependsOnTaskId);
+      this.database.connection.exec("COMMIT");
+    } catch (error) {
+      this.database.connection.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  removeTaskDependency(taskId: number, dependsOnTaskId: number): void {
+    const result = this.database.connection
+      .prepare("DELETE FROM task_dependencies WHERE task_id = ? AND depends_on_task_id = ?")
+      .run(taskId, dependsOnTaskId);
+    if (result.changes !== 1) throw new Error("Task dependency does not exist");
   }
 
   createTask(input: CreateTaskInput): TaskDetail {
@@ -474,6 +552,7 @@ export class TaskRepository {
       if (result.changes !== 1) throw new Error("Expected task to exist");
     }
     if (input.tagIds) this.setTaskTags(taskId, input.tagIds);
+    if (input.dependsOnTaskIds) this.setTaskDependencies(taskId, input.dependsOnTaskIds);
   }
 
   setTaskLifecycle(id: number, status: LifecycleStatus): void {
@@ -736,7 +815,8 @@ export class TaskRepository {
             SELECT relation.parent_tag_id FROM task_tags direct JOIN tag_parents relation ON relation.child_tag_id = direct.tag_id WHERE direct.task_id = task.id
             UNION
             SELECT relation.parent_tag_id FROM tag_parents relation JOIN ancestors ON relation.child_tag_id = ancestors.id
-          ) SELECT json_group_array(tag.public_id) FROM ancestors JOIN tags tag ON tag.id = ancestors.id), '[]') AS derived_tag_ids
+          ) SELECT json_group_array(tag.public_id) FROM ancestors JOIN tags tag ON tag.id = ancestors.id), '[]') AS derived_tag_ids,
+          COALESCE((SELECT json_group_array(depends_on_task_id) FROM task_dependencies dep WHERE dep.task_id = task.id), '[]') AS depends_on_task_ids
          FROM tasks task
          WHERE task.kanban_status IN ('ready', 'in_progress') AND task.duration_estimated = 1
            AND task.duration_minutes_remaining > 0
@@ -763,6 +843,7 @@ export class TaskRepository {
           minChunkMinutes: integer(item.min_chunk_minutes), maxChunkMinutes: integer(item.max_chunk_minutes),
           earliestStart: nullableText(item.earliest_start), deadlineAt: nullableText(item.deadline_at),
           tagIds,
+          dependsOnTaskIds: json<number[]>(item.depends_on_task_ids, []),
           preferredDay,
         };
       })
@@ -774,7 +855,7 @@ export class TaskRepository {
     const result = this.database.connection
       .prepare(
         `INSERT INTO schedule_runs (public_id, model_version, horizon_start, horizon_end, status, input_json, created_at)
-         VALUES (?, 'cp-sat-v3', ?, ?, 'running', ?, ?)`,
+         VALUES (?, 'cp-sat-v4', ?, ?, 'running', ?, ?)`,
       )
       .run(randomUUID(), horizonStart, horizonEnd, JSON.stringify(input), timestamp);
     return this.getScheduleRun(insertedId(result));

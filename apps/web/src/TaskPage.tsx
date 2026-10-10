@@ -1,4 +1,4 @@
-import type { Tag, TaskDetail } from "@mind-palace/shared";
+import type { Tag, TaskDetail, TaskSummary } from "@mind-palace/shared";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
@@ -40,6 +40,58 @@ function PlanningSection({ task }: { task: TaskDetail }) {
         ? <span>{task.durationMinutesRemaining} minutes remaining{task.splittable ? ", splittable" : ""}</span>
         : <span>No time estimate</span>}
       {task.deadlineAt && <span>Due {formatDateTime(task.deadlineAt)}</span>}
+    </section>
+  );
+}
+
+function DependencyLink({ task, onRemove }: { task: TaskSummary; onRemove: () => void }) {
+  return (
+    <li className="dependency-row">
+      <Link to={`/tasks/${task.id}`}>
+        <span className="dependency-status">{task.kanbanStatus.replace("_", " ")}</span>
+        {task.title}
+      </Link>
+      <button type="button" className="mini-block-delete" onClick={onRemove}>Remove</button>
+    </li>
+  );
+}
+
+/**
+ * Read-only display of both dependency directions. Blocking tasks are picked on the
+ * Dashboard via the "Set blocking tasks" button (multi-select, like "Add to this week"); a
+ * dependency is not a hard gate — manual completion never ripples — but the scheduler
+ * orders prerequisites first.
+ */
+function DependencySection({ task, onRemoveDependency }: {
+  task: TaskDetail;
+  onRemoveDependency: (dependentTaskId: number, prerequisiteTaskId: number) => void;
+}) {
+  return (
+    <section>
+      <div className="section-label">Dependencies</div>
+      {task.dependsOn.length === 0 && task.dependents.length === 0 && (
+        <p className="dependency-empty">No dependencies. Set blocking tasks above.</p>
+      )}
+      {task.dependsOn.length > 0 && (
+        <div className="dependency-group">
+          <div className="dependency-group-label">Depends on (scheduled first)</div>
+          <ul className="dependency-list">
+            {task.dependsOn.map((dependsOn) => (
+              <DependencyLink key={dependsOn.id} task={dependsOn} onRemove={() => onRemoveDependency(task.id, dependsOn.id)} />
+            ))}
+          </ul>
+        </div>
+      )}
+      {task.dependents.length > 0 && (
+        <div className="dependency-group">
+          <div className="dependency-group-label">Depend on this</div>
+          <ul className="dependency-list">
+            {task.dependents.map((dependent) => (
+              <DependencyLink key={dependent.id} task={dependent} onRemove={() => onRemoveDependency(dependent.id, task.id)} />
+            ))}
+          </ul>
+        </div>
+      )}
     </section>
   );
 }
@@ -121,6 +173,15 @@ export function TaskPage() {
     await action(() => api.deleteTimeBlock(blockId).then(() => api.task(id)));
   }
 
+  async function removeDependency(dependentTaskId: number, prerequisiteTaskId: number) {
+    await action(() => api.removeTaskDependency(dependentTaskId, prerequisiteTaskId).then(() => api.task(id)));
+  }
+
+  function setBlockingTasks() {
+    // Pick blocking tasks on the Dashboard (multi-select, like "Add to this week").
+    navigate("/", { state: { selectingDependenciesFor: id } });
+  }
+
   async function convertToTag() {
     try {
       const tag = await api.convertTaskToTag(id);
@@ -152,6 +213,7 @@ export function TaskPage() {
           <button onClick={() => setEditing((current) => !current)}>
             {editing ? "Close editor" : "Edit task"}
           </button>
+          <button onClick={() => setBlockingTasks()}>Set blocking tasks</button>
           <button onClick={() => void convertToTag()}>Convert to tag</button>
           {task.kanbanStatus !== "completed" && (
             <button className="primary-button" onClick={() => void action(() => api.updateTask(id, { kanbanStatus: "completed" }))}>
@@ -182,6 +244,7 @@ export function TaskPage() {
             </section>
           )}
           <TimeBlockSection task={task} onAcceptSchedule={() => void acceptSchedule()} onDeleteBlock={(blockId) => void deleteBlock(blockId)} />
+          <DependencySection task={task} onRemoveDependency={(dependentId, prerequisiteId) => void removeDependency(dependentId, prerequisiteId)} />
         </div>
         <div className="detail-sidebar">
           <PlanningSection task={task} />

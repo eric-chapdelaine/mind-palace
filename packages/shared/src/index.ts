@@ -89,6 +89,10 @@ export interface TaskDetail extends TaskSummary {
   createdAt: string;
   timeBlocks: TimeBlock[];
   recurrence: RecurrenceRule | null;
+  /** Tasks this task depends on — they must be completed (and are scheduled) first. Empty unless linked. */
+  dependsOn: TaskSummary[];
+  /** Tasks that depend on this task — this task must come first for them. Not a hard gate on manual completion. */
+  dependents: TaskSummary[];
 }
 
 export interface Tag {
@@ -286,6 +290,11 @@ export interface UpdateTaskInput {
   earliestStart?: string | null;
   deadlineAt?: string | null;
   tagIds?: number[];
+  /**
+   * Replace the full set of tasks this task depends on (like `tagIds`, the editor sends the
+   * whole list and the repository diffs it against the current links). Omit to leave deps alone.
+   */
+  dependsOnTaskIds?: number[];
 }
 
 export interface CreateTagInput {

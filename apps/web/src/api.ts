@@ -56,6 +56,8 @@ export const api = {
     request<TaskDetail>("/api/tasks", { method: "POST", body: JSON.stringify(input) }),
   updateTask: (id: number, input: UpdateTaskInput) =>
     request<TaskDetail>(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+  removeTaskDependency: (id: number, dependsOnTaskId: number) =>
+    request<TaskDetail>(`/api/tasks/${id}/dependencies/${dependsOnTaskId}`, { method: "DELETE" }),
   createTag: (input: { title: string; description?: string; parentIds?: number[]; type?: TagType | null }) =>
     request<Tag>("/api/tags", { method: "POST", body: JSON.stringify(input) }),
   updateTag: (id: number, input: { title?: string; description?: string | null; type?: TagType | null; isArchived?: boolean }) =>

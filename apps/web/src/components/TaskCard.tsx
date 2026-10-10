@@ -14,9 +14,13 @@ function truncate(text: string, maxChars = 140): string {
   return `${cut.slice(0, lastSpace > 0 ? lastSpace : maxChars).trimEnd()}…`;
 }
 
-export function TaskCard({ task, selected = false, checked = false, allTags, onToggleComplete, onCardClick, onPointerDown }: {
+export function TaskCard({ task, selected = false, highlighted = false, highlightLabel, checked = false, allTags, onToggleComplete, onCardClick, onPointerDown }: {
   task: TaskSummary;
   selected?: boolean;
+  /** Mark the card as the subject of the current multi-select (e.g. the task whose blockers are being picked). */
+  highlighted?: boolean;
+  /** Badge text shown on a highlighted card (defaults to "this task"). */
+  highlightLabel?: string;
   checked?: boolean;
   /** Full tag list when the parent page has it — enables the goal breadcrumbs on the card. */
   allTags?: Tag[];
@@ -26,7 +30,7 @@ export function TaskCard({ task, selected = false, checked = false, allTags, onT
 }) {
   return (
     <Link
-      className={`task-card${selected ? " selected" : ""}`}
+      className={`task-card${selected ? " selected" : ""}${highlighted ? " highlighted" : ""}`}
       draggable={false}
       data-task-id={task.id}
       onDragStart={(event) => event.preventDefault()}
@@ -45,6 +49,7 @@ export function TaskCard({ task, selected = false, checked = false, allTags, onT
       <div className="task-card-line">
         <span className="task-priority">P{task.priority}:</span>
         <h3>{task.title}</h3>
+        {highlighted && <span className="task-card-highlight-tag">{highlightLabel ?? "this task"}</span>}
         {task.tags.slice(0, MAX_INLINE_TAGS).map((tag) => (
           <span className="task-card-inline-tag" key={tag.id}>{tag.title}</span>
         ))}

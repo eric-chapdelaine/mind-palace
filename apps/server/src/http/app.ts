@@ -139,6 +139,7 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
       ...(body.earliestStart === null || typeof body.earliestStart === "string" ? { earliestStart: body.earliestStart } : {}),
       ...(body.deadlineAt === null || typeof body.deadlineAt === "string" ? { deadlineAt: body.deadlineAt } : {}),
       ...(Array.isArray(body.tagIds) ? { tagIds: body.tagIds.map(Number) } : {}),
+      ...(Array.isArray(body.dependsOnTaskIds) ? { dependsOnTaskIds: body.dependsOnTaskIds.map(Number) } : {}),
     });
     return context.json(tasks.getTask(taskId));
   });
@@ -221,6 +222,13 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
   app.post("/api/tasks/:id/accept-schedule", (context) => {
     tasks.acceptTaskSchedule(numberParam(context.req.param("id"), "task id"));
     return context.json(schedule.getSchedule());
+  });
+
+  // Remove the "task :id depends on :dependencyId" link (either direction of the page UI).
+  app.delete("/api/tasks/:id/dependencies/:dependencyId", (context) => {
+    const taskId = numberParam(context.req.param("id"), "task id");
+    tasks.removeTaskDependency(taskId, numberParam(context.req.param("dependencyId"), "task id"));
+    return context.json(tasks.getTask(taskId));
   });
 
   app.post("/api/tasks/:id/recurrence", async (context) => {

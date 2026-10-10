@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { reservedTagPublicIds, type CreateTaskInput, type KanbanStatus, type Tag, type TaskSummary } from "@mind-palace/shared";
+import { useLocation, useNavigate } from "react-router-dom";
+import { reservedTagPublicIds, type CreateTaskInput, type KanbanStatus, type Tag, type TaskDetail, type TaskSummary } from "@mind-palace/shared";
 import { api } from "./api";
 import { CreateTaskPanel } from "./components/CreateTaskPanel";
 import { TaskCard } from "./components/TaskCard";
@@ -15,13 +16,44 @@ const columns: Array<{ status: KanbanStatus; label: string }> = [
 ];
 
 export function DashboardPage() {
+  // "Set blocking tasks" on a task page lands here in multi-select mode: router state carries
+  // the target task id, its card is highlighted, and its current blockers start pre-selected
+  // so the board doubles as a full view of what blocks it. Save replaces the set; Cancel
+  // heads back to the task page. Without the state flag this is the plain dashboard.
+  const navigate = useNavigate();
+  const location = useLocation();
+  const dependencyTargetId = (location.state as { selectingDependenciesFor?: number } | null)?.selectingDependenciesFor;
+
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [includedTagIds, setIncludedTagIds] = useState<number[]>(() => readTagFilterPreferences().includedTagIds);
   const [excludedTagIds, setExcludedTagIds] = useState<number[]>(() => readTagFilterPreferences().excludedTagIds);
-  const [selecting, setSelecting] = useState(false);
+  const [selecting, setSelecting] = useState(dependencyTargetId !== undefined);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [dependencyTarget, setDependencyTarget] = useState<TaskDetail | null>(null);
+
+  // Pre-select the blockers (and remember the target task for the hint) once we know which
+  // task we are blocking for; switching back to a plain dashboard resets that state.
+  useEffect(() => {
+    if (dependencyTargetId === undefined) {
+      setDependencyTarget(null);
+      setSelectedIds([]);
+      return;
+    }
+    let cancelled = false;
+    void api.task(dependencyTargetId)
+      .then((task) => {
+        if (cancelled) return;
+        setDependencyTarget(task);
+        setSelectedIds(task.dependsOn.map((dependsOn) => dependsOn.id));
+      })
+      .catch((targetError) => {
+        if (cancelled) return;
+        setError(targetError instanceof Error ? targetError.message : String(targetError));
+      });
+    return () => { cancelled = true; };
+  }, [dependencyTargetId]);
 
   // Kanban drag state: which card is being dragged (its spot shows a dotted placeholder), its
   // measured height (so the placeholder matches), and where a drop would land (the hint line).
@@ -266,6 +298,8 @@ export function DashboardPage() {
   const thisWeekTagId = tags.find((tag) => tag.publicId === reservedTagPublicIds.thisWeek)?.id;
 
   function toggleSelection(taskId: number) {
+    // Selecting the task itself would close a dependency cycle, so its card is inert here.
+    if (taskId === dependencyTargetId) return;
     setSelectedIds((current) => current.includes(taskId)
       ? current.filter((id) => id !== taskId)
       : [...current, taskId]);
@@ -274,6 +308,19 @@ export function DashboardPage() {
   function cancelSelection() {
     setSelectedIds([]);
     setSelecting(false);
+    if (dependencyTargetId !== undefined) navigate(`/tasks/${dependencyTargetId}`);
+  }
+
+  async function saveBlockingTasks() {
+    if (dependencyTargetId === undefined) return;
+    try {
+      await api.updateTask(dependencyTargetId, {
+        dependsOnTaskIds: selectedIds.filter((id) => id !== dependencyTargetId),
+      });
+      navigate(`/tasks/${dependencyTargetId}`);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : String(nextError));
+    }
   }
 
   async function addSelectedToThisWeek() {
@@ -307,19 +354,38 @@ export function DashboardPage() {
           </div>
           {selecting ? (
             <div className="button-row">
-              <button
-                className="primary-button"
-                disabled={selectedIds.length === 0}
-                onClick={() => void addSelectedToThisWeek()}
-              >
-                Add {selectedIds.length === 0 ? "tasks" : `${selectedIds.length} task${selectedIds.length === 1 ? "" : "s"}`} to this week
-              </button>
-              <button onClick={cancelSelection}>Cancel</button>
+              {dependencyTargetId !== undefined ? (
+                <>
+                  <button className="primary-button" onClick={() => void saveBlockingTasks()}>
+                    Save {selectedIds.length === 0 ? "blocking tasks" : `${selectedIds.length} blocking task${selectedIds.length === 1 ? "" : "s"}`}
+                  </button>
+                  <button onClick={cancelSelection}>Cancel</button>
+                </>
+              ) : (
+                <>
+                  <button
+                    className="primary-button"
+                    disabled={selectedIds.length === 0}
+                    onClick={() => void addSelectedToThisWeek()}
+                  >
+                    Add {selectedIds.length === 0 ? "tasks" : `${selectedIds.length} task${selectedIds.length === 1 ? "" : "s"}`} to this week
+                  </button>
+                  <button onClick={cancelSelection}>Cancel</button>
+                </>
+              )}
             </div>
           ) : <button className="primary-button" onClick={() => setSelecting(true)}>Add to this week</button>}
         </div>
       </header>
-      {selecting && <p className="selection-hint muted">Selecting tasks to schedule this week — click task cards to toggle them.</p>}
+      {selecting && (
+        <p className="selection-hint muted">
+          {dependencyTargetId !== undefined
+            ? dependencyTarget
+              ? `Selecting tasks that block “${dependencyTarget.title}” — click task cards to toggle them, then Save.`
+              : "Selecting tasks that block this task — click task cards to toggle them, then Save."
+            : "Selecting tasks to schedule this week — click task cards to toggle them."}
+        </p>
+      )}
       {error && <div className="error-banner">{error}</div>}
       <div className="mind-layout">
         <section className="kanban-board">
@@ -339,6 +405,8 @@ export function DashboardPage() {
                           task={task}
                           allTags={tags}
                           selected={selecting && selectedIds.includes(task.id)}
+                          highlighted={selecting && dependencyTargetId === task.id}
+                          highlightLabel="this task"
                           {...(selecting ? { onCardClick: () => toggleSelection(task.id) } : {})}
                           onPointerDown={(event) => beginCardPointerDown(event, task.id)}
                           checked={task.kanbanStatus === "completed"}
