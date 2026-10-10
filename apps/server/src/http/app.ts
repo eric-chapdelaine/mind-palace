@@ -296,8 +296,24 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
 
   const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../web/dist");
   if (existsSync(webRoot)) {
-    app.use("/*", serveStatic({ root: webRoot }));
-    app.get("/*", serveStatic({ root: webRoot, path: "index.html" }));
+    // Hashed build output. A miss under /assets/ must be a hard 404: falling through to the SPA
+    // shell below would answer a stale asset URL with `index.html` (200, text/html), which
+    // browsers and CDNs cache and then refuse to execute as JS/CSS.
+    app.use("/assets/*", serveStatic({
+      root: webRoot,
+      onFound: (_path, context) => context.header("Cache-Control", "public, max-age=31536000, immutable"),
+    }));
+    app.get("/assets/*", (context) => context.body(null, 404));
+
+    app.use("/*", serveStatic({
+      root: webRoot,
+      onFound: (_path, context) => context.header("Cache-Control", "no-cache"),
+    }));
+    app.get("/*", serveStatic({
+      root: webRoot,
+      path: "index.html",
+      onFound: (_path, context) => context.header("Cache-Control", "no-cache"),
+    }));
   }
 
   return app;
