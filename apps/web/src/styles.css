@@ -43,7 +43,8 @@ code, pre { overflow-wrap: anywhere; white-space: pre-wrap; }
 /* App shell: compact top navigation bar + breadcrumb trail on every page. */
 .app-layout { display: flex; flex-direction: column; min-height: 100vh; }
 .app-topbar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .6rem 1.5rem; background: #fff; border-bottom: 1px solid #ccc; }
-.app-brand { font-weight: 800; font-size: 1.05rem; white-space: nowrap; }
+.app-brand { font-weight: 800; font-size: 1.05rem; white-space: nowrap; color: #222; text-decoration: none; }
+.app-brand:hover { text-decoration: underline; }
 .app-topbar nav { display: flex; flex-wrap: wrap; gap: .25rem; }
 .app-topbar nav a { text-decoration: none; color: #444; font-weight: 600; padding: .45rem .7rem; border-radius: 4px; }
 .app-topbar nav a:hover { background: #eee; }

@@ -25,7 +25,9 @@ function Layout() {
   return (
     <div className="app-layout">
       <header className="app-topbar">
-        <div className="app-brand">Mind Palace</div>
+        <Link to="/" onClick={resetTrail} className="app-brand">
+          Mind Palace
+        </Link>
         <nav>
           {navItems.map((item) => (
             <Link
