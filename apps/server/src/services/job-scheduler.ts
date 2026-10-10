@@ -59,7 +59,8 @@ function zoneOffsetMs(timeZone: string, date: Date): number {
     Number(parts.year), Number(parts.month) - 1, Number(parts.day),
     Number(parts.hour), Number(parts.minute), Number(parts.second),
   );
-  return asUtc - date.getTime();
+  // Drop milliseconds so the offset is a whole number of seconds and pinned times land exactly.
+  return asUtc - (date.getTime() - date.getMilliseconds());
 }
 
 /** Next instant after `now` whose wall clock in `timeZone` matches `"HH:MM"`. */
