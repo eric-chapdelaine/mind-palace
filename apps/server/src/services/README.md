@@ -8,5 +8,6 @@ Services own process and provider boundaries; repositories own SQLite writes.
 - `garmin-service.ts` syncs Garmin Connect sleep and activities through the `workers/garmin` Python worker; a token store on disk is what marks it `connected`.
 - `recurrence-service.ts` materializes routine templates as independently completable child tasks through a requested date.
 - `worker.ts` is the shared runner for the Python workers (spawn, timeout, JSON-in/JSON-out, `{"error"}` handling).
+- `job-scheduler.ts` runs the recurring jobs declared in `src/jobs.ts` on in-process intervals; `GET /api/jobs` reports their status.
 
 Google Calendar accepts normalized imports in v0. Garmin Connect is registered in the composition root's `integrationRegistry`, so `GET /api/integrations` reports its connection state and the UI gates on it. OAuth and provider-specific polling can be added inside these services without changing task or health persistence.

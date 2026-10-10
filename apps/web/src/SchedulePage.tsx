@@ -274,17 +274,27 @@ export function SchedulePage() {
 
   async function load() {
     try {
-      const [nextSchedule, nextTasks, nextTags, nextWeather] = await Promise.all([
+      const [nextSchedule, nextTasks, nextTags] = await Promise.all([
         api.schedule(),
         api.tasks(),
         api.tags(),
-        api.weather(),
       ]);
       setSchedule(nextSchedule);
       setTasks(nextTasks);
       setTags(nextTags);
-      setWeather(nextWeather);
       setError(null);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : String(loadError));
+    }
+  }
+
+  // Weather follows the visible week (plus a day of slack) so navigating back to a past week shows
+  // the stored forecast hours for those days, not just the fresh cache.
+  async function loadWeather() {
+    const from = addDays(rangeStart, -1).toISOString();
+    const to = addDays(rangeStart, 8).toISOString();
+    try {
+      setWeather(await api.weather(from, to));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError));
     }
@@ -293,6 +303,10 @@ export function SchedulePage() {
   useEffect(() => {
     void load();
   }, []);
+
+  useEffect(() => {
+    void loadWeather();
+  }, [rangeStart]);
 
   // The integration is gated on authentication: only ask for (and render) Garmin context once a
   // token store exists. `connected` comes from GET /api/integrations, so this stays generic.
@@ -541,7 +555,7 @@ export function SchedulePage() {
     year: "numeric",
   })}`;
 
-  // High temp + max rain chance per day, condensed from the 3-hourly Boston forecast cache
+  // High temp + max rain chance per day, condensed from the hourly Boston forecast cache
   // into a single line in each calendar day header.
   const dayWeather = new Map<string, { high: number; rain: number }>();
   const dayHourly = new Map<string, WeatherForecast[]>();

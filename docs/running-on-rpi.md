@@ -342,15 +342,14 @@ is nothing to disable if you don't want it. The generic endpoint
    overlays appear on `http://<pi-hostname>:4310/schedule`. Removing the
    token store again hides them.
 
-5. **Sync on a schedule.** The first sync pulls a short lookback window
-   (7 days of sleep, 30 days of activities); later syncs fetch only from
-   the newest stored date forward, so a daily job stays cheap. Add it to
-   the `pi` user's crontab alongside the manual button:
+5. **Syncing is already scheduled.** The first sync pulls a short lookback
+   window (7 days of sleep, 30 days of activities); later syncs fetch only
+   from the newest stored date forward, so a daily job stays cheap. The
+   server runs it in-process once a day (`garmin-sync` in
+   `apps/server/src/jobs.ts`) — there is no crontab to add. Inspect it with:
 
    ```sh
-   crontab -e
-   # every day at 11:00
-   0 11 * * * curl -fsS -X POST http://127.0.0.1:4310/api/integrations/garmin/sync >/dev/null
+   curl -s http://localhost:4310/api/jobs
    ```
 
    Sleep and activities land in the `sleep_sessions` / `health_activities`

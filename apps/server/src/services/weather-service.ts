@@ -19,11 +19,33 @@ interface NwsForecastResponse {
 const headers = { "User-Agent": "mind-palace/0.1 (local personal project)", Accept: "application/geo+json" };
 
 export class WeatherService {
+  private inFlight: Promise<void> | null = null;
+
   constructor(private readonly tasks: TaskRepository) {}
 
-  async getForecast(force = false): Promise<WeatherForecast[]> {
-    const cached = this.tasks.listWeather();
-    if (!force && cached.length > 0) return cached;
+  /**
+   * Refreshes the cache when it is empty/expired (or `force` is set). De-duplicates concurrent
+   * callers so the scheduled job and an on-request read never both hit NWS at once.
+   */
+  async ensureFresh(force = false): Promise<void> {
+    if (!force && this.tasks.listWeather().length > 0) return;
+    if (this.inFlight) return this.inFlight;
+    this.inFlight = this.fetchAndStore().finally(() => {
+      this.inFlight = null;
+    });
+    return this.inFlight;
+  }
+
+  /**
+   * Ensures the forecast cache is fresh, then returns stored hours for the requested range
+   * (including expired rows, so past days on the calendar still render).
+   */
+  async getWeather(force = false, from?: string, to?: string): Promise<WeatherForecast[]> {
+    await this.ensureFresh(force);
+    return this.tasks.listWeatherHistory(from, to);
+  }
+
+  private async fetchAndStore(): Promise<void> {
     const pointsResponse = await fetch("https://api.weather.gov/points/42.3601,-71.0589", { headers });
     if (!pointsResponse.ok) throw new Error(`Weather location request failed: ${pointsResponse.status}`);
     const points = await pointsResponse.json() as NwsPointsResponse;
@@ -31,12 +53,8 @@ export class WeatherService {
     if (!forecastResponse.ok) throw new Error(`Hourly weather request failed: ${forecastResponse.status}`);
     const forecast = await forecastResponse.json() as NwsForecastResponse;
     const fetchedAt = new Date();
-    const weekday = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short" }).format(fetchedAt);
-    const weekdayIndex = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(weekday);
-    const end = new Date(fetchedAt);
-    end.setUTCDate(end.getUTCDate() + (7 - weekdayIndex));
+    // Store every hourly period NWS returns; the API already limits the horizon to ~7 days.
     const values = forecast.properties.periods
-      .filter((period) => new Date(period.startTime) < end)
       .map((period) => ({
         forecastAt: new Date(period.startTime).toISOString(),
         temperatureF: period.temperature,
@@ -44,6 +62,5 @@ export class WeatherService {
         shortForecast: period.shortForecast,
       }));
     this.tasks.upsertWeather(values, fetchedAt.toISOString(), new Date(fetchedAt.getTime() + 8 * 60 * 60 * 1000).toISOString());
-    return this.tasks.listWeather();
   }
 }

@@ -80,6 +80,16 @@ function mapTimeBlock(value: Row): TimeBlock {
   };
 }
 
+function mapWeatherForecast(value: Row): WeatherForecast {
+  return {
+    forecastAt: text(value.forecast_at),
+    temperatureF: value.temperature_f === null ? null : integer(value.temperature_f),
+    precipitationProbability: value.precipitation_probability === null ? null : integer(value.precipitation_probability),
+    shortForecast: nullableText(value.short_forecast),
+    expiresAt: text(value.expires_at),
+  };
+}
+
 function mapSleepSession(value: Row): SleepSession {
   return {
     id: integer(value.id),
@@ -917,16 +927,24 @@ export class TaskRepository {
     return this.database.connection
       .prepare("SELECT * FROM weather_forecasts WHERE location_key = 'boston-ma' AND expires_at > ? ORDER BY forecast_at")
       .all(now())
-      .map((value) => {
-        const item = row(value, "weather forecast");
-        return {
-          forecastAt: text(item.forecast_at),
-          temperatureF: item.temperature_f === null ? null : integer(item.temperature_f),
-          precipitationProbability: item.precipitation_probability === null ? null : integer(item.precipitation_probability),
-          shortForecast: nullableText(item.short_forecast),
-          expiresAt: text(item.expires_at),
-        };
-      });
+      .map((value) => mapWeatherForecast(row(value, "weather forecast")));
+  }
+
+  /**
+   * Stored forecast hours for a date range, including expired rows, so the calendar can render
+   * weather for days that have already passed. `from`/`to` are optional ISO bounds on
+   * `forecast_at` (`to` exclusive). This ignores freshness — callers deciding whether to refetch
+   * should check `listWeather` instead.
+   */
+  listWeatherHistory(from?: string, to?: string): WeatherForecast[] {
+    const values = from && to
+      ? this.database.connection
+        .prepare("SELECT * FROM weather_forecasts WHERE location_key = 'boston-ma' AND forecast_at >= ? AND forecast_at < ? ORDER BY forecast_at")
+        .all(from, to)
+      : this.database.connection
+        .prepare("SELECT * FROM weather_forecasts WHERE location_key = 'boston-ma' ORDER BY forecast_at")
+        .all();
+    return values.map((value) => mapWeatherForecast(row(value, "weather forecast")));
   }
 
   /**

@@ -23,6 +23,7 @@ import type { GarminService } from "../services/garmin-service.js";
 import type { ScheduleService } from "../services/schedule-service.js";
 import type { WeatherService } from "../services/weather-service.js";
 import type { RecurrenceService } from "../services/recurrence-service.js";
+import type { JobScheduler } from "../services/job-scheduler.js";
 
 interface Dependencies {
   tasks: TaskRepository;
@@ -32,6 +33,7 @@ interface Dependencies {
   garmin: GarminService;
   integrationRegistry: IntegrationRegistration[];
   recurrence: RecurrenceService;
+  scheduler: JobScheduler;
 }
 
 /** One authenticated provider's place in `GET /api/integrations` — the composition root fills these in. */
@@ -63,7 +65,7 @@ function optionalText(value: unknown): string | null | undefined {
   return value.trim() || null;
 }
 
-export function createHttpApp({ tasks, schedule, weather, calendar, garmin, integrationRegistry, recurrence }: Dependencies): Hono {
+export function createHttpApp({ tasks, schedule, weather, calendar, garmin, integrationRegistry, recurrence, scheduler }: Dependencies): Hono {
   const app = new Hono();
 
   app.onError((error, context) => {
@@ -73,10 +75,12 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
   });
 
   app.get("/api/health", (context) => context.json({ ok: true }));
+  app.get("/api/jobs", (context) => context.json(scheduler.status()));
   app.get("/api/tasks", (context) => context.json(tasks.listTasks()));
   app.get("/api/tags", (context) => context.json(tasks.listTags()));
   app.get("/api/schedule", (context) => context.json(schedule.getSchedule()));
-  app.get("/api/weather", async (context) => context.json(await weather.getForecast()));
+  app.get("/api/weather", async (context) =>
+    context.json(await weather.getWeather(false, context.req.query("from"), context.req.query("to"))));
   app.get("/api/health-observations", (context) =>
     context.json(tasks.listSleepSessions(context.req.query("from"), context.req.query("to"))));
   app.get("/api/health-activities", (context) =>
@@ -249,7 +253,7 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
     const body = (await context.req.json()) as Record<string, unknown>;
     return context.json({ taskIds: recurrence.materializeThrough(requiredString(body.endDate, "endDate")) });
   });
-  app.post("/api/weather/refresh", async (context) => context.json(await weather.getForecast(true)));
+  app.post("/api/weather/refresh", async (context) => context.json(await weather.getWeather(true)));
 
   app.post("/api/integrations/calendar/import", async (context) => {
     const body = (await context.req.json()) as Record<string, unknown>;

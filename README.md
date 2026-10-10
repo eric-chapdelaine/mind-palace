@@ -91,12 +91,23 @@ The server looks for `$GARMINTOKENSTORE`, then `~/.garminconnect`, then `~/.gart
 the resolved path to the worker. `POST /api/integrations/garmin/sync` is incremental: it asks
 the database for the newest stored sleep and activity dates and fetches only from there forward.
 Once authenticated, the Schedule page shows a **Sync Garmin** button and the calendar health
-overlays, and a daily cron job can drive the same endpoint:
+overlays. The server also syncs once a day through its [background job registry](#scheduled-jobs);
+there is no crontab to install.
 
-```sh
-# every day at 11:00
-0 11 * * * curl -fsS -X POST http://127.0.0.1:4310/api/integrations/garmin/sync >/dev/null
-```
+## Scheduled jobs
+
+Recurring background work is declared in `apps/server/src/jobs.ts` and run in-process by the
+server, so the schedule is versioned with the repo instead of living in a machine's crontab. Add
+an entry to that array to schedule new work; `GET /api/jobs` reports each job's last run and error.
+
+Jobs must be idempotent and cheap when there is nothing to do, because a restart can fire
+`runOnStart` and an interval tick can land at any moment. Current jobs:
+
+- `weather-refresh` — hourly cache-aware check; hits NWS only once the eight-hour cache expires.
+- `garmin-sync` — daily; no-ops until a Garmin token store exists.
+
+The nightly database backup is deliberately *not* here: it runs on the dev machine and needs
+`Persistent=true`, so it stays a systemd user timer (see `docs/running-on-rpi.md` §8).
 
 ## Configuration
 
