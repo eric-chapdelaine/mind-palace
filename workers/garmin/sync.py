@@ -8,8 +8,8 @@ this worker only talks to Garmin and normalizes the provider payloads into the s
 Input:  {"sleepFrom": "YYYY-MM-DD", "activitiesFrom": "YYYY-MM-DD", "today": "YYYY-MM-DD"}
 Output: {"sleep": [...], "activities": [...]}
 
-Authentication reuses the existing Garmin token stores (~/.garminconnect or ~/.garth), so this
-process never touches a password. Only normalized fields are returned — never the raw payload.
+Authentication uses the token store path the server resolves and passes via GARMINTOKENSTORE, so
+this process never touches a password. Only normalized fields are returned — never the raw payload.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 MAX_LOOKBACK_DAYS = 90
-TOKEN_STORES = ("~/.garminconnect", "~/.garth")
+TOKEN_STORE_ENV = "GARMINTOKENSTORE"
 
 
 def iso_from_ms(milliseconds: float | int | None) -> str | None:
@@ -59,23 +59,18 @@ def minutes(seconds: Any) -> int | None:
 
 
 def connect_client() -> Any:
-    """Load an authenticated Garmin client from the first working token store."""
+    """Load an authenticated Garmin client from the token store path the server resolved."""
     from garminconnect import Garmin
 
-    candidates = [store for store in (os.getenv("GARMINTOKENSTORE"), *TOKEN_STORES) if store]
-    errors: list[str] = []
-    for store in candidates:
-        path = Path(store).expanduser()
-        if not path.exists():
-            continue
-        try:
-            client = Garmin()
-            client.login(str(path))
-            return client
-        except Exception as error:  # noqa: BLE001 - report whichever store failed and try the next
-            errors.append(f"{store}: {error}")
-    detail = "; ".join(errors) or "no token store found"
-    raise RuntimeError(f"Could not authenticate with Garmin Connect ({detail})")
+    store = os.getenv(TOKEN_STORE_ENV)
+    if not store:
+        raise RuntimeError(f"{TOKEN_STORE_ENV} is required; the server passes the resolved token store path")
+    path = Path(store).expanduser()
+    if not path.exists():
+        raise RuntimeError(f"Garmin token store not found at {path}")
+    client = Garmin()
+    client.login(str(path))
+    return client
 
 
 def normalize_sleep(client: Any, start_date: date, end_date: date) -> list[dict[str, Any]]:

@@ -15,8 +15,10 @@ expands to the service user's home).
 - **On the Pi:** the entire app — SQLite database (e.g.
   `/home/pi/mind-palace/mind-palace.db`), the Hono API server
   (`pnpm --filter @mind-palace/server start` → `tsx src/index.ts`), and the
-  CP-SAT scheduler, which the server spawns on demand as a subprocess
-  (`uv run --project workers/cp-sat python scheduler.py`).
+  Python workers the server spawns on demand as subprocesses: the CP-SAT
+  scheduler (`uv run --project workers/cp-sat python scheduler.py`) and,
+  once authenticated, the Garmin Connect sync
+  (`uv run --project workers/garmin python sync.py`).
 - **On the dev machine:** the frontend **build**. Vite
   (`pnpm --filter @mind-palace/web build`) is too slow/memory-hungry to run
   on the Pi, so `apps/web/dist/` is compiled there and rsync'd to the Pi.
@@ -70,16 +72,18 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 cd ~/mind-palace
 pnpm install
 uv sync --project workers/cp-sat
+uv sync --project workers/garmin     # only needed if you use the Garmin integration (see §9)
 ```
 
 Why these pieces: packages import each other as TypeScript source, so the
 backend needs **no build step**. `pnpm install` links the TS sources and
-`tsx` runs them directly. `uv sync` prepares the Python environment the
-scheduler runs in.
+`tsx` runs them directly. `uv sync` prepares the Python environment each
+worker runs in (`cp-sat` for the scheduler, `garmin` for the optional
+Garmin Connect sync).
 
 ## 3. Environment variables
 
-The server reads exactly three (`apps/server/src/config.ts`):
+The server reads three deployment variables (`apps/server/src/config.ts`):
 
 | Variable | Default | Required in prod |
 |---|---|---|
@@ -91,6 +95,11 @@ Note: a `.env` file in the repo root is **not read by anything** (the code
 has no dotenv and no env-based secrets today). Credentials and config live
 in the systemd unit's `Environment=` lines. If a future integration needs
 env-based secrets, add them to the unit, not to `.env`.
+
+Integrations read their own environment on top of these. Garmin Connect
+uses `GARMINTOKENSTORE` to locate its credential/token store; it is
+optional (the server falls back to `~/.garminconnect` then `~/.garth`) and
+only matters once you authenticate — see [§9](#9-optional-integrations-garmin-connect).
 
 ## 4. First manual run (sanity check before systemd)
 
@@ -125,6 +134,7 @@ Environment=PATH=/home/pi/.local/bin:/home/pi/.nvm/current/bin:/usr/local/bin:/u
 Environment=HOST=0.0.0.0
 Environment=PORT=4310
 Environment=DATABASE_PATH=/home/pi/mind-palace/mind-palace.db
+Environment=GARMINTOKENSTORE=/home/pi/.garminconnect
 ExecStart=/home/pi/.local/share/pnpm/bin/pnpm --filter @mind-palace/server start
 Restart=on-failure
 RestartSec=5
@@ -147,8 +157,12 @@ Details that matter:
 - **`Environment=PATH` must include `~/.local/bin`** — the scheduler
   spawns `uv`, which the Astral installer puts at `~/.local/bin/uv`.
   Without it the journal shows `spawn uv ENOENT` on every schedule
-  generation. Use `~/.nvm/current/bin` for node so the path stays valid
+  generation (and Garmin sync would fail the same way). Use
+  `~/.nvm/current/bin` for node so the path stays valid
   when you upgrade Node via nvm.
+- **`Environment=GARMINTOKENSTORE` is optional** but recommended: it pins
+  the token store path so the server doesn't have to guess the home
+  directory under systemd. Harmless if you never authenticate.
 - **`ExecStart` uses the absolute pnpm path**
   (`~/.local/share/pnpm/bin/pnpm`): systemd does not run your login shell,
   so it would otherwise not find pnpm or node.
@@ -184,6 +198,8 @@ git pull --ff-only origin main
 #   pnpm install
 # Only if the pull changed workers/cp-sat/pyproject.toml or uv.lock:
 #   uv sync --project workers/cp-sat
+# If you use Garmin and the pull changed workers/garmin/pyproject.toml or uv.lock:
+#   uv sync --project workers/garmin
 DATABASE_PATH=$HOME/mind-palace/mind-palace.db pnpm db:migrate
 sudo systemctl start mind-palace.service
 journalctl -u mind-palace.service -f
@@ -260,6 +276,96 @@ cp /tmp/restore.db ~/mind-palace/mind-palace.db
 sudo systemctl start mind-palace.service   # server migrates forward if the snapshot is older
 ```
 
+## 9. Optional integrations (Garmin Connect)
+
+The app ships an optional Garmin Connect integration: it syncs sleep and
+recorded activities and shows them as read-only context on the Schedule
+calendar. **It is enabled by authenticating, not by a config flag** — a
+provider appears in the UI only once its credential/token store exists on
+disk. Until then the app behaves exactly as if the integration were not
+there (no sync button, no calendar overlay, no extra requests), so there
+is nothing to disable if you don't want it. The generic endpoint
+`GET /api/integrations` reports every provider's connection state.
+
+### Garmin Connect
+
+1. **Install the worker's Python deps** (once; `workers/garmin` was already
+   synced in §2 if you ran that line):
+
+   ```sh
+   cd ~/mind-palace
+   uv sync --project workers/garmin
+   ```
+
+2. **Authenticate to create the token store.** Run the login on the Pi over
+   SSH, through the worker's uv environment so `garth` is importable:
+
+   ```sh
+   cd ~/mind-palace
+   uv run --project workers/garmin python -c \
+     "import garth; garth.login(); garth.save('/home/pi/.garminconnect')"
+   ```
+
+   This prompts for your Garmin email/password (and MFA, if enabled) and
+   writes the store to `/home/pi/.garminconnect`. **The store is a
+   credential** — keep it `chmod 700` and out of git and shared backups.
+   To avoid a second login, you can instead run the same command on your
+   dev machine and `scp -r` the store to `pi@rpi:~/.garminconnect`.
+
+   The server runs as user `pi` (see the unit in §5), so the store must
+   live in `/home/pi`; `GARMINTOKENSTORE` exists for the case where it
+   doesn't.
+
+3. **Point the server at it** (recommended under systemd). Add to the unit
+   and reload — this is already in the §5 unit:
+
+   ```ini
+   Environment=GARMINTOKENSTORE=/home/pi/.garminconnect
+   ```
+
+   ```sh
+   sudo systemctl daemon-reload && sudo systemctl restart mind-palace.service
+   ```
+
+   The server resolves this path with a plain filesystem check — no
+   subprocess, no network — then passes it to the worker, so the check is
+   cheap and safe even before you've authenticated.
+
+4. **Verify** the app sees it:
+
+   ```sh
+   curl -s http://localhost:4310/api/integrations
+   # → [{"key":"garmin","label":"Garmin Connect","connected":true,...}]
+   ```
+
+   `connected:true` makes the **Sync Garmin** button and the sleep/activity
+   overlays appear on `http://<pi-hostname>:4310/schedule`. Removing the
+   token store again hides them.
+
+5. **Sync on a schedule.** The first sync pulls a short lookback window
+   (7 days of sleep, 30 days of activities); later syncs fetch only from
+   the newest stored date forward, so a daily job stays cheap. Add it to
+   the `pi` user's crontab alongside the manual button:
+
+   ```sh
+   crontab -e
+   # every day at 11:00
+   0 11 * * * curl -fsS -X POST http://127.0.0.1:4310/api/integrations/garmin/sync >/dev/null
+   ```
+
+   Sleep and activities land in the `sleep_sessions` / `health_activities`
+   tables in the same SQLite database, so the daily backup in §8 already
+   covers them.
+
+### Future integrations
+
+Any provider added later follows the same shape: `uv sync` its worker (if
+it has one), authenticate it so its credential/token store exists, set the
+provider-specific env var if the store isn't in the default location, and
+it will show up in `GET /api/integrations` with its own control in the UI.
+There is no central enable/disable list to edit — **authentication is the
+switch**.
+
 ## Troubleshooting
 
 - **`command not found: pnpm/node/uv` over SSH.** Non-interactive SSH
@@ -271,6 +377,11 @@ sudo systemctl start mind-palace.service   # server migrates forward if the snap
 - **`spawn uv ENOENT` in `journalctl -u mind-palace.service`.** The unit's
   `Environment=PATH` is missing `~/.local/bin`; add it and
   `sudo systemctl daemon-reload && sudo systemctl restart mind-palace.service`.
+- **Garmin sync fails with "not authenticated" / no Sync button.** No token
+  store was found for the service user. Re-run the login in §9 (as user
+  `pi`), set `Environment=GARMINTOKENSTORE` to its absolute path, and
+  restart. `curl -s http://localhost:4310/api/integrations` should report
+  `connected:true`.
 - **Page shows old UI after an update.** The dev-machine build+rsync step
   (#6) was skipped, or the browser cached `index.html` — hard refresh.
 - **Git over SSH warns about a changed host key.** Your Pi's

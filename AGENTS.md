@@ -157,9 +157,10 @@ useEffect(() => {
 3. Surface it in the UI (tag row already renders on cards; add actions where needed).
 
 **New integration** (calendar/garmin pattern):
-1. Normalize the provider payload into the existing import shapes in `integration-service.ts`.
+1. Normalize the provider payload into the existing import shapes in `calendar-import-service.ts`.
 2. Use `ensureIntegrationAccount` + `findMappedTask`/`mapExternalTask` for idempotency.
 3. Persist only normalized data; keep provider-specific OAuth/polling outside the domain model.
+4. **Enablement is authentication, not a config flag.** A provider is `connected` once its credential/token store exists on disk (checked cheaply in the service, e.g. `GarminService.tokenStorePath`); register it in the composition-root `integrationRegistry` so `GET /api/integrations` reports it and the UI can gate on `connected`. Do not add env toggles or a config table for on/off. (The calendar import path has no credential store, so it is intentionally not a registered provider.)
 
 **New frontend page**:
 1. Page component in `apps/web/src/` following the `TaskPage.tsx` structure (state → load/poll → sections).

@@ -1,8 +1,8 @@
 import {
   reservedTagPublicIds,
   weekdayTagPublicIds,
-  type GarminSyncStatus,
   type HealthActivity,
+  type IntegrationSummary,
   type Schedule,
   type SleepSession,
   type Tag,
@@ -258,7 +258,7 @@ export function SchedulePage() {
   const [weather, setWeather] = useState<WeatherForecast[]>([]);
   const [sleepSessions, setSleepSessions] = useState<SleepSession[]>([]);
   const [healthActivities, setHealthActivities] = useState<HealthActivity[]>([]);
-  const [garminStatus, setGarminStatus] = useState<GarminSyncStatus | null>(null);
+  const [garmin, setGarmin] = useState<IntegrationSummary | null>(null);
   const [rangeStart, setRangeStart] = useState(() => startOfDay(new Date()));
   const [busy, setBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -294,18 +294,33 @@ export function SchedulePage() {
     void load();
   }, []);
 
+  // The integration is gated on authentication: only ask for (and render) Garmin context once a
+  // token store exists. `connected` comes from GET /api/integrations, so this stays generic.
+  const garminConnected = garmin?.connected ?? false;
+
+  async function loadIntegrations() {
+    try {
+      const list = await api.integrations();
+      setGarmin(list.find((entry) => entry.key === "garmin") ?? null);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : String(loadError));
+    }
+  }
+
+  useEffect(() => {
+    void loadIntegrations();
+  }, []);
+
   async function loadHealth() {
     const from = addDays(rangeStart, -1).toISOString();
     const to = addDays(rangeStart, 8).toISOString();
     try {
-      const [nextSleep, nextActivities, nextStatus] = await Promise.all([
+      const [nextSleep, nextActivities] = await Promise.all([
         api.healthObservations(from, to),
         api.healthActivities(from, to),
-        api.garminStatus(),
       ]);
       setSleepSessions(nextSleep);
       setHealthActivities(nextActivities);
-      setGarminStatus(nextStatus);
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError));
@@ -313,15 +328,20 @@ export function SchedulePage() {
   }
 
   // Health context follows the visible week (borrowing a day on each side for overnight windows).
+  // Without Garmin authentication nothing is fetched, matching the pre-integration app.
   useEffect(() => {
-    void loadHealth();
-  }, [rangeStart]);
+    if (garminConnected) void loadHealth();
+    else {
+      setSleepSessions([]);
+      setHealthActivities([]);
+    }
+  }, [rangeStart, garminConnected]);
 
   async function syncGarmin() {
     setSyncing(true);
     try {
       await api.garminSync();
-      await loadHealth();
+      await Promise.all([loadIntegrations(), loadHealth()]);
     } catch (syncError) {
       setError(syncError instanceof Error ? syncError.message : String(syncError));
     } finally {
@@ -552,16 +572,16 @@ export function SchedulePage() {
       <button className="primary-button" disabled={busy} onClick={() => void generate()}>
         {busy ? "Optimizing..." : "Generate schedule"}
       </button>
-      <div className="garmin-sync">
+      {garmin?.connected && <div className="garmin-sync">
         <button onClick={() => void syncGarmin()} disabled={syncing}>
           {syncing ? "Syncing Garmin..." : "Sync Garmin"}
         </button>
-        {garminStatus?.lastError
-          ? <span className="garmin-sync-error" title={garminStatus.lastError}>Garmin error</span>
-          : garminStatus?.lastSyncedAt
-            ? <span className="muted">Synced {new Date(garminStatus.lastSyncedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+        {garmin.lastError
+          ? <span className="garmin-sync-error" title={garmin.lastError}>Garmin error</span>
+          : garmin.lastSyncedAt
+            ? <span className="muted">Synced {new Date(garmin.lastSyncedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
             : <span className="muted">Never synced</span>}
-      </div>
+      </div>}
     </section>
     <div className={`schedule-body${sidebarCollapsed ? " schedule-body-collapsed" : ""}`}>
       <div

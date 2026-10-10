@@ -10,7 +10,7 @@ Request shape:
 
 `GarminService` picks the date ranges from the newest rows already stored, so the worker only asks Garmin for what is missing. The response contains `sleep` and `activities` arrays shaped like the `sleep_sessions` / `health_activities` tables (minus database ids).
 
-Authentication reuses an existing Garmin token store: `$GARMINTOKENSTORE` if set, then `~/.garminconnect`, then `~/.garth`. Create one with:
+The server resolves the token store (`$GARMINTOKENSTORE`, then `~/.garminconnect`, then `~/.garth`) and passes the chosen path to the worker via the `GARMINTOKENSTORE` environment variable, which the worker requires. Create a store with:
 
 ```sh
 python -c "import garth; garth.login(); garth.save('~/.garminconnect')"
@@ -20,7 +20,7 @@ Run it directly with:
 
 ```sh
 echo '{"sleepFrom":"2026-10-01","activitiesFrom":"2026-10-01","today":"2026-10-08"}' \
-  | uv run --project workers/garmin python workers/garmin/sync.py
+  | GARMINTOKENSTORE=~/.garminconnect uv run --project workers/garmin python workers/garmin/sync.py
 ```
 
 Dependencies are isolated by `uv` using `pyproject.toml`.

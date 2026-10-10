@@ -10,6 +10,7 @@ import {
   timeBlockStatuses,
   timeBlockTypes,
   type CreateTaskInput,
+  type IntegrationConnection,
   type LifecycleStatus,
   type KanbanStatus,
   type TagType,
@@ -17,8 +18,8 @@ import {
   type TimeBlockType,
 } from "@mind-palace/shared";
 import { Hono } from "hono";
+import type { CalendarImportService } from "../services/calendar-import-service.js";
 import type { GarminService } from "../services/garmin-service.js";
-import type { IntegrationService } from "../services/integration-service.js";
 import type { ScheduleService } from "../services/schedule-service.js";
 import type { WeatherService } from "../services/weather-service.js";
 import type { RecurrenceService } from "../services/recurrence-service.js";
@@ -27,9 +28,17 @@ interface Dependencies {
   tasks: TaskRepository;
   schedule: ScheduleService;
   weather: WeatherService;
-  integrations: IntegrationService;
+  calendar: CalendarImportService;
   garmin: GarminService;
+  integrationRegistry: IntegrationRegistration[];
   recurrence: RecurrenceService;
+}
+
+/** One authenticated provider's place in `GET /api/integrations` — the composition root fills these in. */
+export interface IntegrationRegistration {
+  key: string;
+  label: string;
+  status: () => IntegrationConnection;
 }
 
 function isTimeBlockBody(value: unknown): value is { startAt: string; endAt: string; type?: string; notes?: string } {
@@ -54,7 +63,7 @@ function optionalText(value: unknown): string | null | undefined {
   return value.trim() || null;
 }
 
-export function createHttpApp({ tasks, schedule, weather, integrations, garmin, recurrence }: Dependencies): Hono {
+export function createHttpApp({ tasks, schedule, weather, calendar, garmin, integrationRegistry, recurrence }: Dependencies): Hono {
   const app = new Hono();
 
   app.onError((error, context) => {
@@ -237,11 +246,13 @@ export function createHttpApp({ tasks, schedule, weather, integrations, garmin, 
   app.post("/api/integrations/calendar/import", async (context) => {
     const body = (await context.req.json()) as Record<string, unknown>;
     if (!Array.isArray(body.events)) throw new Error("events must be an array");
-    return context.json(integrations.importCalendar(requiredString(body.accountId, "accountId"), body.events as never));
+    return context.json(calendar.importCalendar(requiredString(body.accountId, "accountId"), body.events as never));
   });
 
   app.post("/api/integrations/garmin/sync", async (context) => context.json(await garmin.sync()));
-  app.get("/api/integrations/garmin/status", (context) => context.json(garmin.status()));
+  app.get("/api/integrations", (context) => context.json(
+    integrationRegistry.map((entry) => ({ key: entry.key, label: entry.label, ...entry.status() })),
+  ));
 
   app.patch("/api/health-observations/:id", async (context) => {
     const body = (await context.req.json()) as Record<string, unknown>;

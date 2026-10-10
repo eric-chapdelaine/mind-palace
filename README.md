@@ -79,22 +79,28 @@ Weather fetching and CP-SAT scheduling are operational. Google Calendar uses a n
 
 ## Garmin Connect
 
-Authentication reuses the existing Garmin token stores, so the server never handles a password:
+Authentication is the switch: Garmin is considered enabled only once a token store exists, so a
+fresh install behaves exactly as it did before Garmin support (no sync button, no calendar
+overlay, no health requests) and the server never handles a password. Create a store with:
 
 ```sh
 python -c "import garth; garth.login(); garth.save('~/.garminconnect')"
 ```
 
-The worker reads `~/.garminconnect` (falling back to `~/.garth`). `POST /api/integrations/garmin/sync` is incremental: it asks the database for the newest stored sleep and activity dates and fetches only from there forward. The Schedule page has a **Sync Garmin** button, and a daily cron job can drive the same endpoint:
+The server looks for `$GARMINTOKENSTORE`, then `~/.garminconnect`, then `~/.garth`, and passes
+the resolved path to the worker. `POST /api/integrations/garmin/sync` is incremental: it asks
+the database for the newest stored sleep and activity dates and fetches only from there forward.
+Once authenticated, the Schedule page shows a **Sync Garmin** button and the calendar health
+overlays, and a daily cron job can drive the same endpoint:
 
 ```sh
-# every day at 06:00, after the overnight sleep has synced
-0 6 * * * curl -fsS -X POST http://127.0.0.1:4310/api/integrations/garmin/sync >/dev/null
+# every day at 11:00
+0 11 * * * curl -fsS -X POST http://127.0.0.1:4310/api/integrations/garmin/sync >/dev/null
 ```
 
 ## Configuration
 
-`DATABASE_PATH` controls the SQLite location and `HOST` can expose the control plane on a Tailscale interface; set them in the environment as needed. Do not expose this unauthenticated v0 server to the public internet.
+`DATABASE_PATH` controls the SQLite location and `HOST` can expose the control plane on a Tailscale interface; set them in the environment as needed. `GARMINTOKENSTORE` overrides the Garmin token-store path (useful under a service manager with a different `HOME`). Do not expose this unauthenticated v0 server to the public internet.
 
 ## Data Retention
 

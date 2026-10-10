@@ -1,8 +1,8 @@
 import type {
   CreateTaskInput,
   GarminSyncResult,
-  GarminSyncStatus,
   HealthActivity,
+  IntegrationSummary,
   LifecycleStatus,
   Schedule,
   SleepSession,
@@ -47,7 +47,7 @@ export const api = {
   updateHealthActivity: (id: number, input: UpdateHealthActivityInput) =>
     request<HealthActivity>(`/api/health-activities/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
   garminSync: () => request<GarminSyncResult>("/api/integrations/garmin/sync", { method: "POST" }),
-  garminStatus: () => request<GarminSyncStatus>("/api/integrations/garmin/status"),
+  integrations: () => request<IntegrationSummary[]>("/api/integrations"),
   task: (id: number) => request<TaskDetail>(`/api/tasks/${id}`),
   timeBlock: (id: number) => request<TimeBlock>(`/api/time-blocks/${id}`),
   updateTimeBlock: (id: number, input: UpdateTimeBlockInput) =>

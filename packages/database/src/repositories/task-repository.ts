@@ -5,9 +5,9 @@ import {
   type CreateTagInput,
   type CreateTaskInput,
   type CreateTimeBlockInput,
-  type GarminSyncStatus,
   type HealthActivity,
   type HealthActivityProviderInput,
+  type IntegrationStatus,
   type KanbanStatus,
   type LifecycleStatus,
   type RecurrenceRule,
@@ -977,7 +977,7 @@ export class TaskRepository {
     return this.getHealthActivity(id);
   }
 
-  getGarminStatus(): GarminSyncStatus {
+  getGarminStatus(): IntegrationStatus {
     const value = this.database.connection
       .prepare("SELECT status, last_synced_at, last_error FROM integration_accounts WHERE kind = 'garmin' LIMIT 1")
       .get();
@@ -986,7 +986,7 @@ export class TaskRepository {
     return {
       lastSyncedAt: nullableText(item.last_synced_at),
       lastError: nullableText(item.last_error),
-      status: text(item.status) as GarminSyncStatus["status"],
+      status: text(item.status) as IntegrationStatus["status"],
     };
   }
 

@@ -208,11 +208,22 @@ export interface GarminSyncResult {
   syncedAt: string;
 }
 
-/** Last-known state of the Garmin connection, shown next to the sync button. */
-export interface GarminSyncStatus {
+/** Persisted health of one provider connection (`integration_accounts.status` + timestamps). */
+export interface IntegrationStatus {
+  status: "configured" | "healthy" | "error" | "disabled";
   lastSyncedAt: string | null;
   lastError: string | null;
-  status: "configured" | "healthy" | "error" | "disabled";
+}
+
+/** A provider's live connection state: persisted health plus whether its credential store exists. */
+export interface IntegrationConnection extends IntegrationStatus {
+  connected: boolean;
+}
+
+/** One row of `GET /api/integrations` — the generic, provider-agnostic connection summary. */
+export interface IntegrationSummary extends IntegrationConnection {
+  key: string;
+  label: string;
 }
 
 export interface ScheduleRun {

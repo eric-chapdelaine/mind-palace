@@ -12,7 +12,7 @@ export interface CalendarImportEvent {
   allDay?: boolean;
 }
 
-export class IntegrationService {
+export class CalendarImportService {
   constructor(private readonly tasks: TaskRepository) {}
 
   importCalendar(accountId: string, events: CalendarImportEvent[]): TaskDetail[] {

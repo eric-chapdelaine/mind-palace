@@ -10,6 +10,8 @@ interface PythonWorkerOptions {
   timeoutMs: number;
   /** Shown in errors when the worker fails without a parseable JSON message. */
   label: string;
+  /** Extra environment variables merged over `process.env` for the worker process. */
+  env?: NodeJS.ProcessEnv;
 }
 
 /** Pull `{"error": "..."}` out of a worker's stdout, or null when it isn't that shape. */
@@ -26,12 +28,12 @@ function workerError(stdout: string): string | null {
  * JSON object on stdout, and `{"error": "..."}` + a non-zero exit on failure. Shared by the
  * CP-SAT and Garmin workers so spawn, timeout, and error handling live in one place.
  */
-export function runPythonWorker<T>({ directory, script, input, timeoutMs, label }: PythonWorkerOptions): Promise<T> {
+export function runPythonWorker<T>({ directory, script, input, timeoutMs, label, env }: PythonWorkerOptions): Promise<T> {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(
       "uv",
       ["run", "--project", directory, "python", resolve(directory, script)],
-      { stdio: ["pipe", "pipe", "pipe"] },
+      { stdio: ["pipe", "pipe", "pipe"], env: env ? { ...process.env, ...env } : process.env },
     );
     let stdout = "";
     let stderr = "";
