@@ -8,6 +8,7 @@ import {
   type Tag,
   type TaskSummary,
   type TimeBlockStatus,
+  type TimeBlockType,
   type UpdateTaskInput,
   type WeatherForecast,
 } from "@mind-palace/shared";
@@ -225,10 +226,10 @@ function DayTaskChip({ task, scheduled, removeLabel, onRemove, onDragStart, onDr
 // chunks) into one event in the UI. Adjacency is judged on the times as they
 // appear in this day column, so blocks that touch across midnight still merge.
 function mergeAdjacentBlocks(
-  blocks: Array<{ key: string; taskId: number; startAt: string; endAt: string; status: TimeBlockStatus }>,
+  blocks: Array<{ key: string; taskId: number; startAt: string; endAt: string; status: TimeBlockStatus; type: TimeBlockType }>,
   day: Date,
   dayEnd: Date,
-): Array<{ key: string; taskId: number; startAt: string; endAt: string; status: TimeBlockStatus }> {
+): Array<{ key: string; taskId: number; startAt: string; endAt: string; status: TimeBlockStatus; type: TimeBlockType }> {
   const sorted = [...blocks].sort((left, right) => new Date(left.startAt).getTime() - new Date(right.startAt).getTime());
   const merged: typeof blocks = [];
   for (const block of sorted) {
@@ -241,6 +242,7 @@ function mergeAdjacentBlocks(
       previous && previousEnd
       && previous.taskId === block.taskId
       && previous.status === block.status
+      && previous.type === block.type
       && previousEnd.getTime() === blockStart.getTime()
     ) {
       merged[merged.length - 1] = { ...previous, endAt: block.endAt };
@@ -763,9 +765,12 @@ export function SchedulePage() {
                   minute: "2-digit",
                 });
                 const title = task?.title ?? `Task ${block.taskId}`;
+                // Calendar imports are fixed commitments the solver cannot move; tint them like the
+                // Garmin health windows so they read as external time rather than schedulable work.
+                const fixed = block.type === "calendar_event";
 
                 return <article
-                  className={`calendar-event block-${block.status} ${compact ? "calendar-event-compact" : ""} ${new Date(block.endAt) <= now ? "schedule-past" : ""}`}
+                  className={`calendar-event block-${block.status}${fixed ? " calendar-event-fixed" : ""} ${compact ? "calendar-event-compact" : ""} ${new Date(block.endAt) <= now ? "schedule-past" : ""}`}
                   key={`${block.key}-${day.toISOString()}`}
                   style={{ top, height }}
                   title={`${title}: ${startLabel} - ${endLabel}`}
@@ -778,7 +783,7 @@ export function SchedulePage() {
                       onClick={() => void api.acceptTaskSchedule(block.taskId).then(setSchedule)}
                     >Accept</button>}
                   </div>
-                  {!compact && <span>{block.status}</span>}
+                  {!compact && <span>{fixed ? "calendar event" : block.status}</span>}
                   {!compact && block.status === "proposed" && <button
                     onClick={() => void api.acceptTaskSchedule(block.taskId).then(setSchedule)}
                   >Accept</button>}

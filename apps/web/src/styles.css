@@ -288,6 +288,11 @@ body.dragging .task-card:hover .task-card-expand > div { opacity: 0; }
 .calendar-event button { width: max-content; padding: .1rem .3rem; }
 .calendar-event.block-proposed { border-style: dashed; }
 .calendar-event.schedule-past { opacity: .45; background: #ddd; }
+/* Fixed calendar commitments (imported events) are not schedulable work, so tint them the way
+   Garmin sleep/activity windows are tinted: an external-time color that survives `schedule-past`. */
+.calendar-event.calendar-event-fixed { border-color: #b8860b; background: #fdf3e3; color: #6b4d0f; }
+.calendar-event.calendar-event-fixed time, .calendar-event.calendar-event-fixed span { color: #6b4d0f; }
+.calendar-event.calendar-event-fixed.schedule-past { opacity: .5; }
 /* Garmin context (sleep / recorded activities) sits over the work layer but stays click-through,
    so scheduled blocks underneath remain interactive while the health window is still visible. */
 .calendar-event.health-event { z-index: 2; border-width: 1px; border-left-width: 4px; text-decoration: none; }
