@@ -38,6 +38,14 @@ export type TimeBlockType = (typeof timeBlockTypes)[number];
 export const tagTypes = ["goal"] as const;
 export type TagType = (typeof tagTypes)[number];
 
+/**
+ * Manual priority levels. Higher levels dominate lower ones in the scheduler's decision tier
+ * (a P2 task is never dropped in favour of any number of P1 tasks). Rank breaks ties within
+ * a level. Kept to a small range so the ordering stays legible and cheap to solve.
+ */
+export const priorities = [0, 1, 2, 3, 4, 5] as const;
+export type Priority = (typeof priorities)[number];
+
 /** Reserved tags that carry behavior (see AGENTS.md "tag-driven behavior"). */
 export const reservedTagPublicIds = {
   calendarEvent: "mind-palace:calendar-event",
@@ -245,7 +253,80 @@ export interface ScheduleRun {
 export interface Schedule {
   runs: ScheduleRun[];
   timeBlocks: TimeBlock[];
+  /** Why the latest run left each task unplaced. Empty when the latest run placed everything. */
+  unscheduled: ScheduleUnscheduled[];
+  /** Per-tier scores from the latest run, for the fidelity harness. Null before the first run. */
+  tierScores: ScheduleTierScores | null;
+  /** Mirrors `unscheduled.map((entry) => entry.taskId)` for existing consumers. */
   unscheduledTaskIds: number[];
+}
+
+/** Why the solver left a task unscheduled. */
+export interface ScheduleReason {
+  type: "capacity" | "no_eligible_slots" | "rule";
+  detail: string;
+}
+
+export interface ScheduleUnscheduled {
+  taskId: number;
+  reasons: ScheduleReason[];
+}
+
+/** The objective is solved tier by tier (highest precedence first). */
+export interface ScheduleTierScores {
+  decision: { placed: number; of: number; byPriority: Record<string, number> };
+  style: number;
+  fragmentation: number;
+  placement: number;
+}
+
+/** Soft tiers in precedence order, highest first. The engine owns this order. */
+export const softTiers = ["style", "fragmentation", "placement"] as const;
+export type SoftTier = (typeof softTiers)[number];
+
+/** A composable predicate over the scheduling payload. */
+export type RuleCondition =
+  | { always: true }
+  | { taskHasTag: string }
+  | { taskHasAnyTag: string[] }
+  | { all: RuleCondition[] }
+  | { any: RuleCondition[] }
+  | { not: RuleCondition };
+
+/** What a rule does. `type` selects the implementation; the remaining keys are parameters. */
+export interface RuleEffect {
+  type: string;
+  [parameter: string]: unknown;
+}
+
+/** Hard rules constrain feasibility; soft rules contribute to a named objective tier. */
+export type RuleStrength = { kind: "hard" } | { kind: "soft"; tier: SoftTier; weight: number };
+
+/**
+ * A scheduling rule. Rules are data: the worker compiles them into hard constraints and soft
+ * tier terms. `applies` may reference any tag (seeded or user-created); tags are selectors,
+ * never behavior on their own.
+ */
+export interface SchedulerRule {
+  id: number;
+  publicId: string;
+  title: string;
+  enabled: boolean;
+  applies: RuleCondition | null;
+  effect: RuleEffect;
+  strength: RuleStrength;
+  reason: string;
+  updatedAt: string;
+}
+
+/** The editable half of a rule (everything but identity and timestamps). */
+export interface SchedulerRuleInput {
+  title: string;
+  enabled?: boolean;
+  applies?: RuleCondition | null;
+  effect: RuleEffect;
+  strength: RuleStrength;
+  reason?: string;
 }
 
 export interface CreateTaskInput {

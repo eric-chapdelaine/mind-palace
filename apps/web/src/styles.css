@@ -380,3 +380,31 @@ body.dragging .task-card:hover .task-card-expand > div { opacity: 0; }
   .tag-filter label { min-width: 0; }
   .detail-grid { grid-template-columns: 1fr; grid-template-areas: "sidebar" "main"; }
 }
+
+/* ---- Scheduler rules page ---- */
+.rules-list { list-style: none; margin: 1rem 0; padding: 0; display: grid; gap: .5rem; }
+.rule-row {
+  display: flex; align-items: center; gap: .75rem;
+  border: 1px solid #ddd; background: #fff; padding: .6rem .75rem;
+}
+.rule-toggle { margin: 0; }
+.rule-toggle input { width: auto; }
+.rule-main { flex: 1; display: grid; gap: .1rem; }
+.rule-main .muted { font-size: .82rem; }
+.rule-reason { color: #444; font-style: italic; font-size: .85rem; }
+.rule-weight { margin: 0; width: 6rem; font-size: .8rem; }
+.rule-weight input { padding: .3rem; }
+.rule-delete { border: none; background: none; font-size: 1.1rem; line-height: 1; color: #888; padding: 0 .25rem; }
+.rule-delete:hover { color: #222; }
+.rule-form { border-top: 1px solid #ddd; margin-top: 1.5rem; padding-top: 1rem; }
+.rule-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .25rem 1rem; align-items: end; }
+.rule-form-grid label { margin: .35rem 0; }
+.rule-days { display: flex; flex-wrap: wrap; gap: .5rem; margin: .35rem 0; }
+.rule-days label { display: flex; align-items: center; gap: .25rem; margin: 0; }
+.rule-days input { width: auto; }
+
+/* ---- Schedule solver summary / unscheduled reasons ---- */
+.schedule-scores { margin: .5rem 0; font-size: .85rem; }
+.unscheduled-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .35rem; }
+.unscheduled-list li { display: flex; flex-wrap: wrap; gap: .5rem; align-items: baseline; }
+.unscheduled-list .muted { font-size: .8rem; }

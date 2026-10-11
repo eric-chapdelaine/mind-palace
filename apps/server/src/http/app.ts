@@ -6,10 +6,16 @@ import type { TaskRepository } from "@mind-palace/database";
 import {
   kanbanStatuses,
   lifecycleStatuses,
+  softTiers,
   tagTypes,
   timeBlockStatuses,
   timeBlockTypes,
   type CreateTaskInput,
+  type RuleCondition,
+  type RuleEffect,
+  type RuleStrength,
+  type SchedulerRuleInput,
+  type SoftTier,
   type IntegrationConnection,
   type LifecycleStatus,
   type KanbanStatus,
@@ -65,6 +71,51 @@ function optionalText(value: unknown): string | null | undefined {
   return value.trim() || null;
 }
 
+function parseRuleStrength(value: unknown): RuleStrength {
+  if (!value || typeof value !== "object") throw new Error("strength is required");
+  const candidate = value as { kind?: unknown; tier?: unknown; weight?: unknown };
+  if (candidate.kind === "hard") return { kind: "hard" };
+  if (candidate.kind === "soft") {
+    if (!softTiers.includes(candidate.tier as SoftTier)) throw new Error("Invalid soft tier");
+    if (typeof candidate.weight !== "number") throw new Error("Soft rules need a numeric weight");
+    return { kind: "soft", tier: candidate.tier as SoftTier, weight: candidate.weight };
+  }
+  throw new Error("strength.kind must be hard or soft");
+}
+
+function parseRuleInput(body: Record<string, unknown>): SchedulerRuleInput {
+  const effect = body.effect;
+  if (!effect || typeof effect !== "object" || typeof (effect as { type?: unknown }).type !== "string") {
+    throw new Error("effect.type is required");
+  }
+  const applies = body.applies;
+  return {
+    title: requiredString(body.title, "title"),
+    ...(typeof body.enabled === "boolean" ? { enabled: body.enabled } : {}),
+    ...(applies === null || (applies && typeof applies === "object") ? { applies: applies as RuleCondition | null } : {}),
+    effect: effect as RuleEffect,
+    strength: parseRuleStrength(body.strength),
+    ...(typeof body.reason === "string" ? { reason: body.reason } : {}),
+  };
+}
+
+function parseRulePatch(body: Record<string, unknown>): Partial<SchedulerRuleInput> {
+  const patch: Partial<SchedulerRuleInput> = {};
+  if (typeof body.title === "string") patch.title = requiredString(body.title, "title");
+  if (typeof body.enabled === "boolean") patch.enabled = body.enabled;
+  if (body.applies === null) patch.applies = null;
+  else if (body.applies && typeof body.applies === "object") patch.applies = body.applies as RuleCondition;
+  if (body.effect !== undefined) {
+    if (!body.effect || typeof body.effect !== "object" || typeof (body.effect as { type?: unknown }).type !== "string") {
+      throw new Error("effect.type is required");
+    }
+    patch.effect = body.effect as RuleEffect;
+  }
+  if (body.strength !== undefined) patch.strength = parseRuleStrength(body.strength);
+  if (typeof body.reason === "string") patch.reason = body.reason;
+  return patch;
+}
+
 export function createHttpApp({ tasks, schedule, weather, calendar, garmin, integrationRegistry, recurrence, scheduler }: Dependencies): Hono {
   const app = new Hono();
 
@@ -78,6 +129,7 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
   app.get("/api/jobs", (context) => context.json(scheduler.status()));
   app.get("/api/tasks", (context) => context.json(tasks.listTasks()));
   app.get("/api/tags", (context) => context.json(tasks.listTags()));
+  app.get("/api/scheduler-rules", (context) => context.json(tasks.listSchedulerRules()));
   app.get("/api/schedule", (context) => context.json(schedule.getSchedule()));
   app.get("/api/weather", async (context) =>
     context.json(await weather.getWeather(false, context.req.query("from"), context.req.query("to"))));
@@ -146,6 +198,21 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
       ...(Array.isArray(body.dependsOnTaskIds) ? { dependsOnTaskIds: body.dependsOnTaskIds.map(Number) } : {}),
     });
     return context.json(tasks.getTask(taskId));
+  });
+
+  app.post("/api/scheduler-rules", async (context) => {
+    const body = (await context.req.json()) as Record<string, unknown>;
+    return context.json(tasks.createSchedulerRule(parseRuleInput(body)), 201);
+  });
+
+  app.patch("/api/scheduler-rules/:id", async (context) => {
+    const body = (await context.req.json()) as Record<string, unknown>;
+    return context.json(tasks.updateSchedulerRule(numberParam(context.req.param("id"), "rule id"), parseRulePatch(body)));
+  });
+
+  app.delete("/api/scheduler-rules/:id", (context) => {
+    tasks.deleteSchedulerRule(numberParam(context.req.param("id"), "rule id"));
+    return context.json(tasks.listSchedulerRules());
   });
 
   app.post("/api/tags", async (context) => {

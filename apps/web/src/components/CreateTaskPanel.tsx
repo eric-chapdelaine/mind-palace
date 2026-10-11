@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { reservedTagPublicIds, type CreateTaskInput, type Tag, type TimeBlockType } from "@mind-palace/shared";
+import { priorities, reservedTagPublicIds, type CreateTaskInput, type Tag, type TimeBlockType } from "@mind-palace/shared";
 import { TagPicker } from "./TagPicker";
 
 // ---- Tag-driven Quick-capture modes (the expandable registry) ----
@@ -129,7 +129,9 @@ export function CreateTaskPanel({ tags, onCreateTask, onCreateTag }: Props) {
         <label>Title<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="What needs to happen?" required /></label>
         <label>Notes<textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={4} placeholder="Context, outcome, or constraints" /></label>
         <div className="form-pair">
-          <label>Priority<input type="number" value={priority} onChange={(event) => setPriority(Number(event.target.value))} /></label>
+          <label>Priority<select value={priority} onChange={(event) => setPriority(Number(event.target.value))}>
+            {priorities.map((level) => <option key={level} value={level}>P{level}</option>)}
+          </select></label>
           <label>{activeMode ? "Duration (minutes)" : "Time remaining (minutes)"}
             <input
               type="number"

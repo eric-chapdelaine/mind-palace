@@ -7,12 +7,14 @@ import { HealthActivityPage } from "./HealthActivityPage";
 import { HealthObservationPage } from "./HealthObservationPage";
 import { TagsPage } from "./TagsPage";
 import { TagPage } from "./TagPage";
+import { RulesPage } from "./RulesPage";
 import { Breadcrumbs, CrumbTitleProvider, resetTrail } from "./components/Breadcrumbs";
 
 const navItems = [
   { to: "/", label: "Dashboard" },
   { to: "/schedule", label: "Schedule" },
   { to: "/tags", label: "Tags" },
+  { to: "/rules", label: "Rules" },
 ];
 
 function isActive(to: string, pathname: string) {
@@ -62,6 +64,7 @@ export function App() {
           <Route path="/tags" element={<TagsPage />} />
           <Route path="/tags/:id" element={<TagPage />} />
           <Route path="/schedule" element={<SchedulePage />} />
+          <Route path="/rules" element={<RulesPage />} />
           <Route path="/health_activity/:id" element={<HealthActivityPage />} />
           <Route path="/health_observation/:id" element={<HealthObservationPage />} />
         </Route>

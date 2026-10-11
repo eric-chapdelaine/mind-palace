@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
   reservedTagPublicIds,
-  weekdayTagPublicIds,
   type CreateTagInput,
   type CreateTaskInput,
   type CreateTimeBlockInput,
@@ -11,8 +10,16 @@ import {
   type KanbanStatus,
   type LifecycleStatus,
   type RecurrenceRule,
+  type RuleCondition,
+  type RuleEffect,
+  type RuleStrength,
   type ScheduleRun,
+  type ScheduleTierScores,
+  type ScheduleUnscheduled,
+  type SchedulerRule,
+  type SchedulerRuleInput,
   type SleepSession,
+  type SoftTier,
   type SleepSessionProviderInput,
   type Tag,
   type TagType,
@@ -90,6 +97,23 @@ function mapWeatherForecast(value: Row): WeatherForecast {
   };
 }
 
+function mapSchedulerRule(value: Row): SchedulerRule {
+  const strength: RuleStrength = text(value.strength_kind) === "soft"
+    ? { kind: "soft", tier: text(value.tier) as SoftTier, weight: Number(value.weight) }
+    : { kind: "hard" };
+  return {
+    id: integer(value.id),
+    publicId: text(value.public_id),
+    title: text(value.title),
+    enabled: boolean(value.enabled),
+    applies: value.condition_json === null ? null : json<RuleCondition | null>(value.condition_json, null),
+    effect: json<RuleEffect>(value.effect_json, { type: "" }),
+    strength,
+    reason: text(value.reason),
+    updatedAt: text(value.updated_at),
+  };
+}
+
 function mapSleepSession(value: Row): SleepSession {
   return {
     id: integer(value.id),
@@ -144,14 +168,13 @@ export interface SchedulableTask {
   maxChunkMinutes: number;
   earliestStart: string | null;
   deadlineAt: string | null;
+  /**
+   * Effective tags the worker matches rules against: direct assignments plus ancestor
+   * ("derived") tags, deduplicated. Rules select on these; tags carry no behavior themselves.
+   */
   tagIds: string[];
   /** Tasks this task depends on (by id); the solver orders them before this task when both are scheduled. */
   dependsOnTaskIds: number[];
-  /**
-   * Day the task is pinned to, as a Python `date.weekday()` index (0 = Monday .. 6 = Sunday),
-   * derived from its `mind-palace:<weekday>` tag. `null` means it may land on any day.
-   */
-  preferredDay: number | null;
 }
 
 export interface RecurrenceTemplate {
@@ -837,37 +860,31 @@ export class TaskRepository {
         const item = row(value, "schedulable task");
         const tagIds = json<string[]>(item.tag_ids, []);
         const derivedTagIds = json<string[]>(item.derived_tag_ids, []);
-        const effectiveTagIds = [...tagIds, ...derivedTagIds];
+        const effectiveTagIds = [...new Set([...tagIds, ...derivedTagIds])];
         // Eligibility for the week is tag-driven: a task is schedulable only when it carries
         // mind-palace:this-week, directly or through an ancestor tag (the weekday tags are
         // children of this-week, so a day-pinned task is eligible through its day tag).
         if (!effectiveTagIds.includes(reservedTagIds.thisWeek)) return null;
-        // weekdayTagPublicIds is in getDay() order (0 = Sunday); the Python worker wants
-        // weekday() order (0 = Monday), so translate. Tasks with several weekday tags keep
-        // the first one (UI enforces a single day per task).
-        const dayTagIndex = weekdayTagPublicIds.findIndex((id) => effectiveTagIds.includes(id));
-        const preferredDay = dayTagIndex === -1 ? null : (dayTagIndex + 6) % 7;
         return {
           id: integer(item.id), title: text(item.title), priority: integer(item.priority), rank: Number(item.rank),
           durationMinutesRemaining: integer(item.duration_minutes_remaining), splittable: boolean(item.splittable),
           minChunkMinutes: integer(item.min_chunk_minutes), maxChunkMinutes: integer(item.max_chunk_minutes),
           earliestStart: nullableText(item.earliest_start), deadlineAt: nullableText(item.deadline_at),
-          tagIds,
+          tagIds: effectiveTagIds,
           dependsOnTaskIds: json<number[]>(item.depends_on_task_ids, []),
-          preferredDay,
         };
       })
       .filter((task): task is SchedulableTask => task !== null);
   }
 
-  createScheduleRun(horizonStart: string, horizonEnd: string, input: unknown): ScheduleRun {
+  createScheduleRun(horizonStart: string, horizonEnd: string, input: unknown, modelVersion: string): ScheduleRun {
     const timestamp = now();
     const result = this.database.connection
       .prepare(
         `INSERT INTO schedule_runs (public_id, model_version, horizon_start, horizon_end, status, input_json, created_at)
-         VALUES (?, 'cp-sat-v4', ?, ?, 'running', ?, ?)`,
+         VALUES (?, ?, ?, ?, 'running', ?, ?)`,
       )
-      .run(randomUUID(), horizonStart, horizonEnd, JSON.stringify(input), timestamp);
+      .run(randomUUID(), modelVersion, horizonStart, horizonEnd, JSON.stringify(input), timestamp);
     return this.getScheduleRun(insertedId(result));
   }
 
@@ -892,13 +909,68 @@ export class TaskRepository {
       .map((value) => this.getScheduleRun(integer(row(value, "schedule run").id)));
   }
 
-  latestUnscheduledTaskIds(): number[] {
+  /** Unscheduled reasons + tier scores from the latest succeeded run, for the schedule UI. */
+  latestScheduleResult(): { unscheduled: ScheduleUnscheduled[]; tierScores: ScheduleTierScores | null } {
     const value = this.database.connection
       .prepare("SELECT result_json FROM schedule_runs WHERE status = 'succeeded' ORDER BY id DESC LIMIT 1")
       .get();
-    if (!value) return [];
-    const result = json<{ unscheduledTaskIds?: number[] }>(row(value, "schedule result").result_json, {});
-    return result.unscheduledTaskIds ?? [];
+    if (!value) return { unscheduled: [], tierScores: null };
+    const result = json<{ unscheduled?: ScheduleUnscheduled[]; tierScores?: ScheduleTierScores }>(
+      row(value, "schedule result").result_json, {},
+    );
+    return { unscheduled: result.unscheduled ?? [], tierScores: result.tierScores ?? null };
+  }
+
+  listSchedulerRules(): SchedulerRule[] {
+    return this.database.connection.prepare("SELECT * FROM scheduler_rules ORDER BY id").all()
+      .map((value) => mapSchedulerRule(row(value, "scheduler rule")));
+  }
+
+  getSchedulerRule(id: number): SchedulerRule {
+    return mapSchedulerRule(row(
+      this.database.connection.prepare("SELECT * FROM scheduler_rules WHERE id = ?").get(id),
+      "scheduler rule",
+    ));
+  }
+
+  createSchedulerRule(input: SchedulerRuleInput): SchedulerRule {
+    const timestamp = now();
+    const result = this.database.connection.prepare(
+      `INSERT INTO scheduler_rules
+        (public_id, title, enabled, condition_json, effect_json, strength_kind, tier, weight, reason, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      `user:rule:${randomUUID()}`, input.title, input.enabled === false ? 0 : 1,
+      JSON.stringify(input.applies ?? { always: true }), JSON.stringify(input.effect),
+      input.strength.kind, input.strength.kind === "soft" ? input.strength.tier : null,
+      input.strength.kind === "soft" ? input.strength.weight : null,
+      input.reason ?? input.title, timestamp, timestamp,
+    );
+    return this.getSchedulerRule(insertedId(result));
+  }
+
+  updateSchedulerRule(id: number, input: Partial<SchedulerRuleInput>): SchedulerRule {
+    const current = this.getSchedulerRule(id);
+    const title = input.title ?? current.title;
+    const enabled = input.enabled ?? current.enabled;
+    const applies = input.applies === undefined ? current.applies : input.applies;
+    const effect = input.effect ?? current.effect;
+    const strength = input.strength ?? current.strength;
+    const reason = input.reason ?? current.reason;
+    this.database.connection.prepare(
+      `UPDATE scheduler_rules SET title = ?, enabled = ?, condition_json = ?, effect_json = ?,
+        strength_kind = ?, tier = ?, weight = ?, reason = ?, updated_at = ? WHERE id = ?`,
+    ).run(
+      title, enabled ? 1 : 0, JSON.stringify(applies ?? { always: true }), JSON.stringify(effect),
+      strength.kind, strength.kind === "soft" ? strength.tier : null,
+      strength.kind === "soft" ? strength.weight : null,
+      reason, now(), id,
+    );
+    return this.getSchedulerRule(id);
+  }
+
+  deleteSchedulerRule(id: number): void {
+    this.database.connection.prepare("DELETE FROM scheduler_rules WHERE id = ?").run(id);
   }
 
   upsertWeather(forecasts: Omit<WeatherForecast, "expiresAt">[], fetchedAt: string, expiresAt: string): void {

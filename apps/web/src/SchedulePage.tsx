@@ -845,12 +845,20 @@ export function SchedulePage() {
         )}
       </aside>
     </div>
-    {schedule && schedule.unscheduledTaskIds.length > 0 && <section className="unscheduled">
+    {schedule?.tierScores && <p className="muted schedule-scores">
+      Placed {schedule.tierScores.decision.placed}/{schedule.tierScores.decision.of}
+      {" · "}style {schedule.tierScores.style}
+      {" · "}chunks {schedule.tierScores.fragmentation}
+    </p>}
+    {schedule && schedule.unscheduled.length > 0 && <section className="unscheduled">
       <div className="section-label">Unscheduled</div>
       <h2>Tasks without calendar space</h2>
-      {schedule.unscheduledTaskIds.map((id) => <Link key={id} to={`/tasks/${id}`}>
-        {taskById.get(id)?.title ?? `Task ${id}`}
-      </Link>)}
+      <ul className="unscheduled-list">
+        {schedule.unscheduled.map((entry) => <li key={entry.taskId}>
+          <Link to={`/tasks/${entry.taskId}`}>{taskById.get(entry.taskId)?.title ?? `Task ${entry.taskId}`}</Link>
+          <span className="muted">{entry.reasons.map((reason) => reason.detail).join(" · ")}</span>
+        </li>)}
+      </ul>
     </section>}
   </main>;
 }
