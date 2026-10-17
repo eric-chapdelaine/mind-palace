@@ -20,6 +20,7 @@ from schedulerlib import (  # noqa: F401 - re-exported for the tests
     ZoneInfo,
     build_slots,
     condition_matches,
+    day_matches,
     decision_weights,
     parse_datetime,
     rule_strength,

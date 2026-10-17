@@ -259,7 +259,7 @@ export interface Schedule {
   unscheduled: ScheduleUnscheduled[];
   /** Objective scores from the latest run, for display/debugging. Null before the first run. */
   scores: ScheduleScores | null;
-  /** Mirrors `unscheduled.map((entry) => entry.taskId)` for existing consumers. */
+  /** Convenience mirror of `unscheduled.map((entry) => entry.taskId)`. */
   unscheduledTaskIds: number[];
 }
 
@@ -294,8 +294,8 @@ export type RuleCondition =
 
 /**
  * The rule effects the worker implements. This list is the contract: the API rejects anything
- * outside it. `assignDays` and `timeWindow` may be hard; `preferTimeOfDay` and `spread` are
- * preferences only.
+ * outside it. `assignDays`, `timeWindow`, `weatherGate`, and `withinAfter` may be hard
+ * constraints; `preferTimeOfDay`, `spread`, and `dailyBudget` are preferences only.
  */
 export const ruleEffectTypes = ["assignDays", "timeWindow", "preferTimeOfDay", "spread", "dailyBudget", "weatherGate", "withinAfter"] as const;
 export type RuleEffectType = (typeof ruleEffectTypes)[number];
@@ -315,7 +315,7 @@ export type RuleEffect =
   | { type: "timeWindow"; start: string; end: string; when?: RuleWhen }
   | { type: "preferTimeOfDay"; start: string; end: string; when?: RuleWhen }
   | { type: "spread"; maxPerDayMinutes?: number; minDistinctDays?: number; avoidConsecutive?: boolean; when?: RuleWhen }
-  | { type: "dailyBudget"; minPerDay?: number; softMaxPerDay?: number; when?: RuleWhen }
+  | { type: "dailyBudget"; softMaxPerDay?: number; when?: RuleWhen }
   | { type: "withinAfter"; maxMinutes?: number }
   | {
       type: "weatherGate";

@@ -17,7 +17,7 @@ place.
 
 from .config import DEFAULT_CONFIG, MODEL_VERSION
 from .objective import decision_weights
-from .rules import condition_matches, rule_strength, window_slot_indices
+from .rules import condition_matches, day_matches, rule_strength, window_slot_indices
 from .solve import solve
 from .timegrid import ZoneInfo, build_slots, parse_datetime
 from .weather import weather_is_nice
@@ -28,6 +28,7 @@ __all__ = [
     "ZoneInfo",
     "build_slots",
     "condition_matches",
+    "day_matches",
     "decision_weights",
     "parse_datetime",
     "rule_strength",

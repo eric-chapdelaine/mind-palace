@@ -1,5 +1,5 @@
-import { existsSync, statSync } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { TaskRepository } from "@mind-palace/database";

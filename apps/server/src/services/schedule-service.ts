@@ -74,19 +74,27 @@ export class ScheduleService {
     // Release time held by stale proposals first so listSchedulableTasks (and the solver)
     // see an accurate remaining estimate; the new proposed blocks re-claim it below.
     this.tasks.supersedeProposedBlocks();
+    const now = new Date();
     // Weather rules are optional: if NWS is unreachable and nothing is cached, schedule without.
+    // Send only the horizon window (plus a day of slack) so the payload stays bounded as the
+    // forecast cache grows.
     let weather: WeatherForecast[] = [];
     try {
-      weather = await this.weather.getWeather();
+      // Floor the start to the hour: the worker looks weather up by the slot's UTC hour, so the
+      // current hour's forecast must be included even though it starts before `now`.
+      const weatherFrom = new Date(Math.floor(now.getTime() / 3_600_000) * 3_600_000);
+      const horizonEnd = new Date(now.getTime() + (HORIZON_DAYS + 1) * 86_400_000);
+      weather = await this.weather.getWeather(false, weatherFrom.toISOString(), horizonEnd.toISOString());
     } catch {
       weather = [];
     }
     const input = {
-      now: new Date().toISOString(),
+      now: now.toISOString(),
       horizonDays: HORIZON_DAYS,
       config: SCHEDULER_CONFIG,
       tasks: this.tasks.listSchedulableTasks(),
-      timeBlocks: this.tasks.listTimeBlocks(),
+      // The solver only needs live blocks; superseded/missed rows are history, not constraints.
+      timeBlocks: this.tasks.listTimeBlocks().filter((block) => block.status !== "superseded" && block.status !== "missed"),
       weather,
       rules: this.tasks.listSchedulerRules(),
     };

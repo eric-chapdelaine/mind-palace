@@ -152,6 +152,12 @@ class PureHelpersTest(unittest.TestCase):
         self.assertIn(slots[30]["index"], overnight)  # 22:00
         self.assertIn(slots[1]["index"], overnight)   # 07:30
 
+    def test_day_matches(self):
+        self.assertTrue(S.day_matches(None, 3))
+        self.assertTrue(S.day_matches({}, 3))
+        self.assertTrue(S.day_matches({"dayOfWeek": [1, 3]}, 3))
+        self.assertFalse(S.day_matches({"dayOfWeek": [1, 3]}, 4))
+
     def test_decision_weights_strict_dominance(self):
         tasks = [task(1, priority=2), task(2, priority=1), task(3, priority=1), task(4, priority=0)]
         weights = S.decision_weights(tasks, "weighted")
@@ -287,7 +293,8 @@ class SolveTest(unittest.TestCase):
         self.assertTrue(any(r["type"] == "rule" and r["detail"] == "Pinned to Monday" for r in entry["reasons"]))
 
     def test_day_pin_overflow_spills_without_failing(self):
-        # Three 8h tasks pinned to Monday; 07:00-23:00 Monday holds 16h, so one must spill.
+        # The horizon begins mid-Monday (07:00 local), so that Monday holds 17h; three 8h tasks
+        # cannot all fit and one must spill rather than making the model infeasible.
         rules = [rule("mon", {"type": "assignDays", "days": [0]}, {"kind": "hard"}, applies={"taskHasTag": "mon"})]
         tasks = [task(i, durationMinutesRemaining=480, tagIds=["mon"]) for i in (1, 2, 3)]
         result = S.solve(payload(tasks, rules=rules))
@@ -316,7 +323,7 @@ class SolveTest(unittest.TestCase):
         self.assertEqual(result["scores"]["decision"]["byPriority"], {2: 1})
 
 
-class LifeRuleTest(unittest.TestCase):
+class WindowAndGapTest(unittest.TestCase):
     def test_cross_midnight_run(self):
         rules = [rule("sleep", {"type": "timeWindow", "start": "22:00", "end": "07:00"},
                       {"kind": "hard"}, applies={"taskHasTag": "sleep"})]
@@ -381,6 +388,30 @@ class LifeRuleTest(unittest.TestCase):
         result = S.solve(payload([task(1, tagIds=["grocery"])], rules=rules, weather=weather_hours({17})))
         start = S.parse_datetime(result["assignments"][0]["startAt"]).astimezone(timezone.utc)
         self.assertEqual(start.hour, 17)
+
+    def test_weather_gate_when_scopes_the_bonus(self):
+        # The bonus is scoped to Wednesday (Python weekday 2), so even though every day has a nice
+        # hour, the solver must choose Wednesday's.
+        rules = [rule("nice", {"type": "weatherGate", **NICE_WEATHER, "when": {"dayOfWeek": [2]}},
+                      {"kind": "soft", "weight": 30}, applies={"taskHasTag": "grocery"})]
+        result = S.solve(payload([task(1, tagIds=["grocery"])], rules=rules, weather=weather_hours({17})))
+        start = S.parse_datetime(result["assignments"][0]["startAt"])
+        self.assertEqual(start.astimezone(LOCAL).weekday(), 2)
+        self.assertEqual(start.astimezone(timezone.utc).hour, 17)
+
+    def test_daily_budget_when_counts_only_matching_days_in_style(self):
+        # Each task is pinned to a day by a hard rule; the budget only counts Saturday, so one
+        # active matching day and no excess -> +10. (The reported style must match the objective.)
+        rules = [
+            rule("d-sat", {"type": "assignDays", "days": [5]}, {"kind": "hard"}, applies={"taskHasTag": "sat"}),
+            rule("d-mon", {"type": "assignDays", "days": [0]}, {"kind": "hard"}, applies={"taskHasTag": "mon"}),
+            rule("d-tue", {"type": "assignDays", "days": [1]}, {"kind": "hard"}, applies={"taskHasTag": "tue"}),
+            rule("budget", {"type": "dailyBudget", "softMaxPerDay": 1, "when": {"dayOfWeek": [5]}},
+                 {"kind": "soft", "weight": 10}, applies={"taskHasTag": "outing"}),
+        ]
+        tasks = [task(1, tagIds=["outing", "sat"]), task(2, tagIds=["outing", "mon"]), task(3, tagIds=["outing", "tue"])]
+        result = S.solve(payload(tasks, rules=rules))
+        self.assertEqual(result["scores"]["style"], 10)
 
     def test_weather_gate_hard_restricts_eligible_slots(self):
         rules = [rule("nice", {"type": "weatherGate", **NICE_WEATHER}, {"kind": "hard"}, applies={"taskHasTag": "grocery"})]

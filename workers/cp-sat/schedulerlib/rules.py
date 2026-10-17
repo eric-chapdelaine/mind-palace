@@ -44,18 +44,21 @@ def rule_applies(rule, task):
     return rule.get("enabled", True) and condition_matches(rule.get("applies"), task)
 
 
+def day_matches(when, weekday):
+    """Does a Python weekday (0=Mon .. 6=Sun) pass a rule's `when` day filter?"""
+    if not when:
+        return True
+    days = when.get("dayOfWeek")
+    return days is None or weekday in set(days)
+
+
 def when_matches(when, slot):
     """Placement-scoped gate: does this slot match the rule's `when` condition?
 
     `applies` selects *which tasks* a rule governs; `when` decides whether the term applies to a
     particular placement (used by "outings at 5pm on weekdays"-style rules).
     """
-    if not when:
-        return True
-    days = when.get("dayOfWeek")
-    if days is not None and slot["weekday"] not in set(days):
-        return False
-    return True
+    return day_matches(when, slot["weekday"])
 
 
 def window_slot_indices(slots, start_clock, end_clock, when=None):
@@ -100,7 +103,8 @@ def eligible_slots(task, slots, busy_indices, rules, weather_by_hour):
             applied_hard.append(rule.get("reason") or rule.get("id"))
         elif effect_type == "weatherGate":
             eligible = [index for index in eligible
-                        if weather_is_nice(slot_weather(slots[index], weather_by_hour), effect) is not False]
+                        if when_matches(when, slots[index])
+                        and weather_is_nice(slot_weather(slots[index], weather_by_hour), effect) is not False]
             applied_hard.append(rule.get("reason") or rule.get("id"))
 
     if task.get("earliestStart"):
@@ -129,7 +133,7 @@ def style_windows(tasks, rules, slots, weather_by_hour):
             inside = window_slot_indices(slots, effect.get("start", "00:00"), effect.get("end", "23:59"), when)
         elif effect_type == "weatherGate":
             inside = {s["index"] for s in slots
-                      if weather_is_nice(slot_weather(s, weather_by_hour), effect) is True}
+                      if when_matches(when, s) and weather_is_nice(slot_weather(s, weather_by_hour), effect) is True}
         else:
             continue
         for task in tasks:

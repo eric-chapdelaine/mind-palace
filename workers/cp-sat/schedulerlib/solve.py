@@ -16,7 +16,7 @@ from ortools.sat.python import cp_model
 
 from .config import DEFAULT_CONFIG, MODEL_VERSION
 from .objective import compact, decision_weights, group_day_counts, run_capacity, soft_totals
-from .rules import eligible_slots, rule_applies, rule_strength, when_matches, window_slot_indices
+from .rules import day_matches, eligible_slots, rule_applies, rule_strength, when_matches, window_slot_indices
 from .timegrid import build_slots, overlaps, parse_datetime
 from .weather import slot_weather, weather_by_hour, weather_is_nice
 
@@ -166,7 +166,8 @@ def solve(payload):
                     in_nice = model.new_bool_var(f"nice_{rule['id']}_{task['id']}_{index}")
                     model.add_allowed_assignments(
                         [run["start"], in_nice],
-                        [[slot, int(weather_is_nice(slot_weather(slots[slot], weather_hours), effect) is True)]
+                        [[slot, int(when_matches(when, slots[slot])
+                                    and weather_is_nice(slot_weather(slots[slot], weather_hours), effect) is True)]
                          for slot in range(slot_count)],
                     )
                     add_soft(value * in_nice, abs(value))
@@ -178,7 +179,10 @@ def solve(payload):
             max_slots = max(1, int(effect.get("maxPerDayMinutes", 120)) // slot_minutes)
             for day in range(day_count):
                 excess = model.new_int_var(0, span, f"ex_{rule['id']}_{day}")
-                model.add(excess >= totals[day] - max_slots)
+                if day_matches(when, day_weekday[day]):
+                    model.add(excess >= totals[day] - max_slots)
+                else:
+                    model.add(excess == 0)
                 add_soft(-value * excess, value * span)
             if effect.get("minDistinctDays"):
                 active = []
@@ -200,7 +204,7 @@ def solve(payload):
             totals, span = group_day_counts(model, f"db_{rule['id']}", group, task_runs, day_of, day_count)
             soft_max = max(1, int(effect.get("softMaxPerDay", 1)))
             for day in range(day_count):
-                if when and when.get("dayOfWeek") is not None and day_weekday[day] not in set(when["dayOfWeek"]):
+                if not day_matches(when, day_weekday[day]):
                     continue
                 is_active = model.new_bool_var(f"dbact_{rule['id']}_{day}")
                 model.add(totals[day] >= 1).only_enforce_if(is_active)

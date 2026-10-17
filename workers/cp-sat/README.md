@@ -28,7 +28,7 @@ The model lives in the `schedulerlib` package, one responsibility per module:
   - `dailyBudget` — soft per-day **count** budget for a tag group (`softMaxPerDay`); rewards covering days and penalizes extras ("an outing every day, minimize the count").
   - `weatherGate` — hard or soft weather filter/bonus. Every threshold (`minTemperatureF`, `maxTemperatureF`, `maxPrecipitationProbability`, `maxWindMph`, `requireDaytime`) is optional and comes from the rule: the worker evaluates only the dimensions the rule sets, and a rule with no bounds is treated as unknown (never a built-in "nice").
   - `withinAfter` — hard max gap from a prerequisite ("get outside within 30 minutes of waking").
-  - Any effect may carry a placement-scoped `when: { dayOfWeek: [...] }` (Python weekday order) so a bonus applies only to placements on those days.
+  - Any effect may carry a placement-scoped `when: { dayOfWeek: [...] }` (Python weekday order): slot-scoped effects (`assignDays`, `timeWindow`, `preferTimeOfDay`, `weatherGate`) only apply on those days, and day-scoped effects (`spread`, `dailyBudget`) only apply their per-day term on those days.
 - **Objective**: a single weighted expression. The decision term (priority-weighted placement, self-scaling so each level outweighs every lower level combined) is multiplied above the total possible soft contribution, so a preference can never drop a task.
 - **Weather-aware rules**: the payload's `weather[]` hours are matched to slot starts, so a gate/bonus is evaluated per placement. A missing forecast is treated as unknown, so a hard gate is permissive rather than blocking.
 - **Dependencies**: a dependent's interval starts at or after its prerequisite's interval end; `withinAfter` adds the upper bound.

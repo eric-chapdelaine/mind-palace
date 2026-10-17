@@ -6,6 +6,7 @@
 
 from .rules import (
     day_group_ids,
+    day_matches,
     rule_applies,
     rule_strength,
     style_windows,
@@ -162,6 +163,7 @@ def compact(placement, tasks, slots, day_of, eligible_by_task, rules, weather_by
 def soft_totals(placement, tasks, rules, slots, slot_minutes, weather_by_hour):
     """Final style value (window/weather bonuses minus spread/budget penalties) for reporting."""
     total = 0
+    date_weekday = {slot["date"]: slot["weekday"] for slot in slots}
     for rule in rules:
         kind, weight = rule_strength(rule)
         if kind != "soft":
@@ -182,7 +184,8 @@ def soft_totals(placement, tasks, rules, slots, slot_minutes, weather_by_hour):
         elif effect_type == "weatherGate":
             total += value * sum(1 for task in tasks if rule_applies(rule, task)
                                  for start, _size in placement.get(task["id"], [])
-                                 if weather_is_nice(slot_weather(slots[start], weather_by_hour), effect) is True)
+                                 if when_matches(when, slots[start])
+                                 and weather_is_nice(slot_weather(slots[start], weather_by_hour), effect) is True)
         elif effect_type == "spread":
             group = [task for task in tasks if rule_applies(rule, task)]
             if len(group) < 2:
@@ -192,7 +195,8 @@ def soft_totals(placement, tasks, rules, slots, slot_minutes, weather_by_hour):
                 for start, size in placement.get(task["id"], []):
                     totals[slots[start]["date"]] = totals.get(slots[start]["date"], 0) + size
             max_slots = max(1, int(effect.get("maxPerDayMinutes", 120)) // slot_minutes)
-            total -= value * sum(max(0, count - max_slots) for count in totals.values())
+            total -= value * sum(max(0, count - max_slots)
+                                 for date, count in totals.items() if day_matches(when, date_weekday[date]))
             if effect.get("minDistinctDays"):
                 active = sorted(date for date, count in totals.items() if count > 0)
                 total += value * len(active)
@@ -208,6 +212,7 @@ def soft_totals(placement, tasks, rules, slots, slot_minutes, weather_by_hour):
                 for start, size in placement.get(task["id"], []):
                     totals[slots[start]["date"]] = totals.get(slots[start]["date"], 0) + size
             soft_max = max(1, int(effect.get("softMaxPerDay", 1)))
-            total += value * sum(1 for count in totals.values() if count > 0)
-            total -= value * sum(max(0, count - soft_max) for count in totals.values())
+            matching = [count for date, count in totals.items() if day_matches(when, date_weekday[date])]
+            total += value * sum(1 for count in matching if count > 0)
+            total -= value * sum(max(0, count - soft_max) for count in matching)
     return total

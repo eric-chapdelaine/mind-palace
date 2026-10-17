@@ -11,7 +11,6 @@ DEFAULT_CONFIG = {
     "dayEnd": "24:00",
     "timeZone": "America/New_York",
     "priorityMode": "weighted",  # "weighted" | "fair"
-    "priorityExchange": 3,       # kept for payload compatibility
     "timeBudgetSeconds": 15,
     "compact": True,             # greedy post-pass that pulls blocks earlier (preferEarlier)
 }
