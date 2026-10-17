@@ -17,6 +17,8 @@ import { formatClock, formatMinutes } from "./lib/health";
 
 const DAY_START_HOUR = 8;
 const DAY_END_HOUR = 20; // 8am-8pm: the useful day the calendar should fit without scrolling
+// Dragging a proposed block moves it in 30-minute steps, matching the scheduler's slot size.
+const BLOCK_MOVE_SNAP_MINUTES = 30;
 
 function startOfDay(date: Date): Date {
   const result = new Date(date);
@@ -85,6 +87,16 @@ function directTagIds(task: TaskSummary): number[] {
 function sameIds(left: number[], right: number[]): boolean {
   const sort = (ids: number[]) => [...ids].sort((a, b) => a - b).join(",");
   return sort(left) === sort(right);
+}
+
+/**
+ * Where a dragged block should start. `cursorMinutes` is the pointer (minutes since local
+ * midnight) minus the grab offset. Keeps the whole block within the day and snaps to the grid.
+ */
+function snappedBlockStart(cursorMinutes: number, durationMinutes: number): number {
+  const latestStart = 1440 - durationMinutes;
+  const snapped = Math.round(cursorMinutes / BLOCK_MOVE_SNAP_MINUTES) * BLOCK_MOVE_SNAP_MINUTES;
+  return Math.min(latestStart, Math.max(0, snapped));
 }
 
 const terminalStatuses = new Set(["completed", "cancelled"]);
@@ -234,6 +246,9 @@ export function SchedulePage() {
   const [error, setError] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [dragOverRow, setDragOverRow] = useState<number | null>(null);
+  const [draggingBlockId, setDraggingBlockId] = useState<number | null>(null);
+  const [dragOverDay, setDragOverDay] = useState<string | null>(null);
+  const blockGrabOffsetMinutes = useRef(0);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const calendar = useRef<HTMLDivElement>(null);
   const calendarHead = useRef<HTMLDivElement>(null);
@@ -490,6 +505,52 @@ export function SchedulePage() {
     if (Number.isInteger(taskId)) void assignDay(taskId, dayPublicId);
   }
 
+  // ---- Drag & drop: move a proposed time block to a new day/time ----
+
+  function startBlockDrag(event: DragEvent<HTMLElement>, blockId: number) {
+    event.dataTransfer.setData("timeBlockId", String(blockId));
+    event.dataTransfer.effectAllowed = "move";
+    const rect = event.currentTarget.getBoundingClientRect();
+    // Remember where in the block the drag started so it stays under the cursor.
+    blockGrabOffsetMinutes.current = Math.max(0, (event.clientY - rect.top) / hourHeight * 60);
+    setDraggingBlockId(blockId);
+  }
+
+  function endBlockDrag() {
+    setDraggingBlockId(null);
+    setDragOverDay(null);
+  }
+
+  function leaveDay(event: DragEvent<HTMLElement>) {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragOverDay(null);
+  }
+
+  /** Drop a proposed block on a day column, keeping its duration and snapping the start to the grid. */
+  async function dropBlockOnDay(event: DragEvent<HTMLElement>, day: Date) {
+    const raw = event.dataTransfer.getData("timeBlockId");
+    setDraggingBlockId(null);
+    setDragOverDay(null);
+    if (raw === "") return; // a task-chip drag, not a block
+    event.preventDefault();
+    const blockId = Number(raw);
+    const block = schedule?.timeBlocks.find((entry) => entry.id === blockId);
+    if (!block || block.status !== "proposed") return;
+    const durationMinutes = (new Date(block.endAt).getTime() - new Date(block.startAt).getTime()) / 60_000;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const cursorMinutes = (event.clientY - rect.top) / hourHeight * 60 - blockGrabOffsetMinutes.current;
+    const snapped = snappedBlockStart(cursorMinutes, durationMinutes);
+    const startAt = new Date(day);
+    startAt.setHours(0, snapped, 0, 0);
+    const endAt = new Date(startAt);
+    endAt.setMinutes(startAt.getMinutes() + durationMinutes);
+    try {
+      await api.updateTimeBlock(block.id, { startAt: startAt.toISOString(), endAt: endAt.toISOString() });
+      await load();
+    } catch (moveError) {
+      setError(moveError instanceof Error ? moveError.message : String(moveError));
+    }
+  }
+
   const now = new Date();
   const days = Array.from({ length: 7 }, (_, index) => addDays(rangeStart, index));
   const rangeEnd = addDays(rangeStart, 7);
@@ -664,7 +725,15 @@ export function SchedulePage() {
               ? now.getHours() * 60 + now.getMinutes()
               : day < startOfDay(now) ? 1440 : 0;
 
-            return <section className="calendar-day" key={day.toISOString()}>
+            const dayKey = day.toISOString();
+            return <section
+              className={`calendar-day${dragOverDay === dayKey ? " drag-over" : ""}`}
+              key={dayKey}
+              onDragOver={(event) => { if (draggingBlockId !== null) event.preventDefault(); }}
+              onDragEnter={() => { if (draggingBlockId !== null) setDragOverDay(dayKey); }}
+              onDragLeave={leaveDay}
+              onDrop={(event) => void dropBlockOnDay(event, day)}
+            >
               {elapsedMinutes > 0 && <div
                 className="elapsed-time"
                 style={{ height: elapsedMinutes * hourHeight / 60 }}
@@ -731,16 +800,21 @@ export function SchedulePage() {
                 // Calendar imports are fixed commitments the solver cannot move; tint them like the
                 // Garmin health windows so they read as external time rather than schedulable work.
                 const fixed = block.type === "calendar_event";
+                // Proposed blocks can be dragged to a new time; accepted/imported blocks cannot.
+                const movable = block.status === "proposed" && !fixed;
 
                 return <article
-                  className={`calendar-event block-${block.status}${fixed ? " calendar-event-fixed" : ""} ${compact ? "calendar-event-compact" : ""} ${new Date(block.endAt) <= now ? "schedule-past" : ""}`}
+                  className={`calendar-event block-${block.status}${fixed ? " calendar-event-fixed" : ""} ${compact ? "calendar-event-compact" : ""} ${new Date(block.endAt) <= now ? "schedule-past" : ""}${movable ? " calendar-event-movable" : ""}${draggingBlockId === block.id ? " calendar-event-dragging" : ""}`}
                   key={`${block.key}-${day.toISOString()}`}
                   style={{ top, height }}
-                  title={`${title}: ${startLabel} - ${endLabel}`}
+                  title={`${title}: ${startLabel} - ${endLabel}${movable ? " — drag to move" : ""}`}
+                  draggable={movable}
+                  onDragStart={(event) => { if (movable) startBlockDrag(event, block.id); }}
+                  onDragEnd={endBlockDrag}
                 >
                   <div className="calendar-event-summary">
                     <time>{compact ? startLabel : `${startLabel} - ${endLabel}`}</time>
-                    <Link to={`/tasks/${block.taskId}`}><strong>{title}</strong></Link>
+                    <Link to={`/tasks/${block.taskId}`} draggable={false}><strong>{title}</strong></Link>
                     {compact && block.status === "proposed" && <button
                       aria-label={`Accept ${title}`}
                       onClick={() => void api.acceptTaskSchedule(block.taskId).then(setSchedule)}
@@ -779,7 +853,8 @@ export function SchedulePage() {
             </div>
             <p className="muted">
               Tasks you picked with “Add to this week” on the board. Drag one onto a day in the calendar to pin it
-              there, or onto another task to reorder it — ✓ marks tasks already fully scheduled.
+              there, or onto another task to reorder it — ✓ marks tasks already fully scheduled. Drag a dashed
+              proposed block to a new time to move it; accepted blocks stay put when you regenerate.
             </p>
             {unSchedulableCount > 0 && <p className="muted week-tasks-warning">
               {unSchedulableCount} of {committed.length} proposed task{unSchedulableCount === 1 ? "" : "s"} can’t be scheduled yet —

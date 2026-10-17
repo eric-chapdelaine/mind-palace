@@ -180,6 +180,19 @@ class SolveTest(unittest.TestCase):
         result = S.solve(payload(tasks, time_blocks=busy_except(1)))
         self.assertEqual(result["unscheduledTaskIds"], [2, 3, 4, 5, 6])
 
+    def test_accepted_block_is_immovable(self):
+        # The task already holds an accepted 60 min at the horizon start; the remaining 60 min must
+        # land elsewhere. The accepted window is busy — it is never reused and never moved.
+        slots = slots_for()
+        accepted_start, accepted_end = slots[0]["start"], slots[2]["start"]
+        accepted = {"status": "accepted", "startAt": accepted_start.isoformat(), "endAt": accepted_end.isoformat()}
+        result = S.solve(payload([task(1, durationMinutesRemaining=60, splittable=False)], time_blocks=[accepted]))
+        self.assertEqual(result["unscheduledTaskIds"], [])
+        self.assertEqual(len(result["assignments"]), 1)
+        start, end = S.parse_datetime(result["assignments"][0]["startAt"]), S.parse_datetime(result["assignments"][0]["endAt"])
+        self.assertTrue(end <= accepted_start or start >= accepted_end, "assignment overlaps the accepted block")
+        self.assertEqual((end - start).total_seconds() / 60, 60)
+
     def test_non_splittable_is_one_block(self):
         result = S.solve(payload([task(1, durationMinutesRemaining=120, splittable=False)]))
         assigned = [a for a in result["assignments"] if a["taskId"] == 1]
