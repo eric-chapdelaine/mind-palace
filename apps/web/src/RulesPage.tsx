@@ -14,6 +14,9 @@ const EFFECT_TYPES = [
   { value: "timeWindow", label: "Time window" },
   { value: "preferTimeOfDay", label: "Prefer time of day" },
   { value: "spread", label: "Spread across days" },
+  { value: "dailyBudget", label: "Min/max per day" },
+  { value: "weatherGate", label: "Weather conditions" },
+  { value: "withinAfter", label: "Within X of prerequisite" },
 ] as const;
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -31,7 +34,21 @@ function describeEffect(effect: RuleEffect): string {
     case "preferTimeOfDay":
       return `${effect.start}–${effect.end}`;
     case "spread":
-      return `≤ ${effect.maxPerDayMinutes} min/day`;
+      return `≤ ${effect.maxPerDayMinutes ?? 120} min/day${effect.minDistinctDays ? ` · ≥${effect.minDistinctDays} days` : ""}`;
+    case "dailyBudget":
+      return `≤ ${effect.softMaxPerDay ?? 1}/day`;
+    case "weatherGate": {
+      const parts: string[] = [];
+      if (effect.minTemperatureF !== undefined || effect.maxTemperatureF !== undefined) {
+        parts.push(`${effect.minTemperatureF ?? "–"}–${effect.maxTemperatureF ?? "–"}°F`);
+      }
+      if (effect.maxPrecipitationProbability !== undefined) parts.push(`rain ≤${effect.maxPrecipitationProbability}%`);
+      if (effect.maxWindMph !== undefined) parts.push(`wind ≤${effect.maxWindMph} mph`);
+      if (effect.requireDaytime) parts.push("daytime");
+      return parts.length > 0 ? `weather: ${parts.join(", ")}` : "weather (no bounds set)";
+    }
+    case "withinAfter":
+      return `within ${effect.maxMinutes ?? 30} min of prerequisite`;
   }
 }
 
@@ -89,19 +106,52 @@ function RuleForm({ tags, onCreate }: { tags: Tag[]; onCreate: (input: Scheduler
   const [start, setStart] = useState("07:00");
   const [end, setEnd] = useState("11:00");
   const [maxPerDay, setMaxPerDay] = useState(120);
+  const [minDays, setMinDays] = useState(0);
+  const [avoidConsecutive, setAvoidConsecutive] = useState(false);
+  const [budgetMax, setBudgetMax] = useState(1);
+  const [minTemp, setMinTemp] = useState("50");
+  const [maxTemp, setMaxTemp] = useState("80");
+  const [maxPrecip, setMaxPrecip] = useState("20");
+  const [maxWind, setMaxWind] = useState("15");
+  const [requireDaytime, setRequireDaytime] = useState(true);
+  const [withinMinutes, setWithinMinutes] = useState(30);
   const [hard, setHard] = useState(false);
   const [weight, setWeight] = useState(3);
   const [reason, setReason] = useState("");
 
-  // Only day pins and time windows can be hard constraints; the other effects are preferences.
-  const hardCapable = effectType === "assignDays" || effectType === "timeWindow";
+  // Day pins, time windows, nice-weather-only, and prerequisite gaps can be hard constraints.
+  const hardCapable = effectType === "assignDays" || effectType === "timeWindow"
+    || effectType === "weatherGate" || effectType === "withinAfter";
 
   function buildEffect(): RuleEffect {
     switch (effectType) {
       case "assignDays": return { type: "assignDays", days };
       case "timeWindow": return { type: "timeWindow", start, end };
       case "preferTimeOfDay": return { type: "preferTimeOfDay", start, end };
-      case "spread": return { type: "spread", maxPerDayMinutes: maxPerDay };
+      case "spread": return {
+        type: "spread",
+        maxPerDayMinutes: maxPerDay,
+        ...(minDays > 0 ? { minDistinctDays: minDays } : {}),
+        ...(avoidConsecutive ? { avoidConsecutive: true } : {}),
+      };
+      case "dailyBudget": return { type: "dailyBudget", softMaxPerDay: budgetMax };
+      case "weatherGate": {
+        // Blank inputs mean "no bound on this dimension" — the worker applies only what you set.
+        const optionalNumber = (value: string): number | undefined => value.trim() === "" ? undefined : Number(value);
+        const min = optionalNumber(minTemp);
+        const max = optionalNumber(maxTemp);
+        const precipitation = optionalNumber(maxPrecip);
+        const wind = optionalNumber(maxWind);
+        return {
+          type: "weatherGate",
+          ...(min !== undefined ? { minTemperatureF: min } : {}),
+          ...(max !== undefined ? { maxTemperatureF: max } : {}),
+          ...(precipitation !== undefined ? { maxPrecipitationProbability: precipitation } : {}),
+          ...(wind !== undefined ? { maxWindMph: wind } : {}),
+          ...(requireDaytime ? { requireDaytime: true } : {}),
+        };
+      }
+      case "withinAfter": return { type: "withinAfter", maxMinutes: withinMinutes };
     }
   }
 
@@ -133,7 +183,7 @@ function RuleForm({ tags, onCreate }: { tags: Tag[]; onCreate: (input: Scheduler
           <select value={effectType} onChange={(event) => {
             const next = event.target.value as typeof effectType;
             setEffectType(next);
-            if (next !== "assignDays" && next !== "timeWindow") setHard(false);
+            if (next !== "assignDays" && next !== "timeWindow" && next !== "weatherGate" && next !== "withinAfter") setHard(false);
           }}>
             {EFFECT_TYPES.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}
           </select>
@@ -156,8 +206,29 @@ function RuleForm({ tags, onCreate }: { tags: Tag[]; onCreate: (input: Scheduler
           <label>Start<input type="time" value={start} onChange={(event) => setStart(event.target.value)} /></label>
           <label>End<input type="time" value={end} onChange={(event) => setEnd(event.target.value)} /></label>
         </>}
-        {effectType === "spread" && (
+        {effectType === "spread" && <>
           <label>Max minutes/day<input type="number" min={30} step={30} value={maxPerDay} onChange={(event) => setMaxPerDay(Number(event.target.value))} /></label>
+          <label>Min distinct days<input type="number" min={0} max={7} value={minDays} onChange={(event) => setMinDays(Number(event.target.value))} /></label>
+          <label>
+            <input type="checkbox" checked={avoidConsecutive} onChange={(event) => setAvoidConsecutive(event.target.checked)} />
+            Avoid consecutive days
+          </label>
+        </>}
+        {effectType === "dailyBudget" && (
+          <label>Max per day<input type="number" min={1} value={budgetMax} onChange={(event) => setBudgetMax(Number(event.target.value))} /></label>
+        )}
+        {effectType === "weatherGate" && <>
+          <label>Min temp °F<input type="number" value={minTemp} onChange={(event) => setMinTemp(event.target.value)} placeholder="any" /></label>
+          <label>Max temp °F<input type="number" value={maxTemp} onChange={(event) => setMaxTemp(event.target.value)} placeholder="any" /></label>
+          <label>Max rain %<input type="number" min={0} max={100} value={maxPrecip} onChange={(event) => setMaxPrecip(event.target.value)} placeholder="any" /></label>
+          <label>Max wind mph<input type="number" min={0} value={maxWind} onChange={(event) => setMaxWind(event.target.value)} placeholder="any" /></label>
+          <label>
+            <input type="checkbox" checked={requireDaytime} onChange={(event) => setRequireDaytime(event.target.checked)} />
+            Daytime only
+          </label>
+        </>}
+        {effectType === "withinAfter" && (
+          <label>Max minutes after<input type="number" min={0} step={15} value={withinMinutes} onChange={(event) => setWithinMinutes(Number(event.target.value))} /></label>
         )}
         <label>Strength
           <select

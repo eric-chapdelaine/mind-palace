@@ -51,6 +51,8 @@ export const reservedTagPublicIds = {
   calendarEvent: "mind-palace:calendar-event",
   routine: "mind-palace:routine",
   thisWeek: "mind-palace:this-week",
+  cook: "mind-palace:cook",
+  eatOut: "mind-palace:eat-out",
 } as const;
 
 /**
@@ -145,6 +147,8 @@ export interface WeatherForecast {
   forecastAt: string;
   temperatureF: number | null;
   precipitationProbability: number | null;
+  windMph: number | null;
+  isDaytime: boolean | null;
   shortForecast: string | null;
   expiresAt: string;
 }
@@ -295,15 +299,35 @@ export type RuleCondition =
  * outside it. `assignDays` and `timeWindow` may be hard; `preferTimeOfDay` and `spread` are
  * preferences only.
  */
-export const ruleEffectTypes = ["assignDays", "timeWindow", "preferTimeOfDay", "spread"] as const;
+export const ruleEffectTypes = ["assignDays", "timeWindow", "preferTimeOfDay", "spread", "dailyBudget", "weatherGate", "withinAfter"] as const;
 export type RuleEffectType = (typeof ruleEffectTypes)[number];
+
+/**
+ * A placement-scoped condition: the term applies to a slot only when that slot matches. This is
+ * separate from `applies`, which selects *which tasks* a rule governs. `dayOfWeek` uses Python
+ * weekday order (0 = Monday .. 6 = Sunday).
+ */
+export interface RuleWhen {
+  dayOfWeek?: number[];
+}
 
 /** What a rule does. `type` selects the implementation; the remaining keys are parameters. */
 export type RuleEffect =
-  | { type: "assignDays"; days: number[] }
-  | { type: "timeWindow"; start: string; end: string }
-  | { type: "preferTimeOfDay"; start: string; end: string }
-  | { type: "spread"; maxPerDayMinutes: number };
+  | { type: "assignDays"; days: number[]; when?: RuleWhen }
+  | { type: "timeWindow"; start: string; end: string; when?: RuleWhen }
+  | { type: "preferTimeOfDay"; start: string; end: string; when?: RuleWhen }
+  | { type: "spread"; maxPerDayMinutes?: number; minDistinctDays?: number; avoidConsecutive?: boolean; when?: RuleWhen }
+  | { type: "dailyBudget"; minPerDay?: number; softMaxPerDay?: number; when?: RuleWhen }
+  | { type: "withinAfter"; maxMinutes?: number }
+  | {
+      type: "weatherGate";
+      minTemperatureF?: number;
+      maxTemperatureF?: number;
+      maxPrecipitationProbability?: number;
+      maxWindMph?: number;
+      requireDaytime?: boolean;
+      when?: RuleWhen;
+    };
 
 /** Hard rules constrain feasibility; soft rules add a weighted term to the single objective. */
 export type RuleStrength = { kind: "hard" } | { kind: "soft"; weight: number };

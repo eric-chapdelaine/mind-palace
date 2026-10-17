@@ -91,6 +91,8 @@ function mapWeatherForecast(value: Row): WeatherForecast {
     forecastAt: text(value.forecast_at),
     temperatureF: value.temperature_f === null ? null : integer(value.temperature_f),
     precipitationProbability: value.precipitation_probability === null ? null : integer(value.precipitation_probability),
+    windMph: value.wind_mph === null ? null : Number(value.wind_mph),
+    isDaytime: value.is_daytime === null ? null : boolean(value.is_daytime),
     shortForecast: nullableText(value.short_forecast),
     expiresAt: text(value.expires_at),
   };
@@ -113,9 +115,11 @@ function mapSchedulerRule(value: Row): SchedulerRule {
   };
 }
 
-/** Only day pins and time windows are constraints; the other effects are preferences. */
+/** Effects that can be hard constraints; the rest are preferences only. */
+const hardRuleEffects = new Set(["assignDays", "timeWindow", "weatherGate", "withinAfter"]);
+
 function assertRuleStrengthMatchesEffect(effect: RuleEffect, strength: RuleStrength): void {
-  if (strength.kind === "hard" && effect.type !== "assignDays" && effect.type !== "timeWindow") {
+  if (strength.kind === "hard" && !hardRuleEffects.has(effect.type)) {
     throw new Error(`Effect '${effect.type}' cannot be hard`);
   }
 }
@@ -982,16 +986,18 @@ export class TaskRepository {
   upsertWeather(forecasts: Omit<WeatherForecast, "expiresAt">[], fetchedAt: string, expiresAt: string): void {
     const statement = this.database.connection.prepare(
       `INSERT INTO weather_forecasts
-        (location_key, forecast_at, temperature_f, precipitation_probability, short_forecast, fetched_at, expires_at)
-       VALUES ('boston-ma', ?, ?, ?, ?, ?, ?)
+        (location_key, forecast_at, temperature_f, precipitation_probability, wind_mph, is_daytime, short_forecast, fetched_at, expires_at)
+       VALUES ('boston-ma', ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(location_key, forecast_at) DO UPDATE SET temperature_f = excluded.temperature_f,
-         precipitation_probability = excluded.precipitation_probability, short_forecast = excluded.short_forecast,
+         precipitation_probability = excluded.precipitation_probability, wind_mph = excluded.wind_mph,
+         is_daytime = excluded.is_daytime, short_forecast = excluded.short_forecast,
          fetched_at = excluded.fetched_at, expires_at = excluded.expires_at`,
     );
     this.database.connection.exec("BEGIN IMMEDIATE");
     try {
       for (const forecast of forecasts) statement.run(
         forecast.forecastAt, forecast.temperatureF, forecast.precipitationProbability,
+        forecast.windMph, forecast.isDaytime === null ? null : forecast.isDaytime ? 1 : 0,
         forecast.shortForecast, fetchedAt, expiresAt,
       );
       this.database.connection.exec("COMMIT");

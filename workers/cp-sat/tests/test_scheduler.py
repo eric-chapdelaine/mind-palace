@@ -9,12 +9,21 @@ The worker is a pure function, so these tests build payloads directly (no DB, no
 
 import sys
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import scheduler as S  # noqa: E402
+
+# Explicit bounds: the worker has no built-in "nice weather", so tests must supply them.
+NICE_WEATHER = {
+    "minTemperatureF": 50,
+    "maxTemperatureF": 80,
+    "maxPrecipitationProbability": 20,
+    "maxWindMph": 15,
+    "requireDaytime": True,
+}
 
 
 # Monday 2026-03-02, 12:00 UTC == 07:00 America/New_York (EST). The first slot is 07:00 local.
@@ -41,7 +50,7 @@ def task(task_id, **overrides):
     return base
 
 
-def payload(tasks, rules=None, config=None, time_blocks=None, horizon_days=7):
+def payload(tasks, rules=None, config=None, time_blocks=None, horizon_days=7, weather=None):
     return {
         "modelVersion": S.MODEL_VERSION,
         "now": NOW.isoformat(),
@@ -49,8 +58,26 @@ def payload(tasks, rules=None, config=None, time_blocks=None, horizon_days=7):
         "config": config or {},
         "tasks": tasks,
         "timeBlocks": time_blocks or [],
+        "weather": weather or [],
         "rules": rules or [],
     }
+
+
+def weather_hours(nice_hours=()):
+    """Hourly forecast over the horizon; hours (UTC) in `nice_hours` are comfortable and dry."""
+    weather = []
+    cursor = NOW.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    for offset in range(7 * 24):
+        at = cursor + timedelta(hours=offset)
+        nice = at.hour in nice_hours
+        weather.append({
+            "forecastAt": at.isoformat().replace("+00:00", "Z"),
+            "temperatureF": 70 if nice else 30,
+            "precipitationProbability": 0,
+            "windMph": 5,
+            "isDaytime": True,
+        })
+    return weather
 
 
 def slots_for(config=None):
@@ -91,7 +118,7 @@ class PureHelpersTest(unittest.TestCase):
         horizon_start, horizon_end, slots = S.build_slots(NOW, 7, S.DEFAULT_CONFIG)
         self.assertEqual(horizon_start.isoformat(), "2026-03-02T07:00:00-05:00")
         self.assertEqual(horizon_end.isoformat(), "2026-03-09T07:00:00-04:00")  # DST transition
-        self.assertEqual(len(slots), 7 * 32)
+        self.assertEqual(len(slots), 7 * 48)
         self.assertEqual(slots[0]["weekday"], 0)  # Monday
         self.assertEqual(slots[0]["minuteOfDay"], 7 * 60)
         self.assertEqual(slots[31]["minuteOfDay"], 22 * 60 + 30)
@@ -264,6 +291,95 @@ class SolveTest(unittest.TestCase):
         self.assertEqual(result["scores"]["decision"]["of"], 1)
         # Direct call: Python dict keys stay ints (JSON serialization stringifies them).
         self.assertEqual(result["scores"]["decision"]["byPriority"], {2: 1})
+
+
+class LifeRuleTest(unittest.TestCase):
+    def test_cross_midnight_run(self):
+        rules = [rule("sleep", {"type": "timeWindow", "start": "22:00", "end": "07:00"},
+                      {"kind": "hard"}, applies={"taskHasTag": "sleep"})]
+        result = S.solve(payload([task(1, durationMinutesRemaining=480, tagIds=["sleep"])], rules=rules))
+        start = S.parse_datetime(result["assignments"][0]["startAt"]).astimezone(LOCAL)
+        end = S.parse_datetime(result["assignments"][0]["endAt"]).astimezone(LOCAL)
+        self.assertNotEqual(start.date(), end.date())
+        self.assertEqual((end - start).total_seconds(), 480 * 60)
+
+    def test_within_after_caps_the_gap(self):
+        rules = [rule("gap", {"type": "withinAfter", "maxMinutes": 30}, {"kind": "hard"},
+                      applies={"taskHasTag": "walk"})]
+        tasks = [task(1, tagIds=["wake"]), task(2, tagIds=["walk"], dependsOnTaskIds=[1])]
+        result = S.solve(payload(tasks, rules=rules))
+        starts = {a["taskId"]: S.parse_datetime(a["startAt"]) for a in result["assignments"]}
+        self.assertLessEqual((starts[2] - starts[1]).total_seconds(), 60 * 60)
+
+    def test_within_after_survives_compaction(self):
+        # The prerequisite has no window and would be pulled to the horizon start; the dependent
+        # has a preferred window. The hard max-gap must survive the greedy compaction pass.
+        rules = [
+            rule("gap", {"type": "withinAfter", "maxMinutes": 30}, {"kind": "hard"}, applies={"taskHasTag": "walk"}),
+            rule("morning", {"type": "preferTimeOfDay", "start": "06:00", "end": "07:00"},
+                 {"kind": "soft", "weight": 20}, applies={"taskHasTag": "walk"}),
+        ]
+        tasks = [task(1, tagIds=["wake"]), task(2, tagIds=["walk"], dependsOnTaskIds=[1])]
+        result = S.solve(payload(tasks, rules=rules))
+        starts = {a["taskId"]: S.parse_datetime(a["startAt"]) for a in result["assignments"]}
+        gap_minutes = (starts[2] - starts[1]).total_seconds() / 60
+        self.assertGreaterEqual(gap_minutes, 0)
+        self.assertLessEqual(gap_minutes, 60)
+
+    def test_daily_budget_spreads_tasks_across_days(self):
+        rules = [rule("budget", {"type": "dailyBudget", "softMaxPerDay": 1},
+                      {"kind": "soft", "weight": 20}, applies={"taskHasTag": "outing"})]
+        tasks = [task(i, tagIds=["outing"]) for i in (1, 2, 3)]
+        result = S.solve(payload(tasks, rules=rules))
+        days = {assignment["startAt"][:10] for assignment in result["assignments"]}
+        self.assertEqual(len(days), 3)
+
+    def test_spread_min_distinct_days_avoids_consecutive(self):
+        rules = [rule("sp", {"type": "spread", "maxPerDayMinutes": 600, "minDistinctDays": 3,
+                             "avoidConsecutive": True},
+                      {"kind": "soft", "weight": 10}, applies={"taskHasTag": "workout"})]
+        tasks = [task(i, tagIds=["workout"]) for i in (1, 2, 3)]
+        result = S.solve(payload(tasks, rules=rules))
+        days = sorted({S.parse_datetime(a["startAt"]).date() for a in result["assignments"]})
+        self.assertEqual(len(days), 3)
+        self.assertTrue(all((days[index + 1] - days[index]).days > 1 for index in range(len(days) - 1)))
+
+    def test_when_day_of_week_scopes_a_window(self):
+        rules = [rule("mon", {"type": "preferTimeOfDay", "start": "17:00", "end": "18:00",
+                              "when": {"dayOfWeek": [0]}}, {"kind": "soft", "weight": 50})]
+        result = S.solve(payload([task(1)], rules=rules))
+        start = S.parse_datetime(result["assignments"][0]["startAt"]).astimezone(LOCAL)
+        self.assertEqual(start.weekday(), 0)
+        self.assertEqual(start.hour, 17)
+
+    def test_weather_gate_soft_prefers_nice_hours(self):
+        rules = [rule("nice", {"type": "weatherGate", **NICE_WEATHER}, {"kind": "soft", "weight": 30},
+                      applies={"taskHasTag": "grocery"})]
+        result = S.solve(payload([task(1, tagIds=["grocery"])], rules=rules, weather=weather_hours({17})))
+        start = S.parse_datetime(result["assignments"][0]["startAt"]).astimezone(timezone.utc)
+        self.assertEqual(start.hour, 17)
+
+    def test_weather_gate_hard_restricts_eligible_slots(self):
+        rules = [rule("nice", {"type": "weatherGate", **NICE_WEATHER}, {"kind": "hard"}, applies={"taskHasTag": "grocery"})]
+        result = S.solve(payload([task(1, durationMinutesRemaining=60, tagIds=["grocery"])],
+                                 rules=rules, weather=weather_hours({17})))
+        start = S.parse_datetime(result["assignments"][0]["startAt"]).astimezone(timezone.utc)
+        self.assertEqual(start.hour, 17)
+
+    def test_weather_gate_hard_reports_when_unschedulable(self):
+        # A 4h task cannot fit inside isolated single nice hours.
+        rules = [rule("nice", {"type": "weatherGate", **NICE_WEATHER}, {"kind": "hard"}, applies={"taskHasTag": "grocery"})]
+        result = S.solve(payload([task(1, durationMinutesRemaining=240, tagIds=["grocery"])],
+                                 rules=rules, weather=weather_hours({17})))
+        self.assertEqual(result["unscheduledTaskIds"], [1])
+
+    def test_weather_gate_bounds_are_user_defined(self):
+        entry = {"temperatureF": 70, "precipitationProbability": 0, "windMph": 5, "isDaytime": True}
+        # No bounds at all: unknown, never a silent default.
+        self.assertIsNone(S.weather_is_nice(entry, {"type": "weatherGate"}))
+        # Only the dimensions a rule sets are evaluated.
+        self.assertTrue(S.weather_is_nice(entry, {"type": "weatherGate", "maxWindMph": 10}))
+        self.assertFalse(S.weather_is_nice(entry, {"type": "weatherGate", "minTemperatureF": 80}))
 
 
 if __name__ == "__main__":

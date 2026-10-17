@@ -10,6 +10,8 @@ import { healthEditableFieldsMigration } from "./009-health-editable-fields.js";
 import { taskDependenciesMigration } from "./010-task-dependencies.js";
 import { schedulerRulesMigration } from "./011-scheduler-rules.js";
 import { schedulerRulesDropTierMigration } from "./012-scheduler-rules-drop-tier.js";
+import { weatherDetailMigration } from "./013-weather-detail.js";
+import { mealModeTagsMigration } from "./014-meal-mode-tags.js";
 
 export interface Migration {
   version: number;
@@ -32,4 +34,6 @@ export const migrations: Migration[] = [
   taskDependenciesMigration,
   schedulerRulesMigration,
   schedulerRulesDropTierMigration,
+  weatherDetailMigration,
+  mealModeTagsMigration,
 ];

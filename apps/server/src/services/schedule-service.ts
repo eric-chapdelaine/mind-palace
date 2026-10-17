@@ -1,8 +1,9 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { TaskRepository } from "@mind-palace/database";
-import type { Schedule, ScheduleScores, ScheduleUnscheduled } from "@mind-palace/shared";
+import type { Schedule, ScheduleScores, ScheduleUnscheduled, WeatherForecast } from "@mind-palace/shared";
 import { runPythonWorker } from "./worker.js";
+import type { WeatherService } from "./weather-service.js";
 
 interface SolverResult {
   modelVersion: string;
@@ -56,7 +57,7 @@ const SCHEDULER_CONFIG = { priorityMode: "weighted" } as const;
 export class ScheduleService {
   private readonly workerDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../workers/cp-sat");
 
-  constructor(private readonly tasks: TaskRepository) {}
+  constructor(private readonly tasks: TaskRepository, private readonly weather: WeatherService) {}
 
   getSchedule(): Schedule {
     const latest = this.tasks.latestScheduleResult();
@@ -73,12 +74,20 @@ export class ScheduleService {
     // Release time held by stale proposals first so listSchedulableTasks (and the solver)
     // see an accurate remaining estimate; the new proposed blocks re-claim it below.
     this.tasks.supersedeProposedBlocks();
+    // Weather rules are optional: if NWS is unreachable and nothing is cached, schedule without.
+    let weather: WeatherForecast[] = [];
+    try {
+      weather = await this.weather.getWeather();
+    } catch {
+      weather = [];
+    }
     const input = {
       now: new Date().toISOString(),
       horizonDays: HORIZON_DAYS,
       config: SCHEDULER_CONFIG,
       tasks: this.tasks.listSchedulableTasks(),
       timeBlocks: this.tasks.listTimeBlocks(),
+      weather,
       rules: this.tasks.listSchedulerRules(),
     };
     const result = await this.runSolver(input);

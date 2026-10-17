@@ -11,12 +11,21 @@ interface NwsForecastResponse {
       startTime: string;
       temperature: number;
       probabilityOfPrecipitation: { value: number | null };
+      windSpeed: string;
+      isDaytime: boolean;
       shortForecast: string;
     }>;
   };
 }
 
 const headers = { "User-Agent": "mind-palace/0.1 (local personal project)", Accept: "application/geo+json" };
+
+/** NWS reports wind as e.g. "10 mph" or "5 to 10 mph"; keep the leading number. */
+function parseWindMph(value: string | undefined): number | null {
+  if (!value) return null;
+  const match = /(\d+(?:\.\d+)?)/.exec(value);
+  return match ? Number(match[1]) : null;
+}
 
 export class WeatherService {
   private inFlight: Promise<void> | null = null;
@@ -59,6 +68,8 @@ export class WeatherService {
         forecastAt: new Date(period.startTime).toISOString(),
         temperatureF: period.temperature,
         precipitationProbability: period.probabilityOfPrecipitation.value,
+        windMph: parseWindMph(period.windSpeed),
+        isDaytime: period.isDaytime,
         shortForecast: period.shortForecast,
       }));
     this.tasks.upsertWeather(values, fetchedAt.toISOString(), new Date(fetchedAt.getTime() + 8 * 60 * 60 * 1000).toISOString());
