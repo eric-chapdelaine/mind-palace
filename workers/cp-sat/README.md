@@ -4,25 +4,25 @@ This worker is the optimization boundary for Mind Palace. It reads one JSON sche
 
 The worker is a **pure function**: `now` and `horizonDays` arrive in the payload, so the same payload always yields the same schedule. (`num_search_workers = 1` and a fixed `random_seed` make even tied optima deterministic.)
 
-## Model (cp-sat-v5)
+## Model (cp-sat-v6)
 
 - **Slots**: 30-minute grid over `config.dayStart`–`config.dayEnd` (default 07:00–23:00) in `config.timeZone` (default `America/New_York`), for `horizonDays` (default 7). Accepted/completed time blocks are busy.
-- **Rules are data.** Each enabled rule has `applies` (a condition over a task's effective tags), `effect` (one of the catalog types), and `strength`:
-  - `{"kind":"hard"}` → a feasibility constraint (`assignDays`, hard `timeWindow`).
-  - `{"kind":"soft","tier":"style|fragmentation|placement","weight":N}` → an objective term.
-- **Objective tiers** are solved **lexicographically**, highest precedence first. The engine owns the order; rules only choose a tier. No hand-tuned constants keep tiers apart — each tier's optimum is locked with an equality constraint before the next is solved.
-  1. `decision` — which tasks get placed. In `strict` mode (default) this is one sub-tier per priority level, so a higher priority is never traded for a lower one; within a level, count dominates rank. `weighted` and `fair` modes are also supported via `config.priorityMode`.
-  2. `style` — soft per-slot preferences (`timeWindow`, `preferTimeOfDay`, `assignDays`) and `spread`.
-  3. `fragmentation` — `minimizeChunks`.
-  4. `placement` — `preferEarlier`.
-- **Chunking**: `maxChunkMinutes` caps each contiguous run of a splittable task; `minChunkMinutes` bounds the number of runs. A non-splittable task is a single run.
-- **Day pins** (`assignDays`) restrict eligibility but do not force the task to be scheduled, so an over-committed day spills gracefully (the task is reported unscheduled) instead of making the whole model infeasible.
+- **Intervals, not a boolean per slot.** A non-splittable task is one optional interval of its remaining duration; a splittable task is that many optional 30-minute unit intervals (splitting is free — `minChunkMinutes`/`maxChunkMinutes` are ignored). A single `NoOverlap` keeps every interval and every fixed commitment apart.
+- **Rules are data.** Each enabled rule has `applies` (a condition over a task's effective tags), `effect` (a catalog type), and `strength`:
+  - `{"kind":"hard"}` → restricts the task's eligible start domain (`assignDays`, hard `timeWindow`).
+  - `{"kind":"soft","tier":"style",...}` → an objective term (`preferTimeOfDay`, soft `timeWindow`, soft `assignDays`, `spread`).
+  - `fragmentation` (`minimizeChunks`) and `placement` (`preferEarlier`) tiers are accepted but not optimized: splitting is free, and `preferEarlier` is handled by the compaction pass below.
+- **Objective**: a single weighted expression. The decision term (priority-weighted placement, self-scaling so each level outweighs every lower level combined) is multiplied above the total possible soft contribution, so a preference can never drop a task.
+- **Dependencies**: a dependent's interval starts at or after its prerequisite's interval end (`start_B ≥ start_A + size_A`).
+- **preferEarlier** is not an objective term. After solving, a greedy **compaction pass** pulls each block to the earliest slot that keeps its hard eligibility, soft time-window membership, spread day, and dependencies. It is a heuristic applied to the solver's chosen set of tasks, not part of the optimum.
+- **Day pins / windows / busy blocks** restrict eligibility but do not force a task to be scheduled, so an over-committed day spills gracefully (the task is reported unscheduled) instead of making the whole model infeasible.
+- **Solver settings**: `num_search_workers = 1` and `random_seed = 0` for reproducibility. `cp_model_presolve = False` — the allowed-domain encoding makes CP-SAT presolve expensive (seconds) and can consume the whole budget before the first incumbent; turning it off makes the solve both faster and more robust.
 
 ## Output
 
 `{ modelVersion, horizonStart, horizonEnd, assignments, unscheduled, unscheduledTaskIds, tierScores, solverStatus, objectiveValue }`
 
-`unscheduled` carries classified reasons (`capacity`, `no_eligible_slots`, `rule`). `tierScores` reports the locked optimum per tier for the fidelity harness.
+`assignments` is one entry per interval (a splittable task yields one per 30-minute unit); `ScheduleService` merges adjacent entries for the same task into single time blocks before persisting. `unscheduled` carries classified reasons (`capacity`, `no_eligible_slots`, `rule`). `tierScores` reports the placed counts and the achieved style/fragmentation/placement values for display.
 
 ## Tests
 
@@ -31,7 +31,7 @@ pnpm test:worker
 # or: uv run --project workers/cp-sat python -m unittest discover -s workers/cp-sat/tests -v
 ```
 
-The pure helpers (`build_slots`, `condition_matches`, `rule_strength`, `window_slot_indices`, `decision_tiers`) are unit-tested directly, and `solve` is exercised end-to-end against constructed payloads.
+The pure helpers (`build_slots`, `condition_matches`, `rule_strength`, `window_slot_indices`, `decision_weights`) are unit-tested directly, and `solve` is exercised end-to-end against constructed payloads.
 
 Run it by hand with:
 

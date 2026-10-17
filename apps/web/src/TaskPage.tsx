@@ -5,12 +5,25 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "./api";
 import { useCrumbTitle } from "./components/Breadcrumbs";
+import { formatClock } from "./lib/health";
 import { TagRow } from "./components/TagRow";
 import { TaskBreadcrumbs } from "./components/TaskBreadcrumbs";
 import { TaskEditor } from "./components/TaskEditor";
 
 function formatDateTime(value: string): string {
   return new Date(value).toLocaleString();
+}
+
+/** "Mon, Oct 12, 2026 · 3:00 PM – 9:00 PM", or both dates when the block spans midnight. */
+function formatBlockRange(startAt: string, endAt: string): string {
+  const start = new Date(startAt);
+  const end = new Date(endAt);
+  const dayOptions: Intl.DateTimeFormatOptions = { weekday: "short", month: "short", day: "numeric", year: "numeric" };
+  const startLabel = start.toLocaleDateString(undefined, dayOptions);
+  if (start.toLocaleDateString() === end.toLocaleDateString()) {
+    return `${startLabel} · ${formatClock(startAt)} – ${formatClock(endAt)}`;
+  }
+  return `${startLabel} ${formatClock(startAt)} – ${end.toLocaleDateString(undefined, dayOptions)} ${formatClock(endAt)}`;
 }
 
 /** Open markdown links in a new tab instead of navigating the SPA away. */
@@ -109,7 +122,7 @@ function TimeBlockSection({ task, onAcceptSchedule, onDeleteBlock }: {
       {visible.map((block) => (
         <div className="mini-block" key={block.id}>
           <Link className="mini-block-link" to={`/time-blocks/${block.id}`}>
-            <strong>{formatDateTime(block.startAt)}</strong>
+            <strong>{formatBlockRange(block.startAt, block.endAt)}</strong>
             <span>{block.type === "calendar_event" ? "calendar event · " : ""}{block.status}</span>
           </Link>
           <button type="button" className="mini-block-delete" onClick={() => onDeleteBlock(block.id)}>Delete block</button>

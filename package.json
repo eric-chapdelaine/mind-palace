@@ -9,6 +9,7 @@
     "build": "pnpm --recursive build",
     "typecheck": "pnpm --recursive typecheck",
     "db:migrate": "pnpm --filter @mind-palace/server db:migrate",
+  "demo:reset": "node scripts/reset-demo.mjs",
     "test:worker": "uv run --project workers/cp-sat python -m unittest discover -s workers/cp-sat/tests",
     "start": "pnpm --filter @mind-palace/server start"
   },

@@ -8,13 +8,39 @@ interface SolverResult {
   modelVersion: string;
   horizonStart: string;
   horizonEnd: string;
-  assignments: Array<{ taskId: number; startAt: string; endAt: string }>;
+  assignments: Assignment[];
   unscheduled: ScheduleUnscheduled[];
   unscheduledTaskIds: number[];
   tierScores: ScheduleTierScores;
   solverStatus: string;
   objectiveValue: number;
   error?: string;
+}
+
+interface Assignment {
+  taskId: number;
+  startAt: string;
+  endAt: string;
+}
+
+/**
+ * Collapse adjacent solver slots for the same task into one block. The worker models time in
+ * fixed slots (e.g. two 30-minute slots), but a block of work is a contiguous span: 10:00-10:30
+ * plus 10:30-11:00 is a single 10:00-11:00 block. The API and UI both read blocks, so the merge
+ * happens once here instead of being re-done by every consumer.
+ */
+export function mergeAssignments(assignments: Assignment[]): Assignment[] {
+  const sorted = [...assignments].sort((left, right) => left.startAt.localeCompare(right.startAt) || left.taskId - right.taskId);
+  const merged: Assignment[] = [];
+  for (const assignment of sorted) {
+    const previous = merged[merged.length - 1];
+    if (previous && previous.taskId === assignment.taskId && previous.endAt === assignment.startAt) {
+      previous.endAt = assignment.endAt;
+    } else {
+      merged.push({ ...assignment });
+    }
+  }
+  return merged;
 }
 
 /** How far ahead the worker lays out slots. Sent in the payload so a run is reproducible. */
@@ -25,7 +51,7 @@ const HORIZON_DAYS = 7;
  * control plane only states the choices that are product decisions. Kept in the payload so the
  * stored run is self-describing.
  */
-const SCHEDULER_CONFIG = { priorityMode: "strict" } as const;
+const SCHEDULER_CONFIG = { priorityMode: "weighted" } as const;
 
 export class ScheduleService {
   private readonly workerDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../workers/cp-sat");
@@ -58,7 +84,7 @@ export class ScheduleService {
     const result = await this.runSolver(input);
     const run = this.tasks.createScheduleRun(result.horizonStart, result.horizonEnd, input, result.modelVersion);
     try {
-      for (const assignment of result.assignments) {
+      for (const assignment of mergeAssignments(result.assignments)) {
         this.tasks.createTimeBlock({ ...assignment, source: "solver", status: "proposed" }, run.id);
       }
       this.tasks.finishScheduleRun(run.id, result);
