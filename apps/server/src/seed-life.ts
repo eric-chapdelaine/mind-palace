@@ -47,6 +47,35 @@ const database = new Database(config.databasePath);
 database.migrate();
 const tasks = new TaskRepository(database);
 
+/**
+ * Hand back the minutes held by solver blocks before we bulk-delete them below. This mirrors
+ * TaskRepository.deleteTimeBlock; the seed bypasses it by clearing blocks with raw SQL.
+ * `superseded` blocks already returned their minutes, so they are skipped.
+ */
+function releaseSolverMinutes(): void {
+  const held = new Map<number, number>();
+  const blocks = database.connection
+    .prepare("SELECT task_id, start_at, end_at FROM time_blocks WHERE source = 'solver' AND status != 'superseded'")
+    .all() as Array<{ task_id: number; start_at: string; end_at: string }>;
+  for (const block of blocks) {
+    const minutes = Math.round((Date.parse(block.end_at) - Date.parse(block.start_at)) / 60_000);
+    held.set(block.task_id, (held.get(block.task_id) ?? 0) + minutes);
+  }
+  const release = database.connection.prepare(
+    `UPDATE tasks SET
+       duration_minutes_remaining = CASE
+         WHEN duration_minutes_remaining IS NULL THEN NULL
+         ELSE MAX(0, duration_minutes_remaining + ?)
+       END,
+       updated_at = ?
+     WHERE id = ?`,
+  );
+  const timestamp = new Date().toISOString();
+  for (const [taskId, minutes] of held) release.run(minutes, timestamp, taskId);
+}
+
+releaseSolverMinutes();
+
 // ---- clear previous demo data (real, un-prefixed tasks are untouched) -----------------
 database.connection.exec(`
   DELETE FROM task_dependencies
