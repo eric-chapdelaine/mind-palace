@@ -401,6 +401,11 @@ body.dragging .task-card:hover .task-card-expand > div { opacity: 0; }
 .rule-weight input { padding: .3rem; }
 .rule-delete { border: none; background: none; font-size: 1.1rem; line-height: 1; color: #888; padding: 0 .25rem; }
 .rule-delete:hover { color: #222; }
+.rule-edit { border: 1px solid #ccc; background: #fff; font-size: .8rem; padding: .25rem .5rem; }
+.rule-edit:hover { border-color: #888; }
+.rule-row-editing { display: block; }
+.rule-row-editing .rule-form { border-top: none; margin-top: 0; padding-top: 0; }
+.rule-row-editing .rule-form h2 { margin: 0 0 .25rem; font-size: 1rem; }
 .rule-form { border-top: 1px solid #ddd; margin-top: 1.5rem; padding-top: 1rem; }
 .rule-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .25rem 1rem; align-items: end; }
 .rule-form-grid label { margin: .35rem 0; }

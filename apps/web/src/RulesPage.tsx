@@ -1,6 +1,7 @@
 import {
   type RuleCondition,
   type RuleEffect,
+  type RuleEffectType,
   type RuleStrength,
   type SchedulerRule,
   type SchedulerRuleInput,
@@ -20,6 +21,13 @@ const EFFECT_TYPES = [
 ] as const;
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/** Sentinel for a rule whose `applies` is too complex for the simple tag picker; kept verbatim. */
+const KEEP_CONDITION = "__keep__";
+
+function numberText(value: number | undefined): string {
+  return value === undefined ? "" : String(value);
+}
 
 function strengthLabel(strength: RuleStrength): string {
   return strength.kind === "hard" ? "hard" : `weight ${strength.weight}`;
@@ -52,16 +60,22 @@ function describeEffect(effect: RuleEffect): string {
   }
 }
 
-function conditionLabel(condition: RuleCondition | null): string {
+function tagName(tags: Tag[], publicId: string): string {
+  return tags.find((entry) => entry.publicId === publicId)?.title ?? publicId;
+}
+
+function conditionLabel(condition: RuleCondition | null, tags: Tag[]): string {
   if (!condition || "always" in condition) return "any task";
-  if ("taskHasTag" in condition) return `tag ${condition.taskHasTag}`;
-  if ("taskHasAnyTag" in condition) return `tags ${condition.taskHasAnyTag.join(", ")}`;
+  if ("taskHasTag" in condition) return `tag ${tagName(tags, condition.taskHasTag)}`;
+  if ("taskHasAnyTag" in condition) return `tags ${condition.taskHasAnyTag.map((publicId) => tagName(tags, publicId)).join(", ")}`;
   return "condition";
 }
 
-function RuleRow({ rule, onChange, onDelete }: {
+function RuleRow({ rule, tags, onChange, onEdit, onDelete }: {
   rule: SchedulerRule;
+  tags: Tag[];
   onChange: (id: number, input: Partial<SchedulerRuleInput>) => void;
+  onEdit: () => void;
   onDelete: (id: number) => void;
 }) {
   return (
@@ -76,7 +90,7 @@ function RuleRow({ rule, onChange, onDelete }: {
       <div className="rule-main">
         <strong>{rule.title}</strong>
         <span className="muted">
-          {rule.effect.type} · {describeEffect(rule.effect)} · {conditionLabel(rule.applies)} · {strengthLabel(rule.strength)}
+          {rule.effect.type} · {describeEffect(rule.effect)} · {conditionLabel(rule.applies, tags)} · {strengthLabel(rule.strength)}
         </span>
         <span className="rule-reason">{rule.reason}</span>
       </div>
@@ -93,48 +107,69 @@ function RuleRow({ rule, onChange, onDelete }: {
           />
         </label>
       )}
+      <button type="button" className="rule-edit" onClick={onEdit}>Edit</button>
       <button type="button" className="rule-delete" aria-label={`Delete ${rule.title}`} onClick={() => onDelete(rule.id)}>×</button>
     </li>
   );
 }
 
-function RuleForm({ tags, onCreate }: { tags: Tag[]; onCreate: (input: SchedulerRuleInput) => void }) {
-  const [title, setTitle] = useState("");
-  const [tag, setTag] = useState("");
-  const [effectType, setEffectType] = useState<(typeof EFFECT_TYPES)[number]["value"]>("preferTimeOfDay");
-  const [days, setDays] = useState<number[]>([]);
-  const [start, setStart] = useState("07:00");
-  const [end, setEnd] = useState("11:00");
-  const [maxPerDay, setMaxPerDay] = useState(120);
-  const [minDays, setMinDays] = useState(0);
-  const [avoidConsecutive, setAvoidConsecutive] = useState(false);
-  const [budgetMax, setBudgetMax] = useState(1);
-  const [minTemp, setMinTemp] = useState("50");
-  const [maxTemp, setMaxTemp] = useState("80");
-  const [maxPrecip, setMaxPrecip] = useState("20");
-  const [maxWind, setMaxWind] = useState("15");
-  const [requireDaytime, setRequireDaytime] = useState(true);
-  const [withinMinutes, setWithinMinutes] = useState(30);
-  const [hard, setHard] = useState(false);
-  const [weight, setWeight] = useState(3);
-  const [reason, setReason] = useState("");
+function RuleForm({ tags, initial, onSubmit, onCancel }: {
+  tags: Tag[];
+  initial?: SchedulerRule;
+  onSubmit: (input: SchedulerRuleInput) => void;
+  onCancel?: () => void;
+}) {
+  const effect = initial?.effect;
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [tag, setTag] = useState(() => {
+    const applies = initial?.applies;
+    if (!applies || "always" in applies) return "";
+    if ("taskHasTag" in applies) return applies.taskHasTag;
+    return KEEP_CONDITION;
+  });
+  const [effectType, setEffectType] = useState<RuleEffectType>(effect?.type ?? "preferTimeOfDay");
+  const [days, setDays] = useState<number[]>(effect?.type === "assignDays" ? effect.days : []);
+  const [start, setStart] = useState(
+    effect?.type === "timeWindow" || effect?.type === "preferTimeOfDay" ? effect.start : "07:00",
+  );
+  const [end, setEnd] = useState(
+    effect?.type === "timeWindow" || effect?.type === "preferTimeOfDay" ? effect.end : "11:00",
+  );
+  const [maxPerDay, setMaxPerDay] = useState(effect?.type === "spread" ? effect.maxPerDayMinutes ?? 120 : 120);
+  const [minDays, setMinDays] = useState(effect?.type === "spread" ? effect.minDistinctDays ?? 0 : 0);
+  const [avoidConsecutive, setAvoidConsecutive] = useState(effect?.type === "spread" ? effect.avoidConsecutive ?? false : false);
+  const [budgetMax, setBudgetMax] = useState(effect?.type === "dailyBudget" ? effect.softMaxPerDay ?? 1 : 1);
+  const [minTemp, setMinTemp] = useState(effect?.type === "weatherGate" ? numberText(effect.minTemperatureF) : "50");
+  const [maxTemp, setMaxTemp] = useState(effect?.type === "weatherGate" ? numberText(effect.maxTemperatureF) : "80");
+  const [maxPrecip, setMaxPrecip] = useState(effect?.type === "weatherGate" ? numberText(effect.maxPrecipitationProbability) : "20");
+  const [maxWind, setMaxWind] = useState(effect?.type === "weatherGate" ? numberText(effect.maxWindMph) : "15");
+  const [requireDaytime, setRequireDaytime] = useState(effect?.type === "weatherGate" ? effect.requireDaytime ?? false : true);
+  const [withinMinutes, setWithinMinutes] = useState(effect?.type === "withinAfter" ? effect.maxMinutes ?? 30 : 30);
+  const [hard, setHard] = useState(initial?.strength.kind === "hard");
+  const [weight, setWeight] = useState(initial?.strength.kind === "soft" ? initial.strength.weight : 3);
+  const [reason, setReason] = useState(initial?.reason ?? "");
 
-  // Day pins, time windows, nice-weather-only, and prerequisite gaps can be hard constraints.
+  // Day pins, time windows, weather gates, and prerequisite gaps can be hard constraints.
   const hardCapable = effectType === "assignDays" || effectType === "timeWindow"
     || effectType === "weatherGate" || effectType === "withinAfter";
 
+  // Preserve a placement-scoped `when` when the effect type is unchanged; the form does not edit it.
+  const preserveWhen = effect && effect.type === effectType && "when" in effect ? effect.when : undefined;
+  const when = preserveWhen ? { when: preserveWhen } : {};
+
   function buildEffect(): RuleEffect {
     switch (effectType) {
-      case "assignDays": return { type: "assignDays", days };
-      case "timeWindow": return { type: "timeWindow", start, end };
-      case "preferTimeOfDay": return { type: "preferTimeOfDay", start, end };
+      case "assignDays": return { type: "assignDays", days, ...when };
+      case "timeWindow": return { type: "timeWindow", start, end, ...when };
+      case "preferTimeOfDay": return { type: "preferTimeOfDay", start, end, ...when };
       case "spread": return {
         type: "spread",
         maxPerDayMinutes: maxPerDay,
         ...(minDays > 0 ? { minDistinctDays: minDays } : {}),
         ...(avoidConsecutive ? { avoidConsecutive: true } : {}),
+        ...when,
       };
-      case "dailyBudget": return { type: "dailyBudget", softMaxPerDay: budgetMax };
+      case "dailyBudget": return { type: "dailyBudget", softMaxPerDay: budgetMax, ...when };
       case "weatherGate": {
         // Blank inputs mean "no bound on this dimension" — the worker applies only what you set.
         const optionalNumber = (value: string): number | undefined => value.trim() === "" ? undefined : Number(value);
@@ -149,6 +184,7 @@ function RuleForm({ tags, onCreate }: { tags: Tag[]; onCreate: (input: Scheduler
           ...(precipitation !== undefined ? { maxPrecipitationProbability: precipitation } : {}),
           ...(wind !== undefined ? { maxWindMph: wind } : {}),
           ...(requireDaytime ? { requireDaytime: true } : {}),
+          ...when,
         };
       }
       case "withinAfter": return { type: "withinAfter", maxMinutes: withinMinutes };
@@ -157,31 +193,42 @@ function RuleForm({ tags, onCreate }: { tags: Tag[]; onCreate: (input: Scheduler
 
   function submit() {
     const strength: RuleStrength = hard ? { kind: "hard" } : { kind: "soft", weight };
-    onCreate({
+    const applies: RuleCondition = tag === ""
+      ? { always: true }
+      : tag === KEEP_CONDITION
+        ? initial?.applies ?? { always: true }
+        : { taskHasTag: tag };
+    onSubmit({
       title: title.trim() || effectType,
-      applies: !tag ? { always: true } : { taskHasTag: tag },
+      applies,
       effect: buildEffect(),
       strength,
       reason: reason.trim() || title.trim() || effectType,
     });
-    setTitle("");
-    setReason("");
+    if (!initial) {
+      setTitle("");
+      setReason("");
+    }
   }
 
   return (
     <section className="rule-form">
-      <h2>New rule</h2>
+      <h2>{initial ? `Edit “${initial.title}”` : "New rule"}</h2>
       <div className="rule-form-grid">
         <label>Title<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Morning deep work" /></label>
         <label>Tag
           <select value={tag} onChange={(event) => setTag(event.target.value)}>
             <option value="">(any task)</option>
+            {tag === KEEP_CONDITION && <option value={KEEP_CONDITION}>(keep current condition)</option>}
+            {tag !== "" && tag !== KEEP_CONDITION && !tags.some((entry) => entry.publicId === tag) && (
+              <option value={tag}>{tag}</option>
+            )}
             {tags.map((entry) => <option key={entry.id} value={entry.publicId}>{entry.title}</option>)}
           </select>
         </label>
         <label>Effect
           <select value={effectType} onChange={(event) => {
-            const next = event.target.value as typeof effectType;
+            const next = event.target.value as RuleEffectType;
             setEffectType(next);
             if (next !== "assignDays" && next !== "timeWindow" && next !== "weatherGate" && next !== "withinAfter") setHard(false);
           }}>
@@ -245,7 +292,10 @@ function RuleForm({ tags, onCreate }: { tags: Tag[]; onCreate: (input: Scheduler
         )}
         <label>Reason<input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Mornings are for deep work" /></label>
       </div>
-      <button className="primary-button" onClick={submit}>Add rule</button>
+      <div className="button-row">
+        <button className="primary-button" type="button" onClick={submit}>{initial ? "Save rule" : "Add rule"}</button>
+        {onCancel && <button type="button" onClick={onCancel}>Cancel</button>}
+      </div>
     </section>
   );
 }
@@ -254,6 +304,7 @@ export function RulesPage() {
   const [rules, setRules] = useState<SchedulerRule[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   async function load() {
     try {
@@ -273,6 +324,16 @@ export function RulesPage() {
   async function create(input: SchedulerRuleInput) {
     try {
       await api.createSchedulerRule(input);
+      await load();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : String(actionError));
+    }
+  }
+
+  async function save(id: number, input: SchedulerRuleInput) {
+    try {
+      await api.updateSchedulerRule(id, input);
+      setEditingId(null);
       await load();
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : String(actionError));
@@ -312,9 +373,28 @@ export function RulesPage() {
         </div>
       </header>
       <ul className="rules-list">
-        {rules.map((rule) => <RuleRow key={rule.id} rule={rule} onChange={(id, input) => void change(id, input)} onDelete={(id) => void remove(id)} />)}
+        {rules.map((rule) => editingId === rule.id ? (
+          <li key={rule.id} className="rule-row rule-row-editing">
+            <RuleForm
+              key={`edit-${rule.id}`}
+              tags={tags}
+              initial={rule}
+              onSubmit={(input) => void save(rule.id, input)}
+              onCancel={() => setEditingId(null)}
+            />
+          </li>
+        ) : (
+          <RuleRow
+            key={rule.id}
+            rule={rule}
+            tags={tags}
+            onEdit={() => setEditingId(rule.id)}
+            onChange={(id, input) => void change(id, input)}
+            onDelete={(id) => void remove(id)}
+          />
+        ))}
       </ul>
-      <RuleForm tags={tags} onCreate={(input) => void create(input)} />
+      {editingId === null && <RuleForm tags={tags} onSubmit={(input) => void create(input)} />}
     </main>
   );
 }
