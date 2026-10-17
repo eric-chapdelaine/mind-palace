@@ -1,5 +1,4 @@
 import {
-  softTiers,
   type RuleCondition,
   type RuleEffect,
   type RuleStrength,
@@ -11,34 +10,28 @@ import { useEffect, useState } from "react";
 import { api } from "./api";
 
 const EFFECT_TYPES = [
-  { value: "assignDays", label: "Assign days", scope: "task" },
-  { value: "timeWindow", label: "Time window", scope: "task" },
-  { value: "preferTimeOfDay", label: "Prefer time of day", scope: "task" },
-  { value: "spread", label: "Spread across days", scope: "task" },
-  { value: "preferEarlier", label: "Prefer earlier", scope: "global" },
-  { value: "minimizeChunks", label: "Minimize chunks", scope: "global" },
+  { value: "assignDays", label: "Assign days" },
+  { value: "timeWindow", label: "Time window" },
+  { value: "preferTimeOfDay", label: "Prefer time of day" },
+  { value: "spread", label: "Spread across days" },
 ] as const;
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 function strengthLabel(strength: RuleStrength): string {
-  return strength.kind === "hard" ? "hard" : `${strength.tier} · weight ${strength.weight}`;
+  return strength.kind === "hard" ? "hard" : `weight ${strength.weight}`;
 }
 
 /** Human summary of a rule's effect, for the list view. */
 function describeEffect(effect: RuleEffect): string {
   switch (effect.type) {
-    case "assignDays": {
-      const days = Array.isArray(effect.days) ? (effect.days as number[]) : [];
-      return `days ${days.map((day) => WEEKDAYS[day] ?? day).join(", ") || "none"}`;
-    }
+    case "assignDays":
+      return `days ${effect.days.map((day) => WEEKDAYS[day] ?? day).join(", ") || "none"}`;
     case "timeWindow":
     case "preferTimeOfDay":
-      return `${String(effect.start ?? "")}–${String(effect.end ?? "")}`;
+      return `${effect.start}–${effect.end}`;
     case "spread":
-      return `≤ ${String(effect.maxPerDayMinutes ?? 120)} min/day`;
-    default:
-      return effect.type;
+      return `≤ ${effect.maxPerDayMinutes} min/day`;
   }
 }
 
@@ -78,7 +71,7 @@ function RuleRow({ rule, onChange, onDelete }: {
             min={1}
             value={rule.strength.weight}
             onChange={(event) => onChange(rule.id, {
-              strength: { kind: "soft", tier: rule.strength.kind === "soft" ? rule.strength.tier : "style", weight: Number(event.target.value) },
+              strength: { kind: "soft", weight: Number(event.target.value) },
             })}
           />
         </label>
@@ -97,11 +90,11 @@ function RuleForm({ tags, onCreate }: { tags: Tag[]; onCreate: (input: Scheduler
   const [end, setEnd] = useState("11:00");
   const [maxPerDay, setMaxPerDay] = useState(120);
   const [hard, setHard] = useState(false);
-  const [tier, setTier] = useState<(typeof softTiers)[number]>("style");
   const [weight, setWeight] = useState(3);
   const [reason, setReason] = useState("");
 
-  const isGlobal = EFFECT_TYPES.find((entry) => entry.value === effectType)?.scope === "global";
+  // Only day pins and time windows can be hard constraints; the other effects are preferences.
+  const hardCapable = effectType === "assignDays" || effectType === "timeWindow";
 
   function buildEffect(): RuleEffect {
     switch (effectType) {
@@ -109,15 +102,14 @@ function RuleForm({ tags, onCreate }: { tags: Tag[]; onCreate: (input: Scheduler
       case "timeWindow": return { type: "timeWindow", start, end };
       case "preferTimeOfDay": return { type: "preferTimeOfDay", start, end };
       case "spread": return { type: "spread", maxPerDayMinutes: maxPerDay };
-      default: return { type: effectType };
     }
   }
 
   function submit() {
-    const strength: RuleStrength = hard ? { kind: "hard" } : { kind: "soft", tier, weight };
+    const strength: RuleStrength = hard ? { kind: "hard" } : { kind: "soft", weight };
     onCreate({
       title: title.trim() || effectType,
-      applies: isGlobal || !tag ? { always: true } : { taskHasTag: tag },
+      applies: !tag ? { always: true } : { taskHasTag: tag },
       effect: buildEffect(),
       strength,
       reason: reason.trim() || title.trim() || effectType,
@@ -132,13 +124,17 @@ function RuleForm({ tags, onCreate }: { tags: Tag[]; onCreate: (input: Scheduler
       <div className="rule-form-grid">
         <label>Title<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Morning deep work" /></label>
         <label>Tag
-          <select value={tag} onChange={(event) => setTag(event.target.value)} disabled={isGlobal}>
+          <select value={tag} onChange={(event) => setTag(event.target.value)}>
             <option value="">(any task)</option>
             {tags.map((entry) => <option key={entry.id} value={entry.publicId}>{entry.title}</option>)}
           </select>
         </label>
         <label>Effect
-          <select value={effectType} onChange={(event) => setEffectType(event.target.value as typeof effectType)}>
+          <select value={effectType} onChange={(event) => {
+            const next = event.target.value as typeof effectType;
+            setEffectType(next);
+            if (next !== "assignDays" && next !== "timeWindow") setHard(false);
+          }}>
             {EFFECT_TYPES.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}
           </select>
         </label>
@@ -164,19 +160,18 @@ function RuleForm({ tags, onCreate }: { tags: Tag[]; onCreate: (input: Scheduler
           <label>Max minutes/day<input type="number" min={30} step={30} value={maxPerDay} onChange={(event) => setMaxPerDay(Number(event.target.value))} /></label>
         )}
         <label>Strength
-          <select value={hard ? "hard" : "soft"} onChange={(event) => setHard(event.target.value === "hard")}>
+          <select
+            value={hard ? "hard" : "soft"}
+            disabled={!hardCapable}
+            onChange={(event) => setHard(event.target.value === "hard")}
+          >
             <option value="soft">soft</option>
-            <option value="hard">hard</option>
+            {hardCapable && <option value="hard">hard</option>}
           </select>
         </label>
-        {!hard && <>
-          <label>Tier
-            <select value={tier} onChange={(event) => setTier(event.target.value as typeof tier)}>
-              {softTiers.map((entry) => <option key={entry} value={entry}>{entry}</option>)}
-            </select>
-          </label>
+        {!hard && (
           <label>Weight<input type="number" min={1} value={weight} onChange={(event) => setWeight(Number(event.target.value))} /></label>
-        </>}
+        )}
         <label>Reason<input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Mornings are for deep work" /></label>
       </div>
       <button className="primary-button" onClick={submit}>Add rule</button>
@@ -239,9 +234,9 @@ export function RulesPage() {
           <div className="task-card-topline"><span className="task-type">scheduler</span></div>
           <h1>Rules</h1>
           <p className="muted">
-            Rules are data. Each enabled rule becomes a hard constraint or a soft preference in a
-            precedence tier (<code>style</code> &gt; <code>fragmentation</code> &gt; <code>placement</code>).
-            Tags are selectors: a rule can reference any tag, seeded or your own.
+            Rules are data. Each enabled rule becomes a hard constraint or a weighted soft
+            preference, and the scheduler optimizes one objective across all of them. Tags are
+            selectors: a rule can reference any tag, seeded or your own.
           </p>
         </div>
       </header>

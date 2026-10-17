@@ -6,7 +6,7 @@ import type { TaskRepository } from "@mind-palace/database";
 import {
   kanbanStatuses,
   lifecycleStatuses,
-  softTiers,
+  ruleEffectTypes,
   tagTypes,
   timeBlockStatuses,
   timeBlockTypes,
@@ -15,7 +15,6 @@ import {
   type RuleEffect,
   type RuleStrength,
   type SchedulerRuleInput,
-  type SoftTier,
   type IntegrationConnection,
   type LifecycleStatus,
   type KanbanStatus,
@@ -73,27 +72,34 @@ function optionalText(value: unknown): string | null | undefined {
 
 function parseRuleStrength(value: unknown): RuleStrength {
   if (!value || typeof value !== "object") throw new Error("strength is required");
-  const candidate = value as { kind?: unknown; tier?: unknown; weight?: unknown };
+  const candidate = value as { kind?: unknown; weight?: unknown };
   if (candidate.kind === "hard") return { kind: "hard" };
   if (candidate.kind === "soft") {
-    if (!softTiers.includes(candidate.tier as SoftTier)) throw new Error("Invalid soft tier");
     if (typeof candidate.weight !== "number") throw new Error("Soft rules need a numeric weight");
-    return { kind: "soft", tier: candidate.tier as SoftTier, weight: candidate.weight };
+    return { kind: "soft", weight: candidate.weight };
   }
   throw new Error("strength.kind must be hard or soft");
 }
 
-function parseRuleInput(body: Record<string, unknown>): SchedulerRuleInput {
-  const effect = body.effect;
-  if (!effect || typeof effect !== "object" || typeof (effect as { type?: unknown }).type !== "string") {
+/** Reject effects the worker does not implement so the rules table never holds dead behavior. */
+function parseRuleEffect(value: unknown): RuleEffect {
+  if (!value || typeof value !== "object" || typeof (value as { type?: unknown }).type !== "string") {
     throw new Error("effect.type is required");
   }
+  const type = (value as { type: string }).type;
+  if (!ruleEffectTypes.includes(type as (typeof ruleEffectTypes)[number])) {
+    throw new Error(`Unknown rule effect '${type}'`);
+  }
+  return value as RuleEffect;
+}
+
+function parseRuleInput(body: Record<string, unknown>): SchedulerRuleInput {
   const applies = body.applies;
   return {
     title: requiredString(body.title, "title"),
     ...(typeof body.enabled === "boolean" ? { enabled: body.enabled } : {}),
     ...(applies === null || (applies && typeof applies === "object") ? { applies: applies as RuleCondition | null } : {}),
-    effect: effect as RuleEffect,
+    effect: parseRuleEffect(body.effect),
     strength: parseRuleStrength(body.strength),
     ...(typeof body.reason === "string" ? { reason: body.reason } : {}),
   };
@@ -105,12 +111,7 @@ function parseRulePatch(body: Record<string, unknown>): Partial<SchedulerRuleInp
   if (typeof body.enabled === "boolean") patch.enabled = body.enabled;
   if (body.applies === null) patch.applies = null;
   else if (body.applies && typeof body.applies === "object") patch.applies = body.applies as RuleCondition;
-  if (body.effect !== undefined) {
-    if (!body.effect || typeof body.effect !== "object" || typeof (body.effect as { type?: unknown }).type !== "string") {
-      throw new Error("effect.type is required");
-    }
-    patch.effect = body.effect as RuleEffect;
-  }
+  if (body.effect !== undefined) patch.effect = parseRuleEffect(body.effect);
   if (body.strength !== undefined) patch.strength = parseRuleStrength(body.strength);
   if (typeof body.reason === "string") patch.reason = body.reason;
   return patch;

@@ -8,10 +8,9 @@ The worker is a **pure function**: `now` and `horizonDays` arrive in the payload
 
 - **Slots**: 30-minute grid over `config.dayStart`–`config.dayEnd` (default 07:00–23:00) in `config.timeZone` (default `America/New_York`), for `horizonDays` (default 7). Accepted/completed time blocks are busy.
 - **Intervals, not a boolean per slot.** A non-splittable task is one optional interval of its remaining duration; a splittable task is that many optional 30-minute unit intervals (splitting is free — `minChunkMinutes`/`maxChunkMinutes` are ignored). A single `NoOverlap` keeps every interval and every fixed commitment apart.
-- **Rules are data.** Each enabled rule has `applies` (a condition over a task's effective tags), `effect` (a catalog type), and `strength`:
+- **Rules are data.** Each enabled rule has `applies` (a condition over a task's effective tags), `effect` (one of `assignDays`, `timeWindow`, `preferTimeOfDay`, `spread`), and `strength`:
   - `{"kind":"hard"}` → restricts the task's eligible start domain (`assignDays`, hard `timeWindow`).
-  - `{"kind":"soft","tier":"style",...}` → an objective term (`preferTimeOfDay`, soft `timeWindow`, soft `assignDays`, `spread`).
-  - `fragmentation` (`minimizeChunks`) and `placement` (`preferEarlier`) tiers are accepted but not optimized: splitting is free, and `preferEarlier` is handled by the compaction pass below.
+  - `{"kind":"soft","weight":N}` → a weighted objective term (`preferTimeOfDay`, soft `timeWindow`, soft `assignDays`, `spread`).
 - **Objective**: a single weighted expression. The decision term (priority-weighted placement, self-scaling so each level outweighs every lower level combined) is multiplied above the total possible soft contribution, so a preference can never drop a task.
 - **Dependencies**: a dependent's interval starts at or after its prerequisite's interval end (`start_B ≥ start_A + size_A`).
 - **preferEarlier** is not an objective term. After solving, a greedy **compaction pass** pulls each block to the earliest slot that keeps its hard eligibility, soft time-window membership, spread day, and dependencies. It is a heuristic applied to the solver's chosen set of tasks, not part of the optimum.
@@ -20,9 +19,9 @@ The worker is a **pure function**: `now` and `horizonDays` arrive in the payload
 
 ## Output
 
-`{ modelVersion, horizonStart, horizonEnd, assignments, unscheduled, unscheduledTaskIds, tierScores, solverStatus, objectiveValue }`
+`{ modelVersion, horizonStart, horizonEnd, assignments, unscheduled, unscheduledTaskIds, scores, solverStatus, objectiveValue }`
 
-`assignments` is one entry per interval (a splittable task yields one per 30-minute unit); `ScheduleService` merges adjacent entries for the same task into single time blocks before persisting. `unscheduled` carries classified reasons (`capacity`, `no_eligible_slots`, `rule`). `tierScores` reports the placed counts and the achieved style/fragmentation/placement values for display.
+`assignments` is one entry per interval (a splittable task yields one per 30-minute unit); `ScheduleService` merges adjacent entries for the same task into single time blocks before persisting. `unscheduled` carries classified reasons (`capacity`, `no_eligible_slots`, `rule`). `scores` reports `decision` (placed counts by priority) and the total `style` value for display.
 
 ## Tests
 

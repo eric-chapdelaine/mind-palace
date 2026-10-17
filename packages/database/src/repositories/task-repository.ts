@@ -14,12 +14,11 @@ import {
   type RuleEffect,
   type RuleStrength,
   type ScheduleRun,
-  type ScheduleTierScores,
+  type ScheduleScores,
   type ScheduleUnscheduled,
   type SchedulerRule,
   type SchedulerRuleInput,
   type SleepSession,
-  type SoftTier,
   type SleepSessionProviderInput,
   type Tag,
   type TagType,
@@ -99,7 +98,7 @@ function mapWeatherForecast(value: Row): WeatherForecast {
 
 function mapSchedulerRule(value: Row): SchedulerRule {
   const strength: RuleStrength = text(value.strength_kind) === "soft"
-    ? { kind: "soft", tier: text(value.tier) as SoftTier, weight: Number(value.weight) }
+    ? { kind: "soft", weight: Number(value.weight) }
     : { kind: "hard" };
   return {
     id: integer(value.id),
@@ -107,11 +106,18 @@ function mapSchedulerRule(value: Row): SchedulerRule {
     title: text(value.title),
     enabled: boolean(value.enabled),
     applies: value.condition_json === null ? null : json<RuleCondition | null>(value.condition_json, null),
-    effect: json<RuleEffect>(value.effect_json, { type: "" }),
+    effect: json<RuleEffect>(value.effect_json, { type: "assignDays", days: [] }),
     strength,
     reason: text(value.reason),
     updatedAt: text(value.updated_at),
   };
+}
+
+/** Only day pins and time windows are constraints; the other effects are preferences. */
+function assertRuleStrengthMatchesEffect(effect: RuleEffect, strength: RuleStrength): void {
+  if (strength.kind === "hard" && effect.type !== "assignDays" && effect.type !== "timeWindow") {
+    throw new Error(`Effect '${effect.type}' cannot be hard`);
+  }
 }
 
 function mapSleepSession(value: Row): SleepSession {
@@ -909,16 +915,16 @@ export class TaskRepository {
       .map((value) => this.getScheduleRun(integer(row(value, "schedule run").id)));
   }
 
-  /** Unscheduled reasons + tier scores from the latest succeeded run, for the schedule UI. */
-  latestScheduleResult(): { unscheduled: ScheduleUnscheduled[]; tierScores: ScheduleTierScores | null } {
+  /** Unscheduled reasons + objective scores from the latest succeeded run, for the schedule UI. */
+  latestScheduleResult(): { unscheduled: ScheduleUnscheduled[]; scores: ScheduleScores | null } {
     const value = this.database.connection
       .prepare("SELECT result_json FROM schedule_runs WHERE status = 'succeeded' ORDER BY id DESC LIMIT 1")
       .get();
-    if (!value) return { unscheduled: [], tierScores: null };
-    const result = json<{ unscheduled?: ScheduleUnscheduled[]; tierScores?: ScheduleTierScores }>(
+    if (!value) return { unscheduled: [], scores: null };
+    const result = json<{ unscheduled?: ScheduleUnscheduled[]; scores?: ScheduleScores }>(
       row(value, "schedule result").result_json, {},
     );
-    return { unscheduled: result.unscheduled ?? [], tierScores: result.tierScores ?? null };
+    return { unscheduled: result.unscheduled ?? [], scores: result.scores ?? null };
   }
 
   listSchedulerRules(): SchedulerRule[] {
@@ -934,16 +940,16 @@ export class TaskRepository {
   }
 
   createSchedulerRule(input: SchedulerRuleInput): SchedulerRule {
+    assertRuleStrengthMatchesEffect(input.effect, input.strength);
     const timestamp = now();
     const result = this.database.connection.prepare(
       `INSERT INTO scheduler_rules
-        (public_id, title, enabled, condition_json, effect_json, strength_kind, tier, weight, reason, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (public_id, title, enabled, condition_json, effect_json, strength_kind, weight, reason, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       `user:rule:${randomUUID()}`, input.title, input.enabled === false ? 0 : 1,
       JSON.stringify(input.applies ?? { always: true }), JSON.stringify(input.effect),
-      input.strength.kind, input.strength.kind === "soft" ? input.strength.tier : null,
-      input.strength.kind === "soft" ? input.strength.weight : null,
+      input.strength.kind, input.strength.kind === "soft" ? input.strength.weight : null,
       input.reason ?? input.title, timestamp, timestamp,
     );
     return this.getSchedulerRule(insertedId(result));
@@ -957,13 +963,13 @@ export class TaskRepository {
     const effect = input.effect ?? current.effect;
     const strength = input.strength ?? current.strength;
     const reason = input.reason ?? current.reason;
+    assertRuleStrengthMatchesEffect(effect, strength);
     this.database.connection.prepare(
       `UPDATE scheduler_rules SET title = ?, enabled = ?, condition_json = ?, effect_json = ?,
-        strength_kind = ?, tier = ?, weight = ?, reason = ?, updated_at = ? WHERE id = ?`,
+        strength_kind = ?, weight = ?, reason = ?, updated_at = ? WHERE id = ?`,
     ).run(
       title, enabled ? 1 : 0, JSON.stringify(applies ?? { always: true }), JSON.stringify(effect),
-      strength.kind, strength.kind === "soft" ? strength.tier : null,
-      strength.kind === "soft" ? strength.weight : null,
+      strength.kind, strength.kind === "soft" ? strength.weight : null,
       reason, now(), id,
     );
     return this.getSchedulerRule(id);

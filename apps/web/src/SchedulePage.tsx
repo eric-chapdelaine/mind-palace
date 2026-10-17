@@ -813,10 +813,9 @@ export function SchedulePage() {
         )}
       </aside>
     </div>
-    {schedule?.tierScores && <p className="muted schedule-scores">
-      Placed {schedule.tierScores.decision.placed}/{schedule.tierScores.decision.of}
-      {" · "}style {schedule.tierScores.style}
-      {" · "}chunks {schedule.tierScores.fragmentation}
+    {schedule?.scores && <p className="muted schedule-scores">
+      Placed {schedule.scores.decision.placed}/{schedule.scores.decision.of}
+      {" · "}style {schedule.scores.style}
     </p>}
     {schedule && schedule.unscheduled.length > 0 && <section className="unscheduled">
       <div className="section-label">Unscheduled</div>

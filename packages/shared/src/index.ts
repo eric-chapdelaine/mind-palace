@@ -39,9 +39,9 @@ export const tagTypes = ["goal"] as const;
 export type TagType = (typeof tagTypes)[number];
 
 /**
- * Manual priority levels. Higher levels dominate lower ones in the scheduler's decision tier
- * (a P2 task is never dropped in favour of any number of P1 tasks). Rank breaks ties within
- * a level. Kept to a small range so the ordering stays legible and cheap to solve.
+ * Manual priority levels. A higher level dominates every lower one: a P2 task is never dropped
+ * in favour of any number of P1 tasks. Rank breaks ties within a level. Kept to a small range so
+ * the ordering stays legible and cheap to solve.
  */
 export const priorities = [0, 1, 2, 3, 4, 5] as const;
 export type Priority = (typeof priorities)[number];
@@ -255,8 +255,8 @@ export interface Schedule {
   timeBlocks: TimeBlock[];
   /** Why the latest run left each task unplaced. Empty when the latest run placed everything. */
   unscheduled: ScheduleUnscheduled[];
-  /** Per-tier scores from the latest run, for the fidelity harness. Null before the first run. */
-  tierScores: ScheduleTierScores | null;
+  /** Objective scores from the latest run, for display/debugging. Null before the first run. */
+  scores: ScheduleScores | null;
   /** Mirrors `unscheduled.map((entry) => entry.taskId)` for existing consumers. */
   unscheduledTaskIds: number[];
 }
@@ -272,17 +272,14 @@ export interface ScheduleUnscheduled {
   reasons: ScheduleReason[];
 }
 
-/** The objective is solved tier by tier (highest precedence first). */
-export interface ScheduleTierScores {
+/**
+ * The scheduler solves a single weighted objective, not ordered tiers. `decision` reports how
+ * many tasks were placed; `style` is the total soft-rule value of the chosen placement.
+ */
+export interface ScheduleScores {
   decision: { placed: number; of: number; byPriority: Record<string, number> };
   style: number;
-  fragmentation: number;
-  placement: number;
 }
-
-/** Soft tiers in precedence order, highest first. The engine owns this order. */
-export const softTiers = ["style", "fragmentation", "placement"] as const;
-export type SoftTier = (typeof softTiers)[number];
 
 /** A composable predicate over the scheduling payload. */
 export type RuleCondition =
@@ -293,18 +290,27 @@ export type RuleCondition =
   | { any: RuleCondition[] }
   | { not: RuleCondition };
 
-/** What a rule does. `type` selects the implementation; the remaining keys are parameters. */
-export interface RuleEffect {
-  type: string;
-  [parameter: string]: unknown;
-}
+/**
+ * The rule effects the worker implements. This list is the contract: the API rejects anything
+ * outside it. `assignDays` and `timeWindow` may be hard; `preferTimeOfDay` and `spread` are
+ * preferences only.
+ */
+export const ruleEffectTypes = ["assignDays", "timeWindow", "preferTimeOfDay", "spread"] as const;
+export type RuleEffectType = (typeof ruleEffectTypes)[number];
 
-/** Hard rules constrain feasibility; soft rules contribute to a named objective tier. */
-export type RuleStrength = { kind: "hard" } | { kind: "soft"; tier: SoftTier; weight: number };
+/** What a rule does. `type` selects the implementation; the remaining keys are parameters. */
+export type RuleEffect =
+  | { type: "assignDays"; days: number[] }
+  | { type: "timeWindow"; start: string; end: string }
+  | { type: "preferTimeOfDay"; start: string; end: string }
+  | { type: "spread"; maxPerDayMinutes: number };
+
+/** Hard rules constrain feasibility; soft rules add a weighted term to the single objective. */
+export type RuleStrength = { kind: "hard" } | { kind: "soft"; weight: number };
 
 /**
- * A scheduling rule. Rules are data: the worker compiles them into hard constraints and soft
- * tier terms. `applies` may reference any tag (seeded or user-created); tags are selectors,
+ * A scheduling rule. Rules are data: the worker compiles them into hard constraints and weighted
+ * soft terms. `applies` may reference any tag (seeded or user-created); tags are selectors,
  * never behavior on their own.
  */
 export interface SchedulerRule {

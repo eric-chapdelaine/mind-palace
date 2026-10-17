@@ -38,8 +38,6 @@ DEFAULT_CONFIG = {
     "compact": True,             # greedy post-pass that pulls blocks earlier (preferEarlier)
 }
 
-SOFT_TIERS = ("style", "fragmentation", "placement")
-
 
 # --------------------------------------------------------------------------------------
 # Pure helpers (unit-tested without the solver)
@@ -119,16 +117,13 @@ def condition_matches(condition, task):
 
 
 def rule_strength(rule):
-    """Return ("hard", None, None) or ("soft", tier, weight)."""
+    """Return ("hard", None) or ("soft", weight)."""
     strength = rule.get("strength")
     if strength == "hard" or (isinstance(strength, dict) and strength.get("kind") == "hard"):
-        return "hard", None, None
+        return "hard", None
     if isinstance(strength, dict) and strength.get("kind") == "soft":
-        tier = strength.get("tier", "style")
-        if tier not in SOFT_TIERS:
-            raise ValueError(f"Rule {rule.get('id')!r} targets unknown tier {tier!r}")
-        return "soft", tier, float(strength.get("weight", 1))
-    return "hard", None, None
+        return "soft", float(strength.get("weight", 1))
+    return "hard", None
 
 
 def rule_applies(rule, task):
@@ -163,7 +158,7 @@ def _eligible_slots(task, slots, busy_indices, rules):
     for rule in rules:
         if not rule_applies(rule, task):
             continue
-        kind, _tier, _weight = rule_strength(rule)
+        kind, _weight = rule_strength(rule)
         if kind != "hard":
             continue
         effect = rule.get("effect") or {}
@@ -240,7 +235,7 @@ def _style_windows(tasks, rules, slots):
     """Soft time windows per task, used to keep the compaction pass from undoing style."""
     windows = {}
     for rule in rules:
-        kind, _tier, _weight = rule_strength(rule)
+        kind, _weight = rule_strength(rule)
         if kind != "soft":
             continue
         effect = rule.get("effect") or {}
@@ -260,7 +255,7 @@ def _style_windows(tasks, rules, slots):
 def _spread_group_ids(tasks, rules):
     group = {}
     for rule in rules:
-        kind, _tier, _weight = rule_strength(rule)
+        kind, _weight = rule_strength(rule)
         if kind != "soft":
             continue
         if (rule.get("effect") or {}).get("type") != "spread":
@@ -272,7 +267,7 @@ def _spread_group_ids(tasks, rules):
 
 
 def _compact(placement, tasks, slots, day_of, eligible_by_task, rules):
-    """Greedy post-pass: pull each block to the earliest slot that keeps every higher-tier choice.
+    """Greedy post-pass: pull each block to the earliest slot that keeps every soft choice.
 
     A move is only accepted when the block stays hard-eligible, keeps the same soft time-window
     membership, stays on the same day for spread groups, and does not start before its
@@ -327,10 +322,10 @@ def _compact(placement, tasks, slots, day_of, eligible_by_task, rules):
 
 
 def _soft_totals(placement, tasks, rules, slots, slot_minutes):
-    """Final style-tier value (time-window bonuses minus spread penalties) for reporting."""
+    """Final style value (time-window bonuses minus spread penalties) for reporting."""
     total = 0
     for rule in rules:
-        kind, _tier, weight = rule_strength(rule)
+        kind, weight = rule_strength(rule)
         if kind != "soft":
             continue
         effect = rule.get("effect") or {}
@@ -452,7 +447,7 @@ def solve(payload):
         soft_bound += bound
 
     for rule in rules:
-        kind, _tier, weight = rule_strength(rule)
+        kind, weight = rule_strength(rule)
         if kind != "soft":
             continue
         effect = rule.get("effect") or {}
@@ -550,11 +545,9 @@ def solve(payload):
     assignments.sort(key=lambda item: (item["startAt"], item["taskId"]))
 
     placed = len(tasks) - len(unscheduled)
-    tier_scores = {
+    scores = {
         "decision": {"placed": placed, "of": len(tasks), "byPriority": by_priority},
         "style": _soft_totals(placement, tasks, rules, slots, slot_minutes),
-        "fragmentation": -len(assignments),
-        "placement": sum(slot_count - start for runs in placement.values() for start, _size in runs),
     }
 
     return {
@@ -564,7 +557,7 @@ def solve(payload):
         "assignments": assignments,
         "unscheduled": unscheduled,
         "unscheduledTaskIds": [entry["taskId"] for entry in unscheduled],
-        "tierScores": tier_scores,
+        "scores": scores,
         "solverStatus": solver.status_name(status),
         "objectiveValue": int(solver.objective_value) if solved else 0,
     }

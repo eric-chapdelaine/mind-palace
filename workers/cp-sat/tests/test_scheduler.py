@@ -111,11 +111,9 @@ class PureHelpersTest(unittest.TestCase):
         self.assertFalse(S.condition_matches({"unknown": True}, t))
 
     def test_rule_strength(self):
-        self.assertEqual(S.rule_strength({"strength": "hard"}), ("hard", None, None))
-        self.assertEqual(S.rule_strength({"strength": {"kind": "hard"}}), ("hard", None, None))
-        self.assertEqual(S.rule_strength({"strength": {"kind": "soft", "tier": "style", "weight": 5}}), ("soft", "style", 5.0))
-        with self.assertRaises(ValueError):
-            S.rule_strength({"id": "x", "strength": {"kind": "soft", "tier": "decision"}})
+        self.assertEqual(S.rule_strength({"strength": "hard"}), ("hard", None))
+        self.assertEqual(S.rule_strength({"strength": {"kind": "hard"}}), ("hard", None))
+        self.assertEqual(S.rule_strength({"strength": {"kind": "soft", "weight": 5}}), ("soft", 5.0))
 
     def test_window_slot_indices(self):
         slots = slots_for()
@@ -199,7 +197,7 @@ class SolveTest(unittest.TestCase):
         # The preferred window is later than the earliest free slot; the soft bonus should win and
         # the greedy "move earlier" pass must not drag it out of the window.
         rules = [rule("evening", {"type": "preferTimeOfDay", "start": "17:00", "end": "21:00"},
-                      {"kind": "soft", "tier": "style", "weight": 5})]
+                      {"kind": "soft", "weight": 5})]
         result = S.solve(payload([task(1)], rules=rules))
         hour = S.parse_datetime(result["assignments"][0]["startAt"]).astimezone(LOCAL).hour
         self.assertGreaterEqual(hour, 17)
@@ -207,7 +205,7 @@ class SolveTest(unittest.TestCase):
 
     def test_spread_distributes_across_days(self):
         rules = [rule("spread", {"type": "spread", "maxPerDayMinutes": 30},
-                      {"kind": "soft", "tier": "style", "weight": 10}, applies={"taskHasTag": "focus"})]
+                      {"kind": "soft", "weight": 10}, applies={"taskHasTag": "focus"})]
         tasks = [task(1, tagIds=["focus"]), task(2, tagIds=["focus"])]
         result = S.solve(payload(tasks, rules=rules))
         days = {assignment["startAt"][:10] for assignment in result["assignments"]}
@@ -258,14 +256,14 @@ class SolveTest(unittest.TestCase):
         first = S.solve(payload(tasks))
         second = S.solve(payload(tasks))
         self.assertEqual(first["assignments"], second["assignments"])
-        self.assertEqual(first["tierScores"], second["tierScores"])
+        self.assertEqual(first["scores"], second["scores"])
 
-    def test_tier_scores_reported(self):
+    def test_scores_reported(self):
         result = S.solve(payload([task(1, priority=2)]))
-        self.assertEqual(result["tierScores"]["decision"]["placed"], 1)
-        self.assertEqual(result["tierScores"]["decision"]["of"], 1)
+        self.assertEqual(result["scores"]["decision"]["placed"], 1)
+        self.assertEqual(result["scores"]["decision"]["of"], 1)
         # Direct call: Python dict keys stay ints (JSON serialization stringifies them).
-        self.assertEqual(result["tierScores"]["decision"]["byPriority"], {2: 1})
+        self.assertEqual(result["scores"]["decision"]["byPriority"], {2: 1})
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { TaskRepository } from "@mind-palace/database";
-import type { Schedule, ScheduleTierScores, ScheduleUnscheduled } from "@mind-palace/shared";
+import type { Schedule, ScheduleScores, ScheduleUnscheduled } from "@mind-palace/shared";
 import { runPythonWorker } from "./worker.js";
 
 interface SolverResult {
@@ -11,7 +11,7 @@ interface SolverResult {
   assignments: Assignment[];
   unscheduled: ScheduleUnscheduled[];
   unscheduledTaskIds: number[];
-  tierScores: ScheduleTierScores;
+  scores: ScheduleScores;
   solverStatus: string;
   objectiveValue: number;
   error?: string;
@@ -64,7 +64,7 @@ export class ScheduleService {
       runs: this.tasks.listScheduleRuns(),
       timeBlocks: this.tasks.listTimeBlocks(),
       unscheduled: latest.unscheduled,
-      tierScores: latest.tierScores,
+      scores: latest.scores,
       unscheduledTaskIds: latest.unscheduled.map((entry) => entry.taskId),
     };
   }
