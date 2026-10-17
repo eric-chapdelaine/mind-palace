@@ -193,6 +193,16 @@ class SolveTest(unittest.TestCase):
         self.assertTrue(end <= accepted_start or start >= accepted_end, "assignment overlaps the accepted block")
         self.assertEqual((end - start).total_seconds() / 60, 60)
 
+    def test_manual_proposed_block_is_busy(self):
+        # A human-placed (manual) proposal reserves its slot even while still `proposed`; only
+        # solver proposals are ephemeral. The task must land after the manual window.
+        slots = slots_for()
+        manual = {"status": "proposed", "source": "manual",
+                  "startAt": slots[0]["start"].isoformat(), "endAt": slots[1]["start"].isoformat()}
+        result = S.solve(payload([task(1)], time_blocks=[manual]))
+        self.assertEqual(result["unscheduledTaskIds"], [])
+        self.assertGreaterEqual(S.parse_datetime(result["assignments"][0]["startAt"]), slots[1]["start"])
+
     def test_non_splittable_is_one_block(self):
         result = S.solve(payload([task(1, durationMinutesRemaining=120, splittable=False)]))
         assigned = [a for a in result["assignments"] if a["taskId"] == 1]

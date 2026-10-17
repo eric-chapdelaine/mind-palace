@@ -760,11 +760,12 @@ export class TaskRepository {
   supersedeProposedBlocks(): void {
     this.database.connection.exec("BEGIN IMMEDIATE");
     try {
-      // Un-accepted proposals hold time against the task's remaining estimate; releasing them
-      // gives that time back so a fresh generate() starts from an accurate remaining amount.
+      // Solver proposals are ephemeral: they hold time against the task's remaining estimate, so
+      // a fresh generate() releases them first. Human-placed (manual) blocks are commitments and
+      // are left alone, so they keep reserving their slot across regenerations.
       const minutesByTask = new Map<number, number>();
       const proposed = this.database.connection
-        .prepare("SELECT id, task_id, start_at, end_at FROM time_blocks WHERE status = 'proposed'")
+        .prepare("SELECT id, task_id, start_at, end_at FROM time_blocks WHERE status = 'proposed' AND source = 'solver'")
         .all();
       for (const value of proposed) {
         const block = row(value, "proposed block");
@@ -773,7 +774,7 @@ export class TaskRepository {
         minutesByTask.set(taskId, (minutesByTask.get(taskId) ?? 0) + minutes);
       }
       this.database.connection
-        .prepare("UPDATE time_blocks SET status = 'superseded', updated_at = ? WHERE status = 'proposed'")
+        .prepare("UPDATE time_blocks SET status = 'superseded', updated_at = ? WHERE status = 'proposed' AND source = 'solver'")
         .run(now());
       for (const [taskId, minutes] of minutesByTask) this.adjustRemainingMinutes(taskId, minutes);
       this.database.connection.exec("COMMIT");

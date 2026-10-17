@@ -24,7 +24,7 @@ from zoneinfo import ZoneInfo
 
 from ortools.sat.python import cp_model
 
-MODEL_VERSION = "cp-sat-v7"
+MODEL_VERSION = "cp-sat-v8"
 
 # Slot grid / horizon defaults. Overridable per run through the payload `config`.
 # The grid is the full day so sleep, wake, and meals can be real scheduled blocks; tasks may
@@ -538,8 +538,11 @@ def solve(payload):
 
     tasks = list(payload.get("tasks") or [])
     rules = [rule for rule in (payload.get("rules") or []) if rule.get("enabled", True)]
+    # Busy slots: accepted/completed commitments, plus human-placed (manual) proposals, which
+    # reserve their slot even before they are accepted. Solver proposals are ephemeral.
     busy = [block for block in (payload.get("timeBlocks") or [])
-            if block.get("status") in ("accepted", "completed")]
+            if block.get("status") in ("accepted", "completed")
+            or (block.get("status") == "proposed" and block.get("source") == "manual")]
     busy_indices = {
         slot["index"] for slot in slots
         if any(_overlaps(slot, block, tz) for block in busy)

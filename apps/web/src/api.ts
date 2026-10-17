@@ -1,5 +1,6 @@
 import type {
   CreateTaskInput,
+  CreateTimeBlockInput,
   GarminSyncResult,
   HealthActivity,
   IntegrationSummary,
@@ -59,6 +60,8 @@ export const api = {
   integrations: () => request<IntegrationSummary[]>("/api/integrations"),
   task: (id: number) => request<TaskDetail>(`/api/tasks/${id}`),
   timeBlock: (id: number) => request<TimeBlock>(`/api/time-blocks/${id}`),
+  createTimeBlock: (input: CreateTimeBlockInput) =>
+    request<TimeBlock>("/api/time-blocks", { method: "POST", body: JSON.stringify(input) }),
   updateTimeBlock: (id: number, input: UpdateTimeBlockInput) =>
     request<TimeBlock>(`/api/time-blocks/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
   createTask: (input: CreateTaskInput) =>

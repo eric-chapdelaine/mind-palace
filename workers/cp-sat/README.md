@@ -4,9 +4,9 @@ This worker is the optimization boundary for Mind Palace. It reads one JSON sche
 
 The worker is a **pure function**: `now` and `horizonDays` arrive in the payload, so the same payload always yields the same schedule. (`num_search_workers = 1` and a fixed `random_seed` make even tied optima deterministic.)
 
-## Model (cp-sat-v7)
+## Model (cp-sat-v8)
 
-- **Slots**: 30-minute grid over `config.dayStart`–`config.dayEnd` (default `00:00`–`24:00`, i.e. the full day) in `config.timeZone` (default `America/New_York`), for `horizonDays` (default 7). A run may cross midnight (a sleep block does). Accepted/completed time blocks are busy.
+- **Slots**: 30-minute grid over `config.dayStart`–`config.dayEnd` (default `00:00`–`24:00`, i.e. the full day) in `config.timeZone` (default `America/New_York`), for `horizonDays` (default 7). A run may cross midnight (a sleep block does). Accepted/completed blocks are busy, and so are human-placed (manual) blocks even while still `proposed` — a manual block is a commitment that reserves its slot, whereas a solver proposal is ephemeral.
 - **Intervals, not a boolean per slot.** A non-splittable task is one optional interval of its remaining duration; a splittable task is that many optional 30-minute unit intervals (splitting is free — `minChunkMinutes`/`maxChunkMinutes` are ignored). A single `NoOverlap` keeps every interval and every fixed commitment apart.
 - **Rules are data.** Each enabled rule has `applies` (selects tasks), `effect`, and `strength`. The catalog:
   - `assignDays`, `timeWindow` — hard or soft weekday / clock-window constraints or preferences.
