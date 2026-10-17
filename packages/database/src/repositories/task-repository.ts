@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
   reservedTagPublicIds,
-  weekdayTagPublicIds,
   type CreateTagInput,
   type CreateTaskInput,
   type CreateTimeBlockInput,
@@ -11,7 +10,14 @@ import {
   type KanbanStatus,
   type LifecycleStatus,
   type RecurrenceRule,
+  type RuleCondition,
+  type RuleEffect,
+  type RuleStrength,
   type ScheduleRun,
+  type ScheduleScores,
+  type ScheduleUnscheduled,
+  type SchedulerRule,
+  type SchedulerRuleInput,
   type SleepSession,
   type SleepSessionProviderInput,
   type Tag,
@@ -85,9 +91,37 @@ function mapWeatherForecast(value: Row): WeatherForecast {
     forecastAt: text(value.forecast_at),
     temperatureF: value.temperature_f === null ? null : integer(value.temperature_f),
     precipitationProbability: value.precipitation_probability === null ? null : integer(value.precipitation_probability),
+    windMph: value.wind_mph === null ? null : Number(value.wind_mph),
+    isDaytime: value.is_daytime === null ? null : boolean(value.is_daytime),
     shortForecast: nullableText(value.short_forecast),
     expiresAt: text(value.expires_at),
   };
+}
+
+function mapSchedulerRule(value: Row): SchedulerRule {
+  const strength: RuleStrength = text(value.strength_kind) === "soft"
+    ? { kind: "soft", weight: Number(value.weight) }
+    : { kind: "hard" };
+  return {
+    id: integer(value.id),
+    publicId: text(value.public_id),
+    title: text(value.title),
+    enabled: boolean(value.enabled),
+    applies: value.condition_json === null ? null : json<RuleCondition | null>(value.condition_json, null),
+    effect: json<RuleEffect>(value.effect_json, { type: "assignDays", days: [] }),
+    strength,
+    reason: text(value.reason),
+    updatedAt: text(value.updated_at),
+  };
+}
+
+/** Effects that can be hard constraints; the rest are preferences only. */
+const hardRuleEffects = new Set(["assignDays", "timeWindow", "weatherGate", "withinAfter"]);
+
+function assertRuleStrengthMatchesEffect(effect: RuleEffect, strength: RuleStrength): void {
+  if (strength.kind === "hard" && !hardRuleEffects.has(effect.type)) {
+    throw new Error(`Effect '${effect.type}' cannot be hard`);
+  }
 }
 
 function mapSleepSession(value: Row): SleepSession {
@@ -144,14 +178,13 @@ export interface SchedulableTask {
   maxChunkMinutes: number;
   earliestStart: string | null;
   deadlineAt: string | null;
+  /**
+   * Effective tags the worker matches rules against: direct assignments plus ancestor
+   * ("derived") tags, deduplicated. Rules select on these; tags carry no behavior themselves.
+   */
   tagIds: string[];
   /** Tasks this task depends on (by id); the solver orders them before this task when both are scheduled. */
   dependsOnTaskIds: number[];
-  /**
-   * Day the task is pinned to, as a Python `date.weekday()` index (0 = Monday .. 6 = Sunday),
-   * derived from its `mind-palace:<weekday>` tag. `null` means it may land on any day.
-   */
-  preferredDay: number | null;
 }
 
 export interface RecurrenceTemplate {
@@ -727,11 +760,12 @@ export class TaskRepository {
   supersedeProposedBlocks(): void {
     this.database.connection.exec("BEGIN IMMEDIATE");
     try {
-      // Un-accepted proposals hold time against the task's remaining estimate; releasing them
-      // gives that time back so a fresh generate() starts from an accurate remaining amount.
+      // Solver proposals are ephemeral: they hold time against the task's remaining estimate, so
+      // a fresh generate() releases them first. Human-placed (manual) blocks are commitments and
+      // are left alone, so they keep reserving their slot across regenerations.
       const minutesByTask = new Map<number, number>();
       const proposed = this.database.connection
-        .prepare("SELECT id, task_id, start_at, end_at FROM time_blocks WHERE status = 'proposed'")
+        .prepare("SELECT id, task_id, start_at, end_at FROM time_blocks WHERE status = 'proposed' AND source = 'solver'")
         .all();
       for (const value of proposed) {
         const block = row(value, "proposed block");
@@ -740,7 +774,7 @@ export class TaskRepository {
         minutesByTask.set(taskId, (minutesByTask.get(taskId) ?? 0) + minutes);
       }
       this.database.connection
-        .prepare("UPDATE time_blocks SET status = 'superseded', updated_at = ? WHERE status = 'proposed'")
+        .prepare("UPDATE time_blocks SET status = 'superseded', updated_at = ? WHERE status = 'proposed' AND source = 'solver'")
         .run(now());
       for (const [taskId, minutes] of minutesByTask) this.adjustRemainingMinutes(taskId, minutes);
       this.database.connection.exec("COMMIT");
@@ -837,37 +871,31 @@ export class TaskRepository {
         const item = row(value, "schedulable task");
         const tagIds = json<string[]>(item.tag_ids, []);
         const derivedTagIds = json<string[]>(item.derived_tag_ids, []);
-        const effectiveTagIds = [...tagIds, ...derivedTagIds];
+        const effectiveTagIds = [...new Set([...tagIds, ...derivedTagIds])];
         // Eligibility for the week is tag-driven: a task is schedulable only when it carries
         // mind-palace:this-week, directly or through an ancestor tag (the weekday tags are
         // children of this-week, so a day-pinned task is eligible through its day tag).
         if (!effectiveTagIds.includes(reservedTagIds.thisWeek)) return null;
-        // weekdayTagPublicIds is in getDay() order (0 = Sunday); the Python worker wants
-        // weekday() order (0 = Monday), so translate. Tasks with several weekday tags keep
-        // the first one (UI enforces a single day per task).
-        const dayTagIndex = weekdayTagPublicIds.findIndex((id) => effectiveTagIds.includes(id));
-        const preferredDay = dayTagIndex === -1 ? null : (dayTagIndex + 6) % 7;
         return {
           id: integer(item.id), title: text(item.title), priority: integer(item.priority), rank: Number(item.rank),
           durationMinutesRemaining: integer(item.duration_minutes_remaining), splittable: boolean(item.splittable),
           minChunkMinutes: integer(item.min_chunk_minutes), maxChunkMinutes: integer(item.max_chunk_minutes),
           earliestStart: nullableText(item.earliest_start), deadlineAt: nullableText(item.deadline_at),
-          tagIds,
+          tagIds: effectiveTagIds,
           dependsOnTaskIds: json<number[]>(item.depends_on_task_ids, []),
-          preferredDay,
         };
       })
       .filter((task): task is SchedulableTask => task !== null);
   }
 
-  createScheduleRun(horizonStart: string, horizonEnd: string, input: unknown): ScheduleRun {
+  createScheduleRun(horizonStart: string, horizonEnd: string, input: unknown, modelVersion: string): ScheduleRun {
     const timestamp = now();
     const result = this.database.connection
       .prepare(
         `INSERT INTO schedule_runs (public_id, model_version, horizon_start, horizon_end, status, input_json, created_at)
-         VALUES (?, 'cp-sat-v4', ?, ?, 'running', ?, ?)`,
+         VALUES (?, ?, ?, ?, 'running', ?, ?)`,
       )
-      .run(randomUUID(), horizonStart, horizonEnd, JSON.stringify(input), timestamp);
+      .run(randomUUID(), modelVersion, horizonStart, horizonEnd, JSON.stringify(input), timestamp);
     return this.getScheduleRun(insertedId(result));
   }
 
@@ -892,28 +920,85 @@ export class TaskRepository {
       .map((value) => this.getScheduleRun(integer(row(value, "schedule run").id)));
   }
 
-  latestUnscheduledTaskIds(): number[] {
+  /** Unscheduled reasons + objective scores from the latest succeeded run, for the schedule UI. */
+  latestScheduleResult(): { unscheduled: ScheduleUnscheduled[]; scores: ScheduleScores | null } {
     const value = this.database.connection
       .prepare("SELECT result_json FROM schedule_runs WHERE status = 'succeeded' ORDER BY id DESC LIMIT 1")
       .get();
-    if (!value) return [];
-    const result = json<{ unscheduledTaskIds?: number[] }>(row(value, "schedule result").result_json, {});
-    return result.unscheduledTaskIds ?? [];
+    if (!value) return { unscheduled: [], scores: null };
+    const result = json<{ unscheduled?: ScheduleUnscheduled[]; scores?: ScheduleScores }>(
+      row(value, "schedule result").result_json, {},
+    );
+    return { unscheduled: result.unscheduled ?? [], scores: result.scores ?? null };
+  }
+
+  listSchedulerRules(): SchedulerRule[] {
+    return this.database.connection.prepare("SELECT * FROM scheduler_rules ORDER BY id").all()
+      .map((value) => mapSchedulerRule(row(value, "scheduler rule")));
+  }
+
+  getSchedulerRule(id: number): SchedulerRule {
+    return mapSchedulerRule(row(
+      this.database.connection.prepare("SELECT * FROM scheduler_rules WHERE id = ?").get(id),
+      "scheduler rule",
+    ));
+  }
+
+  createSchedulerRule(input: SchedulerRuleInput): SchedulerRule {
+    assertRuleStrengthMatchesEffect(input.effect, input.strength);
+    const timestamp = now();
+    const result = this.database.connection.prepare(
+      `INSERT INTO scheduler_rules
+        (public_id, title, enabled, condition_json, effect_json, strength_kind, weight, reason, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      `user:rule:${randomUUID()}`, input.title, input.enabled === false ? 0 : 1,
+      JSON.stringify(input.applies ?? { always: true }), JSON.stringify(input.effect),
+      input.strength.kind, input.strength.kind === "soft" ? input.strength.weight : null,
+      input.reason ?? input.title, timestamp, timestamp,
+    );
+    return this.getSchedulerRule(insertedId(result));
+  }
+
+  updateSchedulerRule(id: number, input: Partial<SchedulerRuleInput>): SchedulerRule {
+    const current = this.getSchedulerRule(id);
+    const title = input.title ?? current.title;
+    const enabled = input.enabled ?? current.enabled;
+    const applies = input.applies === undefined ? current.applies : input.applies;
+    const effect = input.effect ?? current.effect;
+    const strength = input.strength ?? current.strength;
+    const reason = input.reason ?? current.reason;
+    assertRuleStrengthMatchesEffect(effect, strength);
+    this.database.connection.prepare(
+      `UPDATE scheduler_rules SET title = ?, enabled = ?, condition_json = ?, effect_json = ?,
+        strength_kind = ?, weight = ?, reason = ?, updated_at = ? WHERE id = ?`,
+    ).run(
+      title, enabled ? 1 : 0, JSON.stringify(applies ?? { always: true }), JSON.stringify(effect),
+      strength.kind, strength.kind === "soft" ? strength.weight : null,
+      reason, now(), id,
+    );
+    return this.getSchedulerRule(id);
+  }
+
+  deleteSchedulerRule(id: number): void {
+    this.database.connection.prepare("DELETE FROM scheduler_rules WHERE id = ?").run(id);
   }
 
   upsertWeather(forecasts: Omit<WeatherForecast, "expiresAt">[], fetchedAt: string, expiresAt: string): void {
     const statement = this.database.connection.prepare(
       `INSERT INTO weather_forecasts
-        (location_key, forecast_at, temperature_f, precipitation_probability, short_forecast, fetched_at, expires_at)
-       VALUES ('boston-ma', ?, ?, ?, ?, ?, ?)
+        (location_key, forecast_at, temperature_f, precipitation_probability, wind_mph, is_daytime, short_forecast, fetched_at, expires_at)
+       VALUES ('boston-ma', ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(location_key, forecast_at) DO UPDATE SET temperature_f = excluded.temperature_f,
-         precipitation_probability = excluded.precipitation_probability, short_forecast = excluded.short_forecast,
+         precipitation_probability = excluded.precipitation_probability, wind_mph = excluded.wind_mph,
+         is_daytime = excluded.is_daytime, short_forecast = excluded.short_forecast,
          fetched_at = excluded.fetched_at, expires_at = excluded.expires_at`,
     );
     this.database.connection.exec("BEGIN IMMEDIATE");
     try {
       for (const forecast of forecasts) statement.run(
         forecast.forecastAt, forecast.temperatureF, forecast.precipitationProbability,
+        forecast.windMph, forecast.isDaytime === null ? null : forecast.isDaytime ? 1 : 0,
         forecast.shortForecast, fetchedAt, expiresAt,
       );
       this.database.connection.exec("COMMIT");

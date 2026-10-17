@@ -1,10 +1,13 @@
 import type {
   CreateTaskInput,
+  CreateTimeBlockInput,
   GarminSyncResult,
   HealthActivity,
   IntegrationSummary,
   LifecycleStatus,
   Schedule,
+  SchedulerRule,
+  SchedulerRuleInput,
   SleepSession,
   Tag,
   TagType,
@@ -36,6 +39,13 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export const api = {
   tasks: () => request<TaskSummary[]>("/api/tasks"),
   tags: () => request<Tag[]>("/api/tags"),
+  schedulerRules: () => request<SchedulerRule[]>("/api/scheduler-rules"),
+  createSchedulerRule: (input: SchedulerRuleInput) =>
+    request<SchedulerRule>("/api/scheduler-rules", { method: "POST", body: JSON.stringify(input) }),
+  updateSchedulerRule: (id: number, input: Partial<SchedulerRuleInput>) =>
+    request<SchedulerRule>(`/api/scheduler-rules/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+  deleteSchedulerRule: (id: number) =>
+    request<SchedulerRule[]>(`/api/scheduler-rules/${id}`, { method: "DELETE" }),
   schedule: () => request<Schedule>("/api/schedule"),
   weather: (from?: string, to?: string) => request<WeatherForecast[]>(withRange("/api/weather", from, to)),
   healthObservations: (from?: string, to?: string) => request<SleepSession[]>(withRange("/api/health-observations", from, to)),
@@ -50,6 +60,8 @@ export const api = {
   integrations: () => request<IntegrationSummary[]>("/api/integrations"),
   task: (id: number) => request<TaskDetail>(`/api/tasks/${id}`),
   timeBlock: (id: number) => request<TimeBlock>(`/api/time-blocks/${id}`),
+  createTimeBlock: (input: CreateTimeBlockInput) =>
+    request<TimeBlock>("/api/time-blocks", { method: "POST", body: JSON.stringify(input) }),
   updateTimeBlock: (id: number, input: UpdateTimeBlockInput) =>
     request<TimeBlock>(`/api/time-blocks/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
   createTask: (input: CreateTaskInput) =>

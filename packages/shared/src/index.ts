@@ -38,6 +38,14 @@ export type TimeBlockType = (typeof timeBlockTypes)[number];
 export const tagTypes = ["goal"] as const;
 export type TagType = (typeof tagTypes)[number];
 
+/**
+ * Manual priority levels. A higher level dominates every lower one: a P2 task is never dropped
+ * in favour of any number of P1 tasks. Rank breaks ties within a level. Kept to a small range so
+ * the ordering stays legible and cheap to solve.
+ */
+export const priorities = [0, 1, 2, 3, 4, 5] as const;
+export type Priority = (typeof priorities)[number];
+
 /** Reserved tags that carry behavior (see AGENTS.md "tag-driven behavior"). */
 export const reservedTagPublicIds = {
   calendarEvent: "mind-palace:calendar-event",
@@ -137,6 +145,8 @@ export interface WeatherForecast {
   forecastAt: string;
   temperatureF: number | null;
   precipitationProbability: number | null;
+  windMph: number | null;
+  isDaytime: boolean | null;
   shortForecast: string | null;
   expiresAt: string;
 }
@@ -245,7 +255,106 @@ export interface ScheduleRun {
 export interface Schedule {
   runs: ScheduleRun[];
   timeBlocks: TimeBlock[];
+  /** Why the latest run left each task unplaced. Empty when the latest run placed everything. */
+  unscheduled: ScheduleUnscheduled[];
+  /** Objective scores from the latest run, for display/debugging. Null before the first run. */
+  scores: ScheduleScores | null;
+  /** Convenience mirror of `unscheduled.map((entry) => entry.taskId)`. */
   unscheduledTaskIds: number[];
+}
+
+/** Why the solver left a task unscheduled. */
+export interface ScheduleReason {
+  type: "capacity" | "no_eligible_slots" | "rule";
+  detail: string;
+}
+
+export interface ScheduleUnscheduled {
+  taskId: number;
+  reasons: ScheduleReason[];
+}
+
+/**
+ * The scheduler solves a single weighted objective, not ordered tiers. `decision` reports how
+ * many tasks were placed; `style` is the total soft-rule value of the chosen placement.
+ */
+export interface ScheduleScores {
+  decision: { placed: number; of: number; byPriority: Record<string, number> };
+  style: number;
+}
+
+/** A composable predicate over the scheduling payload. */
+export type RuleCondition =
+  | { always: true }
+  | { taskHasTag: string }
+  | { taskHasAnyTag: string[] }
+  | { all: RuleCondition[] }
+  | { any: RuleCondition[] }
+  | { not: RuleCondition };
+
+/**
+ * The rule effects the worker implements. This list is the contract: the API rejects anything
+ * outside it. `assignDays`, `timeWindow`, `weatherGate`, and `withinAfter` may be hard
+ * constraints; `preferTimeOfDay`, `spread`, and `dailyBudget` are preferences only.
+ */
+export const ruleEffectTypes = ["assignDays", "timeWindow", "preferTimeOfDay", "spread", "dailyBudget", "weatherGate", "withinAfter"] as const;
+export type RuleEffectType = (typeof ruleEffectTypes)[number];
+
+/**
+ * A placement-scoped condition: the term applies to a slot only when that slot matches. This is
+ * separate from `applies`, which selects *which tasks* a rule governs. `dayOfWeek` uses Python
+ * weekday order (0 = Monday .. 6 = Sunday).
+ */
+export interface RuleWhen {
+  dayOfWeek?: number[];
+}
+
+/** What a rule does. `type` selects the implementation; the remaining keys are parameters. */
+export type RuleEffect =
+  | { type: "assignDays"; days: number[]; when?: RuleWhen }
+  | { type: "timeWindow"; start: string; end: string; when?: RuleWhen }
+  | { type: "preferTimeOfDay"; start: string; end: string; when?: RuleWhen }
+  | { type: "spread"; maxPerDayMinutes?: number; minDistinctDays?: number; avoidConsecutive?: boolean; when?: RuleWhen }
+  | { type: "dailyBudget"; softMaxPerDay?: number; when?: RuleWhen }
+  | { type: "withinAfter"; maxMinutes?: number }
+  | {
+      type: "weatherGate";
+      minTemperatureF?: number;
+      maxTemperatureF?: number;
+      maxPrecipitationProbability?: number;
+      maxWindMph?: number;
+      requireDaytime?: boolean;
+      when?: RuleWhen;
+    };
+
+/** Hard rules constrain feasibility; soft rules add a weighted term to the single objective. */
+export type RuleStrength = { kind: "hard" } | { kind: "soft"; weight: number };
+
+/**
+ * A scheduling rule. Rules are data: the worker compiles them into hard constraints and weighted
+ * soft terms. `applies` may reference any tag (seeded or user-created); tags are selectors,
+ * never behavior on their own.
+ */
+export interface SchedulerRule {
+  id: number;
+  publicId: string;
+  title: string;
+  enabled: boolean;
+  applies: RuleCondition | null;
+  effect: RuleEffect;
+  strength: RuleStrength;
+  reason: string;
+  updatedAt: string;
+}
+
+/** The editable half of a rule (everything but identity and timestamps). */
+export interface SchedulerRuleInput {
+  title: string;
+  enabled?: boolean;
+  applies?: RuleCondition | null;
+  effect: RuleEffect;
+  strength: RuleStrength;
+  reason?: string;
 }
 
 export interface CreateTaskInput {

@@ -8,6 +8,9 @@ import { goalTagsMigration } from "./007-goal-tags.js";
 import { sleepAndActivitiesMigration } from "./008-sleep-and-activities.js";
 import { healthEditableFieldsMigration } from "./009-health-editable-fields.js";
 import { taskDependenciesMigration } from "./010-task-dependencies.js";
+import { schedulerRulesMigration } from "./011-scheduler-rules.js";
+import { schedulerRulesDropTierMigration } from "./012-scheduler-rules-drop-tier.js";
+import { weatherDetailMigration } from "./013-weather-detail.js";
 
 export interface Migration {
   version: number;
@@ -28,4 +31,7 @@ export const migrations: Migration[] = [
   sleepAndActivitiesMigration,
   healthEditableFieldsMigration,
   taskDependenciesMigration,
+  schedulerRulesMigration,
+  schedulerRulesDropTierMigration,
+  weatherDetailMigration,
 ];

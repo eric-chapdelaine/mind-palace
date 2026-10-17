@@ -256,6 +256,7 @@ body.dragging .task-card:hover .task-card-expand > div { opacity: 0; }
 .time-gutter { background-color: #fff; border-right: 1px solid #ccc; }
 .time-gutter time { position: absolute; right: .45rem; transform: translateY(-.5em); color: #666; font-size: .7rem; }
 .calendar-day { border-right: 1px solid #ddd; }
+.calendar-day.drag-over { background-color: #eef6ff; box-shadow: inset 0 0 0 1px #222; }
 .elapsed-time { position: absolute; z-index: 0; inset: 0 0 auto; background: #eee9; border-bottom: 1px solid #aaa; pointer-events: none; }
 .calendar-event { position: absolute; z-index: 1; left: 3px; right: 3px; overflow: hidden; display: grid; align-content: start; gap: .1rem; border: 1px solid #777; border-left-width: 4px; border-radius: 3px; background: #fff; padding: .25rem .35rem; font-size: .72rem; }
 .calendar-event-summary { display: grid; gap: .1rem; min-width: 0; }
@@ -287,7 +288,15 @@ body.dragging .task-card:hover .task-card-expand > div { opacity: 0; }
 .calendar-event time, .calendar-event span { color: #555; }
 .calendar-event button { width: max-content; padding: .1rem .3rem; }
 .calendar-event.block-proposed { border-style: dashed; }
+.calendar-event-movable { cursor: grab; }
+.calendar-event-movable:active { cursor: grabbing; }
+.calendar-event-dragging { opacity: .4; }
 .calendar-event.schedule-past { opacity: .45; background: #ddd; }
+/* Fixed calendar commitments (imported events) are not schedulable work, so tint them the way
+   Garmin sleep/activity windows are tinted: an external-time color that survives `schedule-past`. */
+.calendar-event.calendar-event-fixed { border-color: #b8860b; background: #fdf3e3; color: #6b4d0f; }
+.calendar-event.calendar-event-fixed time, .calendar-event.calendar-event-fixed span { color: #6b4d0f; }
+.calendar-event.calendar-event-fixed.schedule-past { opacity: .5; }
 /* Garmin context (sleep / recorded activities) sits over the work layer but stays click-through,
    so scheduled blocks underneath remain interactive while the health window is still visible. */
 .calendar-event.health-event { z-index: 2; border-width: 1px; border-left-width: 4px; text-decoration: none; }
@@ -380,3 +389,36 @@ body.dragging .task-card:hover .task-card-expand > div { opacity: 0; }
   .tag-filter label { min-width: 0; }
   .detail-grid { grid-template-columns: 1fr; grid-template-areas: "sidebar" "main"; }
 }
+
+/* ---- Scheduler rules page ---- */
+.rules-list { list-style: none; margin: 1rem 0; padding: 0; display: grid; gap: .5rem; }
+.rule-row {
+  display: flex; align-items: center; gap: .75rem;
+  border: 1px solid #ddd; background: #fff; padding: .6rem .75rem;
+}
+.rule-toggle { margin: 0; }
+.rule-toggle input { width: auto; }
+.rule-main { flex: 1; display: grid; gap: .1rem; }
+.rule-main .muted { font-size: .82rem; }
+.rule-reason { color: #444; font-style: italic; font-size: .85rem; }
+.rule-weight { margin: 0; width: 6rem; font-size: .8rem; }
+.rule-weight input { padding: .3rem; }
+.rule-delete { border: none; background: none; font-size: 1.1rem; line-height: 1; color: #888; padding: 0 .25rem; }
+.rule-delete:hover { color: #222; }
+.rule-edit { border: 1px solid #ccc; background: #fff; font-size: .8rem; padding: .25rem .5rem; }
+.rule-edit:hover { border-color: #888; }
+.rule-row-editing { display: block; }
+.rule-row-editing .rule-form { border-top: none; margin-top: 0; padding-top: 0; }
+.rule-row-editing .rule-form h2 { margin: 0 0 .25rem; font-size: 1rem; }
+.rule-form { border-top: 1px solid #ddd; margin-top: 1.5rem; padding-top: 1rem; }
+.rule-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .25rem 1rem; align-items: end; }
+.rule-form-grid label { margin: .35rem 0; }
+.rule-days { display: flex; flex-wrap: wrap; gap: .5rem; margin: .35rem 0; }
+.rule-days label { display: flex; align-items: center; gap: .25rem; margin: 0; }
+.rule-days input { width: auto; }
+
+/* ---- Schedule solver summary / unscheduled reasons ---- */
+.schedule-scores { margin: .5rem 0; font-size: .85rem; }
+.unscheduled-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .35rem; }
+.unscheduled-list li { display: flex; flex-wrap: wrap; gap: .5rem; align-items: baseline; }
+.unscheduled-list .muted { font-size: .8rem; }

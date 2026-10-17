@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { kanbanStatuses, type Tag, type TaskDetail, type UpdateTaskInput } from "@mind-palace/shared";
+import { kanbanStatuses, priorities, type Priority, type Tag, type TaskDetail, type UpdateTaskInput } from "@mind-palace/shared";
 import { TagPicker } from "./TagPicker";
 
 function toLocalDateTime(value: string | null): string {
@@ -55,7 +55,10 @@ export function TaskEditor({ task, tags, onSave, onCancel }: {
     <label>Description<textarea rows={8} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
     <div className="form-pair">
       <label>Status<select value={status} onChange={(event) => setStatus(event.target.value as typeof status)}>{kanbanStatuses.map((item) => <option key={item} value={item}>{item.replace("_", " ")}</option>)}</select></label>
-      <label>Priority<input type="number" value={priority} onChange={(event) => setPriority(event.target.value)} /></label>
+      <label>Priority<select value={priority} onChange={(event) => setPriority(event.target.value)}>
+        {(priorities.includes(task.priority as Priority) ? priorities : [...priorities, task.priority]).map((level) =>
+          <option key={level} value={level}>P{level}</option>)}
+      </select></label>
     </div>
     <label>Time remaining (minutes)<input type="number" min="1" placeholder="Optional" value={remaining} onChange={(event) => setRemaining(event.target.value)} /></label>
     <label>Tags<TagPicker tags={tags} selectedIds={tagIds} onChange={setTagIds} /></label>

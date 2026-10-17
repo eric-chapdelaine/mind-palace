@@ -1,5 +1,5 @@
-import { existsSync, statSync } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { TaskRepository } from "@mind-palace/database";
@@ -24,6 +24,8 @@ import type { ScheduleService } from "../services/schedule-service.js";
 import type { WeatherService } from "../services/weather-service.js";
 import type { RecurrenceService } from "../services/recurrence-service.js";
 import type { JobScheduler } from "../services/job-scheduler.js";
+import { parseRuleInput, parseRulePatch } from "./rules.js";
+import { isTimeBlockBody, numberParam, optionalText, requiredString } from "./validation.js";
 
 interface Dependencies {
   tasks: TaskRepository;
@@ -43,28 +45,6 @@ export interface IntegrationRegistration {
   status: () => IntegrationConnection;
 }
 
-function isTimeBlockBody(value: unknown): value is { startAt: string; endAt: string; type?: string; notes?: string } {
-  return typeof value === "object" && value !== null && "startAt" in value && "endAt" in value;
-}
-
-function numberParam(value: string, name: string): number {
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) throw new Error(`${name} must be a positive integer`);
-  return parsed;
-}
-
-function requiredString(value: unknown, name: string): string {
-  if (typeof value !== "string" || !value.trim()) throw new Error(`${name} is required`);
-  return value.trim();
-}
-
-/** Optional user text: absent → undefined (leave unchanged), null/blank → null (clear), else trimmed. */
-function optionalText(value: unknown): string | null | undefined {
-  if (value === null) return null;
-  if (typeof value !== "string") return undefined;
-  return value.trim() || null;
-}
-
 export function createHttpApp({ tasks, schedule, weather, calendar, garmin, integrationRegistry, recurrence, scheduler }: Dependencies): Hono {
   const app = new Hono();
 
@@ -78,6 +58,7 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
   app.get("/api/jobs", (context) => context.json(scheduler.status()));
   app.get("/api/tasks", (context) => context.json(tasks.listTasks()));
   app.get("/api/tags", (context) => context.json(tasks.listTags()));
+  app.get("/api/scheduler-rules", (context) => context.json(tasks.listSchedulerRules()));
   app.get("/api/schedule", (context) => context.json(schedule.getSchedule()));
   app.get("/api/weather", async (context) =>
     context.json(await weather.getWeather(false, context.req.query("from"), context.req.query("to"))));
@@ -146,6 +127,21 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
       ...(Array.isArray(body.dependsOnTaskIds) ? { dependsOnTaskIds: body.dependsOnTaskIds.map(Number) } : {}),
     });
     return context.json(tasks.getTask(taskId));
+  });
+
+  app.post("/api/scheduler-rules", async (context) => {
+    const body = (await context.req.json()) as Record<string, unknown>;
+    return context.json(tasks.createSchedulerRule(parseRuleInput(body)), 201);
+  });
+
+  app.patch("/api/scheduler-rules/:id", async (context) => {
+    const body = (await context.req.json()) as Record<string, unknown>;
+    return context.json(tasks.updateSchedulerRule(numberParam(context.req.param("id"), "rule id"), parseRulePatch(body)));
+  });
+
+  app.delete("/api/scheduler-rules/:id", (context) => {
+    tasks.deleteSchedulerRule(numberParam(context.req.param("id"), "rule id"));
+    return context.json(tasks.listSchedulerRules());
   });
 
   app.post("/api/tags", async (context) => {
