@@ -1,8 +1,7 @@
 /**
- * Scheduler rules carry no objective tier. The worker optimizes a single weighted objective, so
- * a soft rule is just a weight. This rebuilds `scheduler_rules` without the `tier` column and
- * drops any rule whose effect no longer exists: `preferEarlier` is now always applied by the
- * post-solve compaction pass, and `minimizeChunks` is gone now that splitting is free.
+ * Scheduler rules carry no objective tier. The worker optimizes a single weighted objective, so a
+ * soft rule is just a weight. This rebuilds `scheduler_rules` without the `tier` column; column
+ * removal needs a drop/recreate, so the runner toggles foreign keys off around it.
  */
 export const schedulerRulesDropTierMigration = {
   version: 12,
@@ -28,8 +27,7 @@ export const schedulerRulesDropTierMigration = {
     INSERT INTO scheduler_rules_new
       (id, public_id, title, enabled, condition_json, effect_json, strength_kind, weight, reason, created_at, updated_at)
       SELECT id, public_id, title, enabled, condition_json, effect_json, strength_kind, weight, reason, created_at, updated_at
-      FROM scheduler_rules
-      WHERE json_extract(effect_json, '$.type') IN ('assignDays', 'timeWindow', 'preferTimeOfDay', 'spread');
+      FROM scheduler_rules;
 
     DROP TABLE scheduler_rules;
     ALTER TABLE scheduler_rules_new RENAME TO scheduler_rules;

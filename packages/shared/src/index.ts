@@ -51,8 +51,6 @@ export const reservedTagPublicIds = {
   calendarEvent: "mind-palace:calendar-event",
   routine: "mind-palace:routine",
   thisWeek: "mind-palace:this-week",
-  cook: "mind-palace:cook",
-  eatOut: "mind-palace:eat-out",
 } as const;
 
 /**

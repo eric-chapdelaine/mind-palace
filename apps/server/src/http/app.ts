@@ -6,15 +6,10 @@ import type { TaskRepository } from "@mind-palace/database";
 import {
   kanbanStatuses,
   lifecycleStatuses,
-  ruleEffectTypes,
   tagTypes,
   timeBlockStatuses,
   timeBlockTypes,
   type CreateTaskInput,
-  type RuleCondition,
-  type RuleEffect,
-  type RuleStrength,
-  type SchedulerRuleInput,
   type IntegrationConnection,
   type LifecycleStatus,
   type KanbanStatus,
@@ -29,6 +24,8 @@ import type { ScheduleService } from "../services/schedule-service.js";
 import type { WeatherService } from "../services/weather-service.js";
 import type { RecurrenceService } from "../services/recurrence-service.js";
 import type { JobScheduler } from "../services/job-scheduler.js";
+import { parseRuleInput, parseRulePatch } from "./rules.js";
+import { isTimeBlockBody, numberParam, optionalText, requiredString } from "./validation.js";
 
 interface Dependencies {
   tasks: TaskRepository;
@@ -46,75 +43,6 @@ export interface IntegrationRegistration {
   key: string;
   label: string;
   status: () => IntegrationConnection;
-}
-
-function isTimeBlockBody(value: unknown): value is { startAt: string; endAt: string; type?: string; notes?: string } {
-  return typeof value === "object" && value !== null && "startAt" in value && "endAt" in value;
-}
-
-function numberParam(value: string, name: string): number {
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) throw new Error(`${name} must be a positive integer`);
-  return parsed;
-}
-
-function requiredString(value: unknown, name: string): string {
-  if (typeof value !== "string" || !value.trim()) throw new Error(`${name} is required`);
-  return value.trim();
-}
-
-/** Optional user text: absent → undefined (leave unchanged), null/blank → null (clear), else trimmed. */
-function optionalText(value: unknown): string | null | undefined {
-  if (value === null) return null;
-  if (typeof value !== "string") return undefined;
-  return value.trim() || null;
-}
-
-function parseRuleStrength(value: unknown): RuleStrength {
-  if (!value || typeof value !== "object") throw new Error("strength is required");
-  const candidate = value as { kind?: unknown; weight?: unknown };
-  if (candidate.kind === "hard") return { kind: "hard" };
-  if (candidate.kind === "soft") {
-    if (typeof candidate.weight !== "number") throw new Error("Soft rules need a numeric weight");
-    return { kind: "soft", weight: candidate.weight };
-  }
-  throw new Error("strength.kind must be hard or soft");
-}
-
-/** Reject effects the worker does not implement so the rules table never holds dead behavior. */
-function parseRuleEffect(value: unknown): RuleEffect {
-  if (!value || typeof value !== "object" || typeof (value as { type?: unknown }).type !== "string") {
-    throw new Error("effect.type is required");
-  }
-  const type = (value as { type: string }).type;
-  if (!ruleEffectTypes.includes(type as (typeof ruleEffectTypes)[number])) {
-    throw new Error(`Unknown rule effect '${type}'`);
-  }
-  return value as RuleEffect;
-}
-
-function parseRuleInput(body: Record<string, unknown>): SchedulerRuleInput {
-  const applies = body.applies;
-  return {
-    title: requiredString(body.title, "title"),
-    ...(typeof body.enabled === "boolean" ? { enabled: body.enabled } : {}),
-    ...(applies === null || (applies && typeof applies === "object") ? { applies: applies as RuleCondition | null } : {}),
-    effect: parseRuleEffect(body.effect),
-    strength: parseRuleStrength(body.strength),
-    ...(typeof body.reason === "string" ? { reason: body.reason } : {}),
-  };
-}
-
-function parseRulePatch(body: Record<string, unknown>): Partial<SchedulerRuleInput> {
-  const patch: Partial<SchedulerRuleInput> = {};
-  if (typeof body.title === "string") patch.title = requiredString(body.title, "title");
-  if (typeof body.enabled === "boolean") patch.enabled = body.enabled;
-  if (body.applies === null) patch.applies = null;
-  else if (body.applies && typeof body.applies === "object") patch.applies = body.applies as RuleCondition;
-  if (body.effect !== undefined) patch.effect = parseRuleEffect(body.effect);
-  if (body.strength !== undefined) patch.strength = parseRuleStrength(body.strength);
-  if (typeof body.reason === "string") patch.reason = body.reason;
-  return patch;
 }
 
 export function createHttpApp({ tasks, schedule, weather, calendar, garmin, integrationRegistry, recurrence, scheduler }: Dependencies): Hono {

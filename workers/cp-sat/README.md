@@ -4,6 +4,19 @@ This worker is the optimization boundary for Mind Palace. It reads one JSON sche
 
 The worker is a **pure function**: `now` and `horizonDays` arrive in the payload, so the same payload always yields the same schedule. (`num_search_workers = 1` and a fixed `random_seed` make even tied optima deterministic.)
 
+## Layout
+
+`workers/cp-sat/scheduler.py` is the stdin/stdout entry point and re-exports the tested helpers.
+The model lives in the `schedulerlib` package, one responsibility per module:
+
+- `config.py` — model version and default configuration.
+- `timegrid.py` — slot-grid construction and time parsing.
+- `weather.py` — forecast indexing and the rule-defined weather gate.
+- `rules.py` — which tasks a rule governs and how it shapes eligibility.
+- `objective.py` — objective helpers and the greedy compaction post-pass.
+- `solve.py` — model construction, solving, and output shaping.
+- `main.py` — the stdin/stdout protocol.
+
 ## Model (cp-sat-v8)
 
 - **Slots**: 30-minute grid over `config.dayStart`–`config.dayEnd` (default `00:00`–`24:00`, i.e. the full day) in `config.timeZone` (default `America/New_York`), for `horizonDays` (default 7). A run may cross midnight (a sleep block does). Accepted/completed blocks are busy, and so are human-placed (manual) blocks even while still `proposed` — a manual block is a commitment that reserves its slot, whereas a solver proposal is ephemeral.
