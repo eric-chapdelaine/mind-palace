@@ -51,8 +51,20 @@ const HORIZON_DAYS = 7;
  * Solver configuration. The worker owns the defaults (slot size, day window, timezone); the
  * control plane only states the choices that are product decisions. Kept in the payload so the
  * stored run is self-describing.
+ *
+ * `timeBudgetSeconds` is the solver's soft time limit (the worker defaults to 15s). It is raised
+ * to 30s because the Raspberry Pi needs the extra budget to place the same tasks the dev machine
+ * solves in a few seconds.
  */
-const SCHEDULER_CONFIG = { priorityMode: "weighted" } as const;
+const SCHEDULER_TIME_BUDGET_SECONDS = 30;
+const SCHEDULER_CONFIG = { priorityMode: "weighted", timeBudgetSeconds: SCHEDULER_TIME_BUDGET_SECONDS } as const;
+
+/**
+ * Hard wall-clock cap for the worker process. Must exceed `timeBudgetSeconds` plus `uv` startup
+ * and model build (a few seconds on the Pi); otherwise the child is SIGTERM'd mid-solve and the
+ * request fails before the worker can print its result.
+ */
+const WORKER_TIMEOUT_MS = 60_000;
 
 export class ScheduleService {
   private readonly workerDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../workers/cp-sat");
@@ -117,7 +129,7 @@ export class ScheduleService {
       directory: this.workerDirectory,
       script: "scheduler.py",
       input,
-      timeoutMs: 30_000,
+      timeoutMs: WORKER_TIMEOUT_MS,
       label: "CP-SAT worker",
     });
   }
