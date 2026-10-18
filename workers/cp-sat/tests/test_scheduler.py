@@ -161,10 +161,10 @@ class PureHelpersTest(unittest.TestCase):
     def test_decision_weights_strict_dominance(self):
         tasks = [task(1, priority=2), task(2, priority=1), task(3, priority=1), task(4, priority=0)]
         weights = S.decision_weights(tasks, "weighted")
-        # A task at each level outweighs every task at every lower level combined.
-        for level in (1, 2):
-            lower_total = sum(weights[t["priority"]] for t in tasks if t["priority"] < level)
-            self.assertGreater(weights[level], lower_total)
+        # A task at each level outweighs every task at every less-important (higher) level combined.
+        for level in (0, 1):
+            less_important_total = sum(weights[t["priority"]] for t in tasks if t["priority"] > level)
+            self.assertGreater(weights[level], less_important_total)
 
 
 class SolveTest(unittest.TestCase):
@@ -173,16 +173,16 @@ class SolveTest(unittest.TestCase):
         self.assertEqual(result["modelVersion"], S.MODEL_VERSION)
         self.assertEqual(result["horizonStart"], "2026-03-02T12:00:00Z")
 
-    def test_weighted_priority_prefers_higher(self):
-        # Only one slot is available; the higher-priority task must win.
+    def test_weighted_priority_prefers_lower_number(self):
+        # Only one slot is available; the higher-priority P0 task must beat P5.
         tasks = [task(1, priority=5), task(2, priority=0)]
         result = S.solve(payload(tasks, time_blocks=busy_except(1)))
-        self.assertEqual(result["unscheduledTaskIds"], [2])
-        self.assertEqual(sorted({a["taskId"] for a in result["assignments"]}), [1])
+        self.assertEqual(result["unscheduledTaskIds"], [1])
+        self.assertEqual(sorted({a["taskId"] for a in result["assignments"]}), [2])
 
-    def test_priority_beats_many_lower_tasks(self):
-        # One P10 task vs five P0 tasks competing for a single slot.
-        tasks = [task(1, priority=10)] + [task(2 + i, priority=0) for i in range(5)]
+    def test_priority_beats_many_less_important_tasks(self):
+        # One P0 task vs five P5 tasks competing for a single slot.
+        tasks = [task(1, priority=0)] + [task(2 + i, priority=5) for i in range(5)]
         result = S.solve(payload(tasks, time_blocks=busy_except(1)))
         self.assertEqual(result["unscheduledTaskIds"], [2, 3, 4, 5, 6])
 

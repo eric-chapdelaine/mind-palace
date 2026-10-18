@@ -21,17 +21,20 @@ from .weather import slot_weather, weather_is_nice
 def decision_weights(tasks, mode):
     """Per-priority weights for the decision term.
 
-    "weighted" self-scales so each level outweighs the total of every lower level (priority is
-    never traded for count). "fair" ignores priority.
+    Priorities run P0 (most important) .. P5 (least important). "weighted" self-scales so each
+    level outweighs the total of every less-important level (priority is never traded for count).
+    "fair" ignores priority.
     """
-    levels = sorted({task["priority"] for task in tasks})
+    # Walk from least important (highest number) up, so each more-important level gets a weight
+    # larger than the combined weight of every less-important task.
+    levels = sorted({task["priority"] for task in tasks}, reverse=True)
     if mode == "fair":
         return {level: 1 for level in levels}
     weights = {}
-    lower_total = 0
+    less_important_total = 0
     for level in levels:
-        weights[level] = lower_total + 1
-        lower_total += weights[level] * sum(1 for task in tasks if task["priority"] == level)
+        weights[level] = less_important_total + 1
+        less_important_total += weights[level] * sum(1 for task in tasks if task["priority"] == level)
     return weights
 
 

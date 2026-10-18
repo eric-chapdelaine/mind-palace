@@ -39,9 +39,10 @@ export const tagTypes = ["goal"] as const;
 export type TagType = (typeof tagTypes)[number];
 
 /**
- * Manual priority levels. A higher level dominates every lower one: a P2 task is never dropped
- * in favour of any number of P1 tasks. Rank breaks ties within a level. Kept to a small range so
- * the ordering stays legible and cheap to solve.
+ * Manual priority levels, P0 (most important) through P5 (least important). A more-important
+ * level dominates every less-important one: a P0 task is never dropped in favour of any number
+ * of P1 tasks. Rank breaks ties within a level. Kept to a small range so the ordering stays
+ * legible and cheap to solve.
  */
 export const priorities = [0, 1, 2, 3, 4, 5] as const;
 export type Priority = (typeof priorities)[number];

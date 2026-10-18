@@ -250,7 +250,7 @@ export class TaskRepository {
 
   listTasks(): TaskSummary[] {
     return this.database.connection
-      .prepare(`${taskSummarySql} ORDER BY CASE t.lifecycle_status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END, t.priority DESC, t.updated_at DESC`)
+      .prepare(`${taskSummarySql} ORDER BY CASE t.lifecycle_status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END, t.priority ASC, t.updated_at DESC`)
       .all()
       .map((value) => mapTaskSummary(row(value, "task summary")));
   }
@@ -278,14 +278,14 @@ export class TaskRepository {
     const dependsOn = this.database.connection
       .prepare(
         `${taskSummarySql} JOIN (SELECT depends_on_task_id AS dep_task_id FROM task_dependencies WHERE task_id = ?) dep ON dep.dep_task_id = t.id
-         ORDER BY t.priority DESC, t.title COLLATE NOCASE`,
+         ORDER BY t.priority ASC, t.title COLLATE NOCASE`,
       )
       .all(taskId)
       .map((value) => mapTaskSummary(row(value, "task dependency")));
     const dependents = this.database.connection
       .prepare(
         `${taskSummarySql} JOIN (SELECT task_id AS dep_task_id FROM task_dependencies WHERE depends_on_task_id = ?) dep ON dep.dep_task_id = t.id
-         ORDER BY t.priority DESC, t.title COLLATE NOCASE`,
+         ORDER BY t.priority ASC, t.title COLLATE NOCASE`,
       )
       .all(taskId)
       .map((value) => mapTaskSummary(row(value, "task dependent")));
@@ -864,7 +864,7 @@ export class TaskRepository {
          FROM tasks task
          WHERE task.kanban_status IN ('ready', 'in_progress') AND task.duration_estimated = 1
            AND task.duration_minutes_remaining > 0
-         ORDER BY task.priority DESC, task.rank DESC`,
+         ORDER BY task.priority ASC, task.rank DESC`,
       )
       .all()
       .map((value) => {
