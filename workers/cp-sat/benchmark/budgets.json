@@ -1,0 +1,92 @@
+[
+  {
+    "case": "typical",
+    "tasks": 73,
+    "budget": 30,
+    "status": "FEASIBLE",
+    "placed": 73,
+    "of": 73,
+    "weightedDecision": 9449,
+    "style": 995,
+    "byPriority": {
+      "0": 41,
+      "1": 24,
+      "2": 8
+    }
+  },
+  {
+    "case": "typical",
+    "tasks": 73,
+    "budget": 120,
+    "status": "OPTIMAL",
+    "placed": 73,
+    "of": 73,
+    "weightedDecision": 9449,
+    "style": 995,
+    "byPriority": {
+      "0": 41,
+      "1": 24,
+      "2": 8
+    }
+  },
+  {
+    "case": "s128",
+    "tasks": 235,
+    "budget": 30,
+    "status": "FEASIBLE",
+    "placed": 82,
+    "of": 235,
+    "weightedDecision": 157710,
+    "style": -290,
+    "byPriority": {
+      "0": 34,
+      "1": 15,
+      "2": 33
+    }
+  },
+  {
+    "case": "s128",
+    "tasks": 235,
+    "budget": 60,
+    "status": "FEASIBLE",
+    "placed": 105,
+    "of": 235,
+    "weightedDecision": 163135,
+    "style": -95,
+    "byPriority": {
+      "0": 35,
+      "1": 20,
+      "2": 50
+    }
+  },
+  {
+    "case": "s128",
+    "tasks": 235,
+    "budget": 120,
+    "status": "FEASIBLE",
+    "placed": 106,
+    "of": 235,
+    "weightedDecision": 163136,
+    "style": -135,
+    "byPriority": {
+      "0": 35,
+      "1": 20,
+      "2": 51
+    }
+  },
+  {
+    "case": "s128",
+    "tasks": 235,
+    "budget": 300,
+    "status": "FEASIBLE",
+    "placed": 106,
+    "of": 235,
+    "weightedDecision": 163136,
+    "style": -40,
+    "byPriority": {
+      "0": 35,
+      "1": 20,
+      "2": 51
+    }
+  }
+]

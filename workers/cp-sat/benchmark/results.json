@@ -1,0 +1,1337 @@
+{
+  "generatedAt": "2026-10-18T03:36:16.937577+00:00",
+  "cpBudgetSeconds": 30.0,
+  "greedyBudgetSeconds": 10.0,
+  "rows": [
+    {
+      "scenario": "baseline",
+      "seed": 1,
+      "tasks": 64,
+      "slots": 336,
+      "cp": {
+        "placed": 64,
+        "of": 64,
+        "weightedDecision": 3527,
+        "style": 960,
+        "byPriority": {
+          "0": 41,
+          "1": 20,
+          "2": 3
+        },
+        "buildSeconds": 0.03,
+        "solveSeconds": 0.93,
+        "modelSeconds": 0.96,
+        "wallSeconds": 0.9568172589933965,
+        "solverStatus": "OPTIMAL",
+        "reportedObjective": 34780707,
+        "reportedStyle": 960,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 64,
+        "of": 64,
+        "weightedDecision": 3527,
+        "style": 935,
+        "byPriority": {
+          "0": 41,
+          "1": 20,
+          "2": 3
+        },
+        "constructSeconds": 0.06642059498699382,
+        "totalSeconds": 0.09401137600070797,
+        "iterations": 3,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "baseline",
+      "seed": 2,
+      "tasks": 62,
+      "slots": 336,
+      "cp": {
+        "placed": 62,
+        "of": 62,
+        "weightedDecision": 3191,
+        "style": 950,
+        "byPriority": {
+          "0": 41,
+          "1": 18,
+          "2": 3
+        },
+        "buildSeconds": 0.02,
+        "solveSeconds": 1.31,
+        "modelSeconds": 1.34,
+        "wallSeconds": 1.3369158970017452,
+        "solverStatus": "OPTIMAL",
+        "reportedObjective": 30127181,
+        "reportedStyle": 950,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 62,
+        "of": 62,
+        "weightedDecision": 3191,
+        "style": 945,
+        "byPriority": {
+          "0": 41,
+          "1": 18,
+          "2": 3
+        },
+        "constructSeconds": 0.06356363306986168,
+        "totalSeconds": 0.09292207300313748,
+        "iterations": 3,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "baseline",
+      "seed": 3,
+      "tasks": 61,
+      "slots": 336,
+      "cp": {
+        "placed": 61,
+        "of": 61,
+        "weightedDecision": 3023,
+        "style": 960,
+        "byPriority": {
+          "0": 41,
+          "1": 17,
+          "2": 3
+        },
+        "buildSeconds": 0.03,
+        "solveSeconds": 0.78,
+        "modelSeconds": 0.81,
+        "wallSeconds": 0.8090768299880438,
+        "solverStatus": "OPTIMAL",
+        "reportedObjective": 29810763,
+        "reportedStyle": 960,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 61,
+        "of": 61,
+        "weightedDecision": 3023,
+        "style": 915,
+        "byPriority": {
+          "0": 41,
+          "1": 17,
+          "2": 3
+        },
+        "constructSeconds": 0.06484890097635798,
+        "totalSeconds": 0.0931877999973949,
+        "iterations": 3,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "typical",
+      "seed": 1,
+      "tasks": 73,
+      "slots": 336,
+      "cp": {
+        "placed": 73,
+        "of": 73,
+        "weightedDecision": 9449,
+        "style": 995,
+        "byPriority": {
+          "0": 41,
+          "1": 24,
+          "2": 8
+        },
+        "buildSeconds": 0.03,
+        "solveSeconds": 30.0,
+        "modelSeconds": 30.04,
+        "wallSeconds": 30.043814422009746,
+        "solverStatus": "FEASIBLE",
+        "reportedObjective": 121241114,
+        "reportedStyle": 995,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 72,
+        "of": 73,
+        "weightedDecision": 9440,
+        "style": 880,
+        "byPriority": {
+          "0": 41,
+          "1": 23,
+          "2": 8
+        },
+        "constructSeconds": 0.07905006103101186,
+        "totalSeconds": 0.34966700497898273,
+        "iterations": 5,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "typical",
+      "seed": 2,
+      "tasks": 71,
+      "slots": 336,
+      "cp": {
+        "placed": 71,
+        "of": 71,
+        "weightedDecision": 8693,
+        "style": 805,
+        "byPriority": {
+          "0": 41,
+          "1": 22,
+          "2": 8
+        },
+        "buildSeconds": 0.04,
+        "solveSeconds": 30.01,
+        "modelSeconds": 30.05,
+        "wallSeconds": 30.049975657981122,
+        "solverStatus": "FEASIBLE",
+        "reportedObjective": 133447048,
+        "reportedStyle": 805,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 70,
+        "of": 71,
+        "weightedDecision": 8684,
+        "style": 725,
+        "byPriority": {
+          "0": 41,
+          "1": 21,
+          "2": 8
+        },
+        "constructSeconds": 0.07464484398951754,
+        "totalSeconds": 0.340027218015166,
+        "iterations": 5,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "typical",
+      "seed": 3,
+      "tasks": 71,
+      "slots": 336,
+      "cp": {
+        "placed": 70,
+        "of": 71,
+        "weightedDecision": 8684,
+        "style": 925,
+        "byPriority": {
+          "0": 41,
+          "1": 21,
+          "2": 8
+        },
+        "buildSeconds": 0.03,
+        "solveSeconds": 30.0,
+        "modelSeconds": 30.04,
+        "wallSeconds": 30.04487492100452,
+        "solverStatus": "FEASIBLE",
+        "reportedObjective": 114291049,
+        "reportedStyle": 925,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 69,
+        "of": 71,
+        "weightedDecision": 8675,
+        "style": 860,
+        "byPriority": {
+          "0": 41,
+          "1": 20,
+          "2": 8
+        },
+        "constructSeconds": 0.07746338099241257,
+        "totalSeconds": 0.32967253698734567,
+        "iterations": 6,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "busy_week",
+      "seed": 1,
+      "tasks": 85,
+      "slots": 336,
+      "cp": {
+        "placed": 79,
+        "of": 85,
+        "weightedDecision": 20603,
+        "style": 685,
+        "byPriority": {
+          "0": 41,
+          "1": 22,
+          "2": 16
+        },
+        "buildSeconds": 0.05,
+        "solveSeconds": 30.01,
+        "modelSeconds": 30.06,
+        "wallSeconds": 30.062791712000035,
+        "solverStatus": "FEASIBLE",
+        "reportedObjective": 408990838,
+        "reportedStyle": 685,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 80,
+        "of": 85,
+        "weightedDecision": 20620,
+        "style": 730,
+        "byPriority": {
+          "0": 41,
+          "1": 23,
+          "2": 16
+        },
+        "constructSeconds": 0.10277681093430147,
+        "totalSeconds": 0.3395922759955283,
+        "iterations": 3,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "busy_week",
+      "seed": 2,
+      "tasks": 82,
+      "slots": 336,
+      "cp": {
+        "placed": 74,
+        "of": 82,
+        "weightedDecision": 18443,
+        "style": 515,
+        "byPriority": {
+          "0": 41,
+          "1": 18,
+          "2": 15
+        },
+        "buildSeconds": 0.05,
+        "solveSeconds": 30.01,
+        "modelSeconds": 30.06,
+        "wallSeconds": 30.060895022994373,
+        "solverStatus": "FEASIBLE",
+        "reportedObjective": 404842743,
+        "reportedStyle": 515,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 76,
+        "of": 82,
+        "weightedDecision": 18461,
+        "style": 455,
+        "byPriority": {
+          "0": 41,
+          "1": 19,
+          "2": 16
+        },
+        "constructSeconds": 0.09802673800732009,
+        "totalSeconds": 0.2953985450149048,
+        "iterations": 3,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "busy_week",
+      "seed": 3,
+      "tasks": 82,
+      "slots": 336,
+      "cp": {
+        "placed": 71,
+        "of": 82,
+        "weightedDecision": 18424,
+        "style": 750,
+        "byPriority": {
+          "0": 41,
+          "1": 17,
+          "2": 13
+        },
+        "buildSeconds": 0.05,
+        "solveSeconds": 30.01,
+        "modelSeconds": 30.06,
+        "wallSeconds": 30.059736360999523,
+        "solverStatus": "FEASIBLE",
+        "reportedObjective": 340863089,
+        "reportedStyle": 750,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 76,
+        "of": 82,
+        "weightedDecision": 18461,
+        "style": 685,
+        "byPriority": {
+          "0": 41,
+          "1": 19,
+          "2": 16
+        },
+        "constructSeconds": 0.09921036698506214,
+        "totalSeconds": 0.37244915499468334,
+        "iterations": 6,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "bad_weather",
+      "seed": 1,
+      "tasks": 75,
+      "slots": 336,
+      "cp": {
+        "placed": 73,
+        "of": 75,
+        "weightedDecision": 11527,
+        "style": 950,
+        "byPriority": {
+          "0": 41,
+          "1": 22,
+          "2": 10
+        },
+        "buildSeconds": 0.03,
+        "solveSeconds": 30.0,
+        "modelSeconds": 30.04,
+        "wallSeconds": 30.043589042004896,
+        "solverStatus": "FEASIBLE",
+        "reportedObjective": 158623997,
+        "reportedStyle": 950,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 73,
+        "of": 75,
+        "weightedDecision": 11527,
+        "style": 850,
+        "byPriority": {
+          "0": 41,
+          "1": 22,
+          "2": 10
+        },
+        "constructSeconds": 0.08565126502071507,
+        "totalSeconds": 0.28501005098223686,
+        "iterations": 3,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "bad_weather",
+      "seed": 2,
+      "tasks": 73,
+      "slots": 336,
+      "cp": {
+        "placed": 72,
+        "of": 73,
+        "weightedDecision": 10614,
+        "style": 690,
+        "byPriority": {
+          "0": 41,
+          "1": 21,
+          "2": 10
+        },
+        "buildSeconds": 0.04,
+        "solveSeconds": 30.01,
+        "modelSeconds": 30.05,
+        "wallSeconds": 30.05143990999204,
+        "solverStatus": "FEASIBLE",
+        "reportedObjective": 168349344,
+        "reportedStyle": 690,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 71,
+        "of": 73,
+        "weightedDecision": 10603,
+        "style": 620,
+        "byPriority": {
+          "0": 41,
+          "1": 20,
+          "2": 10
+        },
+        "constructSeconds": 0.08135879095061682,
+        "totalSeconds": 0.352297694014851,
+        "iterations": 4,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "bad_weather",
+      "seed": 3,
+      "tasks": 73,
+      "slots": 336,
+      "cp": {
+        "placed": 73,
+        "of": 73,
+        "weightedDecision": 10625,
+        "style": 795,
+        "byPriority": {
+          "0": 41,
+          "1": 22,
+          "2": 10
+        },
+        "buildSeconds": 0.04,
+        "solveSeconds": 30.06,
+        "modelSeconds": 30.1,
+        "wallSeconds": 30.10535601299489,
+        "solverStatus": "FEASIBLE",
+        "reportedObjective": 173942670,
+        "reportedStyle": 795,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 72,
+        "of": 73,
+        "weightedDecision": 10614,
+        "style": 695,
+        "byPriority": {
+          "0": 41,
+          "1": 21,
+          "2": 10
+        },
+        "constructSeconds": 0.08164813698385842,
+        "totalSeconds": 0.2801713130029384,
+        "iterations": 3,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "nice_weather",
+      "seed": 1,
+      "tasks": 75,
+      "slots": 336,
+      "cp": {
+        "placed": 75,
+        "of": 75,
+        "weightedDecision": 11549,
+        "style": 1030,
+        "byPriority": {
+          "0": 41,
+          "1": 24,
+          "2": 10
+        },
+        "buildSeconds": 0.04,
+        "solveSeconds": 30.02,
+        "modelSeconds": 30.07,
+        "wallSeconds": 30.06688956799917,
+        "solverStatus": "FEASIBLE",
+        "reportedObjective": 169667389,
+        "reportedStyle": 1030,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 74,
+        "of": 75,
+        "weightedDecision": 11538,
+        "style": 935,
+        "byPriority": {
+          "0": 41,
+          "1": 23,
+          "2": 10
+        },
+        "constructSeconds": 0.08573909202823415,
+        "totalSeconds": 0.42094263798207976,
+        "iterations": 8,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "nice_weather",
+      "seed": 2,
+      "tasks": 73,
+      "slots": 336,
+      "cp": {
+        "placed": 73,
+        "of": 73,
+        "weightedDecision": 10625,
+        "style": 860,
+        "byPriority": {
+          "0": 41,
+          "1": 22,
+          "2": 10
+        },
+        "buildSeconds": 0.03,
+        "solveSeconds": 30.01,
+        "modelSeconds": 30.04,
+        "wallSeconds": 30.044834494998213,
+        "solverStatus": "FEASIBLE",
+        "reportedObjective": 178405235,
+        "reportedStyle": 860,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 72,
+        "of": 73,
+        "weightedDecision": 10614,
+        "style": 780,
+        "byPriority": {
+          "0": 41,
+          "1": 21,
+          "2": 10
+        },
+        "constructSeconds": 0.08170443106791936,
+        "totalSeconds": 0.5015010930073913,
+        "iterations": 10,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "nice_weather",
+      "seed": 3,
+      "tasks": 73,
+      "slots": 336,
+      "cp": {
+        "placed": 73,
+        "of": 73,
+        "weightedDecision": 10625,
+        "style": 905,
+        "byPriority": {
+          "0": 41,
+          "1": 22,
+          "2": 10
+        },
+        "buildSeconds": 0.04,
+        "solveSeconds": 30.01,
+        "modelSeconds": 30.05,
+        "wallSeconds": 30.053830852004467,
+        "solverStatus": "FEASIBLE",
+        "reportedObjective": 173942780,
+        "reportedStyle": 905,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 72,
+        "of": 73,
+        "weightedDecision": 10614,
+        "style": 835,
+        "byPriority": {
+          "0": 41,
+          "1": 21,
+          "2": 10
+        },
+        "constructSeconds": 0.08372038105153479,
+        "totalSeconds": 0.2896268659969792,
+        "iterations": 3,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "overloaded",
+      "seed": 1,
+      "tasks": 99,
+      "slots": 336,
+      "cp": {
+        "placed": 79,
+        "of": 99,
+        "weightedDecision": 32897,
+        "style": -20,
+        "byPriority": {
+          "0": 37,
+          "1": 20,
+          "2": 22
+        },
+        "buildSeconds": 0.06,
+        "solveSeconds": 30.01,
+        "modelSeconds": 30.07,
+        "wallSeconds": 30.073982803995023,
+        "solverStatus": "FEASIBLE",
+        "reportedObjective": 839564297,
+        "reportedStyle": -20,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 88,
+        "of": 99,
+        "weightedDecision": 36474,
+        "style": 45,
+        "byPriority": {
+          "0": 41,
+          "1": 23,
+          "2": 24
+        },
+        "constructSeconds": 0.1221399600035511,
+        "totalSeconds": 0.41472712098038755,
+        "iterations": 4,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "overloaded",
+      "seed": 2,
+      "tasks": 94,
+      "slots": 336,
+      "cp": {
+        "placed": 75,
+        "of": 94,
+        "weightedDecision": 31144,
+        "style": 115,
+        "byPriority": {
+          "0": 41,
+          "1": 15,
+          "2": 19
+        },
+        "buildSeconds": 0.06,
+        "solveSeconds": 30.01,
+        "modelSeconds": 30.07,
+        "wallSeconds": 30.07347543601645,
+        "solverStatus": "FEASIBLE",
+        "reportedObjective": 834067464,
+        "reportedStyle": 115,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 83,
+        "of": 94,
+        "weightedDecision": 31224,
+        "style": 75,
+        "byPriority": {
+          "0": 41,
+          "1": 18,
+          "2": 24
+        },
+        "constructSeconds": 0.11889775196323171,
+        "totalSeconds": 0.43314237298909575,
+        "iterations": 9,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "overloaded",
+      "seed": 3,
+      "tasks": 95,
+      "slots": 336,
+      "cp": {
+        "placed": 80,
+        "of": 95,
+        "weightedDecision": 31496,
+        "style": 395,
+        "byPriority": {
+          "0": 40,
+          "1": 19,
+          "2": 21
+        },
+        "buildSeconds": 0.06,
+        "solveSeconds": 30.01,
+        "modelSeconds": 30.07,
+        "wallSeconds": 30.073631808976643,
+        "solverStatus": "FEASIBLE",
+        "reportedObjective": 846329366,
+        "reportedStyle": 395,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 86,
+        "of": 95,
+        "weightedDecision": 32324,
+        "style": 450,
+        "byPriority": {
+          "0": 41,
+          "1": 21,
+          "2": 24
+        },
+        "constructSeconds": 0.12105784198502079,
+        "totalSeconds": 0.5315844159922563,
+        "iterations": 9,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "fragmented",
+      "seed": 1,
+      "tasks": 95,
+      "slots": 336,
+      "cp": {
+        "placed": 94,
+        "of": 95,
+        "weightedDecision": 32518,
+        "style": 45,
+        "byPriority": {
+          "0": 41,
+          "1": 23,
+          "2": 30
+        },
+        "buildSeconds": 0.06,
+        "solveSeconds": 30.0,
+        "modelSeconds": 30.07,
+        "wallSeconds": 30.069939770008205,
+        "solverStatus": "FEASIBLE",
+        "reportedObjective": 970369683,
+        "reportedStyle": 45,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 93,
+        "of": 95,
+        "weightedDecision": 32487,
+        "style": -20,
+        "byPriority": {
+          "0": 41,
+          "1": 22,
+          "2": 30
+        },
+        "constructSeconds": 0.14167728598113172,
+        "totalSeconds": 1.3501989819924347,
+        "iterations": 16,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "fragmented",
+      "seed": 2,
+      "tasks": 93,
+      "slots": 336,
+      "cp": {
+        "placed": 92,
+        "of": 93,
+        "weightedDecision": 29914,
+        "style": -250,
+        "byPriority": {
+          "0": 41,
+          "1": 21,
+          "2": 30
+        },
+        "buildSeconds": 0.06,
+        "solveSeconds": 30.01,
+        "modelSeconds": 30.08,
+        "wallSeconds": 30.080520001007244,
+        "solverStatus": "FEASIBLE",
+        "reportedObjective": 1005738344,
+        "reportedStyle": -250,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 90,
+        "of": 93,
+        "weightedDecision": 29852,
+        "style": -350,
+        "byPriority": {
+          "0": 41,
+          "1": 19,
+          "2": 30
+        },
+        "constructSeconds": 0.12862122396472842,
+        "totalSeconds": 0.9263407030084636,
+        "iterations": 13,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "fragmented",
+      "seed": 3,
+      "tasks": 93,
+      "slots": 336,
+      "cp": {
+        "placed": 93,
+        "of": 93,
+        "weightedDecision": 29945,
+        "style": 135,
+        "byPriority": {
+          "0": 41,
+          "1": 22,
+          "2": 30
+        },
+        "buildSeconds": 0.08,
+        "solveSeconds": 30.06,
+        "modelSeconds": 30.14,
+        "wallSeconds": 30.144638620025944,
+        "solverStatus": "FEASIBLE",
+        "reportedObjective": 971745330,
+        "reportedStyle": 135,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 90,
+        "of": 93,
+        "weightedDecision": 29852,
+        "style": 90,
+        "byPriority": {
+          "0": 41,
+          "1": 19,
+          "2": 30
+        },
+        "constructSeconds": 0.13058419708977453,
+        "totalSeconds": 0.6054549109830987,
+        "iterations": 12,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "many_small",
+      "seed": 1,
+      "tasks": 125,
+      "slots": 336,
+      "cp": {
+        "placed": 103,
+        "of": 125,
+        "weightedDecision": 64027,
+        "style": -705,
+        "byPriority": {
+          "0": 41,
+          "1": 24,
+          "2": 38
+        },
+        "buildSeconds": 0.11,
+        "solveSeconds": 30.02,
+        "modelSeconds": 30.13,
+        "wallSeconds": 30.14319506700849,
+        "solverStatus": "FEASIBLE",
+        "reportedObjective": 3756526772,
+        "reportedStyle": -705,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 117,
+        "of": 125,
+        "weightedDecision": 63981,
+        "style": -1230,
+        "byPriority": {
+          "0": 41,
+          "1": 23,
+          "2": 53
+        },
+        "constructSeconds": 0.15475932604749687,
+        "totalSeconds": 0.6987470249878243,
+        "iterations": 6,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "many_small",
+      "seed": 2,
+      "tasks": 123,
+      "slots": 336,
+      "cp": {
+        "placed": 87,
+        "of": 123,
+        "weightedDecision": 58829,
+        "style": -100,
+        "byPriority": {
+          "0": 41,
+          "1": 21,
+          "2": 25
+        },
+        "buildSeconds": 0.1,
+        "solveSeconds": 30.01,
+        "modelSeconds": 30.12,
+        "wallSeconds": 30.122484092018567,
+        "solverStatus": "FEASIBLE",
+        "reportedObjective": 3723345254,
+        "reportedStyle": -100,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 108,
+        "of": 123,
+        "weightedDecision": 58850,
+        "style": -1275,
+        "byPriority": {
+          "0": 41,
+          "1": 21,
+          "2": 46
+        },
+        "constructSeconds": 0.14810125101939775,
+        "totalSeconds": 0.5156796090013813,
+        "iterations": 7,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "many_small",
+      "seed": 3,
+      "tasks": 123,
+      "slots": 336,
+      "cp": {
+        "placed": 112,
+        "of": 123,
+        "weightedDecision": 58914,
+        "style": -1025,
+        "byPriority": {
+          "0": 41,
+          "1": 22,
+          "2": 49
+        },
+        "buildSeconds": 0.11,
+        "solveSeconds": 30.02,
+        "modelSeconds": 30.13,
+        "wallSeconds": 30.135492234985577,
+        "solverStatus": "FEASIBLE",
+        "reportedObjective": 3629748784,
+        "reportedStyle": -1025,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 113,
+        "of": 123,
+        "weightedDecision": 58855,
+        "style": -935,
+        "byPriority": {
+          "0": 41,
+          "1": 21,
+          "2": 51
+        },
+        "constructSeconds": 0.14876725498470478,
+        "totalSeconds": 0.7928681859921198,
+        "iterations": 5,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "huge",
+      "seed": 1,
+      "tasks": 229,
+      "slots": 336,
+      "cp": {
+        "placed": 0,
+        "of": 229,
+        "weightedDecision": 0,
+        "style": 0,
+        "byPriority": {},
+        "buildSeconds": 0.21,
+        "solveSeconds": 30.02,
+        "modelSeconds": 30.24,
+        "wallSeconds": 30.238444392976817,
+        "solverStatus": "UNKNOWN",
+        "reportedObjective": 0,
+        "reportedStyle": 0,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 121,
+        "of": 229,
+        "weightedDecision": 195189,
+        "style": -1105,
+        "byPriority": {
+          "0": 41,
+          "1": 23,
+          "2": 57
+        },
+        "constructSeconds": 0.2653207149996888,
+        "totalSeconds": 0.9881328909832519,
+        "iterations": 6,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "huge",
+      "seed": 2,
+      "tasks": 226,
+      "slots": 336,
+      "cp": {
+        "placed": 102,
+        "of": 226,
+        "weightedDecision": 174567,
+        "style": 275,
+        "byPriority": {
+          "0": 41,
+          "1": 18,
+          "2": 43
+        },
+        "buildSeconds": 0.21,
+        "solveSeconds": 30.02,
+        "modelSeconds": 30.24,
+        "wallSeconds": 30.244648068008246,
+        "solverStatus": "FEASIBLE",
+        "reportedObjective": 19469630262,
+        "reportedStyle": 275,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 117,
+        "of": 226,
+        "weightedDecision": 174582,
+        "style": -1460,
+        "byPriority": {
+          "0": 41,
+          "1": 18,
+          "2": 58
+        },
+        "constructSeconds": 0.25995901189162396,
+        "totalSeconds": 0.6635853970074095,
+        "iterations": 3,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "huge",
+      "seed": 3,
+      "tasks": 226,
+      "slots": 336,
+      "cp": {
+        "placed": 0,
+        "of": 226,
+        "weightedDecision": 0,
+        "style": 0,
+        "byPriority": {},
+        "buildSeconds": 0.22,
+        "solveSeconds": 30.02,
+        "modelSeconds": 30.24,
+        "wallSeconds": 30.24198671299382,
+        "solverStatus": "UNKNOWN",
+        "reportedObjective": 0,
+        "reportedStyle": 0,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 121,
+        "of": 226,
+        "weightedDecision": 174746,
+        "style": -1345,
+        "byPriority": {
+          "0": 41,
+          "1": 19,
+          "2": 61
+        },
+        "constructSeconds": 0.26343255094252527,
+        "totalSeconds": 0.9045701810100581,
+        "iterations": 4,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "mega",
+      "seed": 1,
+      "tasks": 395,
+      "slots": 336,
+      "cp": {
+        "placed": 0,
+        "of": 395,
+        "weightedDecision": 0,
+        "style": 0,
+        "byPriority": {},
+        "buildSeconds": 0.4,
+        "solveSeconds": 30.04,
+        "modelSeconds": 30.44,
+        "wallSeconds": 30.44459931901656,
+        "solverStatus": "UNKNOWN",
+        "reportedObjective": 0,
+        "reportedStyle": 0,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 121,
+        "of": 395,
+        "weightedDecision": 468395,
+        "style": -875,
+        "byPriority": {
+          "0": 41,
+          "1": 24,
+          "2": 56
+        },
+        "constructSeconds": 0.5984298149705864,
+        "totalSeconds": 1.0473712450184394,
+        "iterations": 4,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "mega",
+      "seed": 2,
+      "tasks": 390,
+      "slots": 336,
+      "cp": {
+        "placed": 0,
+        "of": 390,
+        "weightedDecision": 0,
+        "style": 0,
+        "byPriority": {},
+        "buildSeconds": 0.39,
+        "solveSeconds": 30.04,
+        "modelSeconds": 30.43,
+        "wallSeconds": 30.43465506398934,
+        "solverStatus": "UNKNOWN",
+        "reportedObjective": 0,
+        "reportedStyle": 0,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 120,
+        "of": 390,
+        "weightedDecision": 400669,
+        "style": -1545,
+        "byPriority": {
+          "0": 41,
+          "1": 18,
+          "2": 61
+        },
+        "constructSeconds": 0.5893003379751462,
+        "totalSeconds": 0.9870014000043739,
+        "iterations": 2,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    },
+    {
+      "scenario": "mega",
+      "seed": 3,
+      "tasks": 391,
+      "slots": 336,
+      "cp": {
+        "placed": 0,
+        "of": 391,
+        "weightedDecision": 0,
+        "style": 0,
+        "byPriority": {},
+        "buildSeconds": 0.39,
+        "solveSeconds": 30.03,
+        "modelSeconds": 30.42,
+        "wallSeconds": 30.430696126975818,
+        "solverStatus": "UNKNOWN",
+        "reportedObjective": 0,
+        "reportedStyle": 0,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      },
+      "greedy": {
+        "placed": 117,
+        "of": 391,
+        "weightedDecision": 414787,
+        "style": -1280,
+        "byPriority": {
+          "0": 41,
+          "1": 21,
+          "2": 55
+        },
+        "constructSeconds": 0.5909772490267642,
+        "totalSeconds": 1.2506150479894131,
+        "iterations": 5,
+        "restarts": 12,
+        "hitBudget": false,
+        "feasible": true,
+        "noOverlap": true,
+        "eligibilityViolations": 0
+      }
+    }
+  ]
+}
