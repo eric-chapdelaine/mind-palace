@@ -5,6 +5,10 @@ and weather gates are identical), and it optimises the same soft rule semantics 
 (a per-slot window/weather gain, plus per-day spread/daily-budget contributions). Construction is
 priority-ordered; local search relocates blocks for style and can evict strictly-less-important
 tasks to place a higher-priority one.
+
+Splittable tasks arrive pre-expanded into independent 30-minute unit tasks (see
+`instance.expand_splittable`), so the scheduler treats every unit as its own optional interval:
+partial progress is allowed, not all-or-nothing.
 """
 
 from __future__ import annotations
@@ -24,6 +28,15 @@ from schedulerlib.rules import (
 from schedulerlib.timegrid import next_day
 from schedulerlib.weather import slot_weather, weather_is_nice
 
+# Order-by-variant tie-breaks within a priority tier. `duration` is negative so ascending sort
+# means longest-first; each restarted construction permutes which signal dominates.
+_ORDER_VARIANTS = {
+    0: lambda eligible, duration, rank: (eligible, duration, rank),
+    1: lambda eligible, duration, rank: (duration, eligible, rank),
+    2: lambda eligible, duration, rank: (rank, eligible, duration),
+    3: lambda eligible, duration, rank: (eligible, rank, duration),
+}
+
 
 class SoftModel:
     """Incremental view of the soft objective: per-slot gain + per-day group counts."""
@@ -37,7 +50,6 @@ class SoftModel:
 
     def _build(self):
         p = self.p
-        slots = p.slots
         for rule in p.rules:
             kind, weight = rule_strength(rule)
             if kind != "soft":
@@ -47,37 +59,36 @@ class SoftModel:
             value = int(round(weight))
             when = effect.get("when")
             applies = [task for task in p.tasks if rule_applies(rule, task)]
-            if etype == "assignDays":
-                inside = {
-                    s["index"]
-                    for s in slots
-                    if s["weekday"] in set(effect.get("days") or []) and when_matches(when, s)
-                }
-                for task in applies:
-                    gains = self.slot_gain[task["id"]]
-                    for index in inside:
-                        gains[index] += value
-            elif etype in ("preferTimeOfDay", "timeWindow"):
-                inside = window_slot_indices(slots, effect.get("start", "00:00"), effect.get("end", "23:59"), when)
+
+            if etype in ("assignDays", "preferTimeOfDay", "timeWindow"):
+                if etype == "assignDays":
+                    inside = {
+                        slot["index"]
+                        for slot in p.slots
+                        if slot["weekday"] in set(effect.get("days") or []) and when_matches(when, slot)
+                    }
+                else:
+                    inside = window_slot_indices(
+                        p.slots, effect.get("start", "00:00"), effect.get("end", "23:59"), when
+                    )
                 for task in applies:
                     gains = self.slot_gain[task["id"]]
                     for index in inside:
                         gains[index] += value
             elif etype == "weatherGate":
-                for s in slots:
-                    if when_matches(when, s) and weather_is_nice(slot_weather(s, p.weather_hours), effect) is True:
+                for slot in p.slots:
+                    if when_matches(when, slot) and weather_is_nice(slot_weather(slot, p.weather_hours), effect) is True:
                         for task in applies:
-                            self.slot_gain[task["id"]][s["index"]] += value
+                            self.slot_gain[task["id"]][slot["index"]] += value
             elif etype in ("spread", "dailyBudget"):
                 key = (etype, rule["id"])
                 self.counts[key] = [0] * p.day_count
-                days = {d for d in range(p.day_count) if day_matches(when, p.day_weekday[d])}
                 spec = {
                     "kind": etype,
                     "key": key,
                     "value": value,
                     "task_ids": {task["id"] for task in applies},
-                    "days": days,
+                    "days": {d for d in range(p.day_count) if day_matches(when, p.day_weekday[d])},
                 }
                 if etype == "spread":
                     spec["max_slots"] = max(1, int(effect.get("maxPerDayMinutes", 120)) // p.slot_minutes)
@@ -92,45 +103,44 @@ class SoftModel:
         if spec["kind"] == "spread":
             if len(spec["task_ids"]) < 2:
                 return 0
-            total = -spec["value"] * sum(max(0, counts[d] - spec["max_slots"]) for d in spec["days"])
+            value = spec["value"]
+            total = -value * sum(max(0, counts[d] - spec["max_slots"]) for d in spec["days"])
             if spec["min_distinct"]:
                 active = [d for d in range(self.p.day_count) if counts[d] > 0]
-                total += spec["value"] * len(active)
+                total += value * len(active)
                 if spec["avoid_consecutive"]:
-                    total -= spec["value"] * sum(
+                    total -= value * sum(
                         1 for i in range(len(active) - 1)
                         if next_day(self.p.dates[active[i]]) == self.p.dates[active[i + 1]]
                     )
             return total
         if not spec["task_ids"]:
             return 0
+        value = spec["value"]
         total = 0
         for d in spec["days"]:
             if counts[d] > 0:
-                total += spec["value"]
-            total -= spec["value"] * max(0, counts[d] - spec["soft_max"])
+                total += value
+            total -= value * max(0, counts[d] - spec["soft_max"])
         return total
-
-    def slot_gains(self, task_id: int, starts) -> int:
-        gains = self.slot_gain[task_id]
-        return sum(gains[s] for s in starts)
 
     def delta(self, task_id: int, starts, sign: int) -> int:
         """Score change from adding (sign=+1) / removing (sign=-1) a task's units. No mutation."""
-        total = sign * self.slot_gains(task_id, starts)
+        gains = self.slot_gain[task_id]
+        total = sign * sum(gains[start] for start in starts)
         if not self.group_specs:
             return total
-        days = [self.p.day_of[s] for s in starts]
+        days = [self.p.day_of[start] for start in starts]
         for spec in self.group_specs:
             if task_id not in spec["task_ids"]:
                 continue
-            before = self.contribution(spec)
             counts = self.counts[spec["key"]]
-            for d in days:
-                counts[d] += sign
+            before = self.contribution(spec)
+            for day in days:
+                counts[day] += sign
             after = self.contribution(spec)
-            for d in days:
-                counts[d] -= sign
+            for day in days:
+                counts[day] -= sign
             total += after - before
         return total
 
@@ -180,7 +190,7 @@ class GreedyScheduler:
     # ---- state helpers ---------------------------------------------------------------
     def commit(self, task, runs):
         runs = [tuple(run) for run in runs]
-        self.running_style += self.soft.delta(task["id"], [s for s, _size in runs], +1)
+        self.running_style += self.soft.delta(task["id"], [start for start, _size in runs], +1)
         self.placement[task["id"]] = runs
         for start, size in runs:
             self.occupied.update(range(start, start + size))
@@ -188,28 +198,31 @@ class GreedyScheduler:
 
     def uncommit(self, task_id):
         runs = self.placement.pop(task_id)
-        self.running_style += self.soft.delta(task_id, [s for s, _size in runs], -1)
+        self.running_style += self.soft.delta(task_id, [start for start, _size in runs], -1)
         for start, size in runs:
             for slot in range(start, start + size):
                 self.occupied.discard(slot)
         self.soft.apply(task_id, runs, -1)
         return runs
 
+    def _priority_order(self, tasks):
+        """Tasks (or unit tasks) in strict priority order, then longest-first within a tier."""
+        return sorted(tasks, key=lambda task: (-self.p.weights[task["priority"]], -task["durationMinutesRemaining"]))
+
+    def _unscheduled(self):
+        return (task for task in self.p.tasks if task["id"] not in self.placement)
+
     def order_key(self, task):
-        p = self.p
-        eligible = len(p.eligible_by_task.get(task["id"], []))
-        duration = -task["durationMinutesRemaining"]
-        rank = -task["rank"]
-        by_variant = {
-            0: (eligible, duration, rank),
-            1: (duration, eligible, rank),
-            2: (rank, eligible, duration),
-            3: (eligible, rank, duration),
-        }
-        fields = by_variant.get(self.order_variant, by_variant[0])
-        return (-p.weights[task["priority"]], *fields, self.jitter[task["id"]])
+        fields = _ORDER_VARIANTS.get(self.order_variant, _ORDER_VARIANTS[0])(
+            len(self.p.eligible_by_task.get(task["id"], [])),
+            -task["durationMinutesRemaining"],
+            -task["rank"],
+        )
+        return (-self.p.weights[task["priority"]], *fields, self.jitter[task["id"]])
 
     def _dep_bounds(self, task):
+        """Earliest start (max prerequisite end) and optional latest start, or None if a dep is
+        unplaced. `withinAfter` caps how late a dependent may start after its prerequisite ends."""
         lower = 0
         upper = None
         gap = self.within_after.get(task["id"])
@@ -217,86 +230,57 @@ class GreedyScheduler:
             runs = self.placement.get(dep)
             if not runs:
                 return None
-            max_end = max(s + size for s, size in runs)
-            min_end = min(s + size for s, size in runs)
-            lower = max(lower, max_end)
+            lower = max(lower, max(start + size for start, size in runs))
             if gap is not None:
-                bound = min_end + gap
+                bound = min(start + size for start, size in runs) + gap
                 upper = bound if upper is None else min(upper, bound)
         return lower, upper
 
-    def placement_score(self, task_id, runs) -> int:
-        starts = [s for s, _size in runs]
-        return self.soft.delta(task_id, starts, +1)
-
     def best_placement(self, task):
+        # `Problem` presents splittable tasks as independent 30-minute unit tasks
+        # (`instance.expand_splittable`), so every task here is one optional interval of
+        # `requirement` slots. There is no splittable special case: units are just tasks.
         p = self.p
         requirement = p.required_by_task[task["id"]]
         bounds = self._dep_bounds(task)
         if bounds is None:
             return None
         lower, upper = bounds
-        eligible = p.eligible_by_task.get(task["id"], [])
-        gains = self.soft.slot_gain[task["id"]]
-        occupied = self.occupied
-        if task.get("splittable", False):
-            candidates = [
-                s for s in eligible
-                if s >= lower and (upper is None or s <= upper) and s not in occupied
-            ]
-            if len(candidates) < requirement:
-                return None
-            candidates.sort(key=lambda s: (-gains[s], s))
-            chosen = sorted(candidates[:requirement])
-            return [(s, 1) for s in chosen]
-        best = None
-        best_score = None
         eligible_set = self.eligible_set[task["id"]]
-        for start in eligible:
-            if start < lower:
-                continue
-            if upper is not None and start > upper:
+        best_start = None
+        best_score = None
+        for start in p.eligible_by_task.get(task["id"], []):
+            if start < lower or (upper is not None and start > upper):
                 continue
             end = start + requirement
             if end > p.slot_count:
                 break
-            blocked = False
-            for slot in range(start, end):
-                if slot not in eligible_set or slot in occupied:
-                    blocked = True
-                    break
-            if blocked:
+            if any(slot not in eligible_set or slot in self.occupied for slot in range(start, end)):
                 continue
-            score = sum(gains[start:end])
-            score += self.soft.delta(task["id"], range(start, end), +1)
+            score = self.soft.delta(task["id"], range(start, end), +1)
             if self.explore:
                 score += self.rng.random() * self.explore
-            if best_score is None or score > best_score or (score == best_score and start < best[0]):
+            if best_score is None or score > best_score or (score == best_score and start < best_start):
                 best_score = score
-                best = [start]
-        if best is None:
-            return None
-        return [(best[0], requirement)]
+                best_start = start
+        return [(best_start, requirement)] if best_start is not None else None
 
     def feasible(self) -> bool:
         for task in self.p.tasks:
-            deps = self.deps.get(task["id"], [])
             placed = self.placement.get(task["id"])
             if placed is None:
-                # An unplaced task is fine unless a placed task depends on it? deps point from
-                # task to prerequisite, so only placed tasks need their deps placed.
+                # Only placed tasks need their prerequisites placed.
                 continue
-            minimal_placed = all(self.placement.get(dep) for dep in deps)
-            if not minimal_placed:
+            deps = self.deps.get(task["id"], [])
+            if not all(self.placement.get(dep) for dep in deps):
                 return False
-            starts = [s for s, _size in placed]
-            min_start = min(starts)
-            max_start = max(starts)
+            min_start = min(start for start, _size in placed)
+            max_start = max(start for start, _size in placed)
             gap = self.within_after.get(task["id"])
             for dep in deps:
                 dep_runs = self.placement[dep]
-                dep_max_end = max(s + size for s, size in dep_runs)
-                dep_min_end = min(s + size for s, size in dep_runs)
+                dep_max_end = max(start + size for start, size in dep_runs)
+                dep_min_end = min(start + size for start, size in dep_runs)
                 if min_start < dep_max_end:
                     return False
                 if gap is not None and max_start > dep_min_end + gap:
@@ -308,32 +292,26 @@ class GreedyScheduler:
         decided = set()
         remaining = set(self.task_ids)
         while remaining:
-            ready = [tid for tid in remaining if all(dep in decided for dep in self.deps.get(tid, []))]
-            if not ready:
-                ready = list(remaining)
-            tid = min(ready, key=lambda value: self.order_key(self.task_by_id[value]))
-            task = self.task_by_id[tid]
+            ready = [
+                tid for tid in remaining
+                if all(dep in decided for dep in self.deps.get(tid, []))
+            ] or list(remaining)
+            task = self.task_by_id[min(ready, key=lambda tid: self.order_key(self.task_by_id[tid]))]
             runs = self.best_placement(task)
             if runs:
                 self.commit(task, runs)
-            decided.add(tid)
-            remaining.discard(tid)
+            decided.add(task["id"])
+            remaining.discard(task["id"])
 
     # ---- local search -----------------------------------------------------------------
     def _relocate(self) -> bool:
-        order = sorted(
-            (self.task_by_id[tid] for tid in self.placement),
-            key=lambda task: (-self.p.weights[task["priority"]], -task["durationMinutesRemaining"]),
-        )
         changed = False
-        for task in order:
-            if task["id"] not in self.placement:
-                continue
+        for task in self._priority_order(self.task_by_id[tid] for tid in self.placement):
             current = self.uncommit(task["id"])
-            current_score = self.placement_score(task["id"], current)
+            current_score = self.soft.delta(task["id"], [start for start, _size in current], +1)
             candidate = self.best_placement(task)
             if candidate is not None:
-                candidate_score = self.placement_score(task["id"], candidate)
+                candidate_score = self.soft.delta(task["id"], [start for start, _size in candidate], +1)
                 if candidate_score > current_score or (candidate_score == current_score and candidate < current):
                     self.commit(task, candidate)
                     if self.feasible():
@@ -344,12 +322,8 @@ class GreedyScheduler:
         return changed
 
     def _insert(self) -> bool:
-        unscheduled = sorted(
-            (task for task in self.p.tasks if task["id"] not in self.placement),
-            key=lambda task: (-self.p.weights[task["priority"]], -task["durationMinutesRemaining"]),
-        )
         changed = False
-        for task in unscheduled:
+        for task in self._priority_order(self._unscheduled()):
             candidate = self.best_placement(task)
             if candidate is not None:
                 self.commit(task, candidate)
@@ -369,13 +343,12 @@ class GreedyScheduler:
         target_priorities = {task["priority"] for task in unscheduled}
         order = sorted(self.placement, key=lambda tid: self.task_by_id[tid]["durationMinutesRemaining"])
         explored = 0
-        changed = False
         for index, a_id in enumerate(order):
             a = self.task_by_id[a_id]
             for b_id in order[index + 1:]:
                 explored += 1
                 if explored > pair_budget:
-                    return changed
+                    return False
                 b = self.task_by_id[b_id]
                 if a["priority"] not in target_priorities and b["priority"] not in target_priorities:
                     continue
@@ -393,20 +366,14 @@ class GreedyScheduler:
                     self.uncommit(a_id)
                 self.commit(a, a_runs)
                 self.commit(b, b_runs)
-        return changed
+        return False
 
     def _evict_insert(self) -> bool:
-        unscheduled = sorted(
-            (task for task in self.p.tasks if task["id"] not in self.placement),
-            key=lambda task: (-self.p.weights[task["priority"]], -task["durationMinutesRemaining"]),
-        )
         changed = False
-        for task in unscheduled:
-            if task["id"] in self.placement:
-                continue
+        for task in self._priority_order(self._unscheduled()):
             weight = self.p.weights[task["priority"]]
             evictable = [
-                tid for tid in list(self.placement)
+                tid for tid in self.placement
                 if self.p.weights[self.task_by_id[tid]["priority"]] < weight
             ]
             if not evictable:
@@ -419,10 +386,9 @@ class GreedyScheduler:
                 continue
             self.commit(task, candidate)
             for tid, runs in saved:
-                other = self.task_by_id[tid]
-                reinsert = self.best_placement(other)
+                reinsert = self.best_placement(self.task_by_id[tid])
                 if reinsert is not None:
-                    self.commit(other, reinsert)
+                    self.commit(self.task_by_id[tid], reinsert)
             changed = True
         return changed
 
@@ -440,21 +406,6 @@ class GreedyScheduler:
                 break
         return iterations
 
-    # ---- entry point -----------------------------------------------------------------
-    def run(self, deadline: float, local_search: bool = True):
-        started = time.perf_counter()
-        self.construct()
-        construct_time = time.perf_counter() - started
-        iterations = 0
-        if local_search:
-            iterations = self.local_search(deadline)
-        return {
-            "placement": self.placement,
-            "constructSeconds": construct_time,
-            "totalSeconds": time.perf_counter() - started,
-            "iterations": iterations,
-        }
-
 
 def solve_greedy(problem: Problem, time_budget_seconds: float = 5.0, restarts: int = 12, max_iters: int = 25):
     """Multi-restart greedy construction, then local search on the best packing.
@@ -470,15 +421,15 @@ def solve_greedy(problem: Problem, time_budget_seconds: float = 5.0, restarts: i
 
     best_scheduler = None
     best_score = None
-    completed_restarts = 0
     construct_seconds = 0.0
+    completed_restarts = 0
     for restart in range(restarts):
         if restart > 0 and time.perf_counter() >= construct_deadline:
             break
         scheduler = GreedyScheduler(problem, order_variant=restart % 4, jitter_seed=restart + 1, max_iters=max_iters)
-        started_construct = time.perf_counter()
+        construct_started = time.perf_counter()
         scheduler.construct()
-        construct_seconds += time.perf_counter() - started_construct
+        construct_seconds += time.perf_counter() - construct_started
         score = (problem.decision_score(scheduler.placement), problem.style(scheduler.placement))
         if best_score is None or score > best_score:
             best_score = score
