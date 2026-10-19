@@ -26,7 +26,7 @@ import importlib  # noqa: E402
 S = importlib.import_module("schedulerlib.solve")
 
 from greedy import solve_greedy  # noqa: E402
-from instance import Problem, placement_from_assignments  # noqa: E402
+from instance import Problem, expand_splittable, placement_from_assignments  # noqa: E402
 from usecase import build_payload  # noqa: E402
 
 Case = {
@@ -61,6 +61,7 @@ def run(payload, presolve, workers, budget):
     cp_model.CpSolver = Configured
     S.cp_model.CpSolver = Configured
     try:
+        payload = expand_splittable(payload)
         payload = {**payload, "config": {**payload.get("config", {}), "timeBudgetSeconds": budget}}
         return S.solve(payload)
     finally:

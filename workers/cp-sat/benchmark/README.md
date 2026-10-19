@@ -13,7 +13,7 @@ the rule/when matchers) and therefore cannot drift from the real model.
 | File | Purpose |
 |---|---|
 | `usecase.py` | Seeded demo-data generator for the "make the day decisive" use case (sleep, wake+outside, workouts, meals, grocery, outings, work backlog, weather). |
-| `instance.py` | Parses a payload into a `Problem`: slots, eligibility, required chunks, the soft objective scorecard, placement validation, and a per-rule style breakdown. |
+| `instance.py` | Parses a payload into a `Problem`: slots, eligibility, required chunks, the soft objective scorecard, placement validation, and a per-rule style breakdown. Also expands splittable tasks into independent unit tasks (`expand_splittable`). |
 | `greedy.py` | Greedy construction + local search. Optimises the same objective (priority-weighted decision, then soft style). Multi-restart, relocate, swap (2-opt), and ejection-insert neighbourhoods. |
 | `compare.py` | Runs both on every scenario/seed; writes `results.json`; prints tables. |
 | `scaling.py` | Sweeps task count to find where CP-SAT degrades; writes `scaling.json`. |
@@ -46,6 +46,12 @@ uv run --project workers/cp-sat python workers/cp-sat/benchmark/diagnose.py --sc
 * **Same objective.** Scores come from the worker's own `decision_weights` and `soft_totals`, so
   the "style" number is exactly what CP-SAT reports. Decision strictly dominates style by
   construction, so placements are compared lexicographically `(weightedDecision, style)`.
+* **Same model, including splittable tasks.** `instance.expand_splittable` replaces every
+  splittable task with `ceil(minutes / slot)` independent 30-minute unit tasks (same tags,
+  priority, rank and mapped dependencies), and is applied to *both* schedulers. So a splittable
+  task is scheduled as k independent tasks and partial progress is allowed — it is no longer
+  CP-SAT's all-or-nothing `scheduled` boolean. This is a deliberate deviation from the production
+  worker's semantics; `fragmented` opts out with `work_splittable=False`.
 * **Greedy gets a real budget.** 10s and 12 restarts; it converges in 0.1–1.4s, so it is never
   artificially starved.
 

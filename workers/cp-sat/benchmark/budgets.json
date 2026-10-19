@@ -1,92 +1,92 @@
 [
   {
     "case": "typical",
-    "tasks": 73,
+    "tasks": 133,
     "budget": 30,
     "status": "FEASIBLE",
-    "placed": 73,
-    "of": 73,
-    "weightedDecision": 9449,
-    "style": 995,
+    "placed": 133,
+    "of": 133,
+    "weightedDecision": 32129,
+    "style": 990,
     "byPriority": {
       "0": 41,
-      "1": 24,
+      "1": 84,
       "2": 8
     }
   },
   {
     "case": "typical",
-    "tasks": 73,
+    "tasks": 133,
     "budget": 120,
     "status": "OPTIMAL",
-    "placed": 73,
-    "of": 73,
-    "weightedDecision": 9449,
+    "placed": 133,
+    "of": 133,
+    "weightedDecision": 32129,
     "style": 995,
     "byPriority": {
       "0": 41,
-      "1": 24,
+      "1": 84,
       "2": 8
     }
   },
   {
     "case": "s128",
-    "tasks": 235,
+    "tasks": 411,
     "budget": 30,
     "status": "FEASIBLE",
-    "placed": 82,
-    "of": 235,
-    "weightedDecision": 157710,
-    "style": -290,
+    "placed": 213,
+    "of": 411,
+    "weightedDecision": 1024391,
+    "style": 305,
     "byPriority": {
-      "0": 34,
-      "1": 15,
-      "2": 33
+      "0": 41,
+      "1": 84,
+      "2": 88
     }
   },
   {
     "case": "s128",
-    "tasks": 235,
+    "tasks": 411,
     "budget": 60,
     "status": "FEASIBLE",
-    "placed": 105,
-    "of": 235,
-    "weightedDecision": 163135,
-    "style": -95,
+    "placed": 213,
+    "of": 411,
+    "weightedDecision": 1024391,
+    "style": 265,
     "byPriority": {
-      "0": 35,
-      "1": 20,
-      "2": 50
+      "0": 41,
+      "1": 84,
+      "2": 88
     }
   },
   {
     "case": "s128",
-    "tasks": 235,
+    "tasks": 411,
     "budget": 120,
     "status": "FEASIBLE",
-    "placed": 106,
-    "of": 235,
-    "weightedDecision": 163136,
-    "style": -135,
+    "placed": 213,
+    "of": 411,
+    "weightedDecision": 1024391,
+    "style": 395,
     "byPriority": {
-      "0": 35,
-      "1": 20,
-      "2": 51
+      "0": 41,
+      "1": 84,
+      "2": 88
     }
   },
   {
     "case": "s128",
-    "tasks": 235,
+    "tasks": 411,
     "budget": 300,
     "status": "FEASIBLE",
-    "placed": 106,
-    "of": 235,
-    "weightedDecision": 163136,
-    "style": -40,
+    "placed": 213,
+    "of": 411,
+    "weightedDecision": 1024391,
+    "style": 395,
     "byPriority": {
-      "0": 35,
-      "1": 20,
-      "2": 51
+      "0": 41,
+      "1": 84,
+      "2": 88
     }
   }
 ]

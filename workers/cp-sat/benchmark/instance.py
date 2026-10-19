@@ -30,9 +30,61 @@ from schedulerlib.timegrid import build_slots  # noqa: E402
 from schedulerlib.weather import slot_weather, weather_by_hour, weather_is_nice  # noqa: E402
 
 
+def expand_splittable(payload: dict) -> dict:
+    """Model each splittable task as `ceil(minutes / slot)` independent unit tasks.
+
+    Production models a splittable task as a single all-or-nothing `scheduled` boolean spanning
+    several 1-slot intervals. Here we deliberately relax that: every 30-minute unit becomes its
+    own task that inherits the parent's tags, priority, rank and dependencies, so units are
+    scheduled — and may be left unplaced — independently ("k independent tasks", not
+    all-or-nothing). `Problem.from_payload` and the CP-SAT runners both call this, so both
+    schedulers are scored against the same model. Idempotent (unit tasks are never splittable).
+    """
+    config = {**DEFAULT_CONFIG, **(payload.get("config") or {})}
+    slot_minutes = int(config["slotMinutes"])
+    tasks = list(payload.get("tasks") or [])
+
+    units: dict = {}
+    for task in tasks:
+        minutes = int(task.get("durationMinutesRemaining") or 0)
+        required = math.ceil(minutes / slot_minutes) if minutes > 0 else 0
+        if task.get("splittable") and required > 1:
+            units[task["id"]] = [f"{task['id']}::u{index + 1}" for index in range(required)]
+        else:
+            units[task["id"]] = [task["id"]]
+
+    def mapped_deps(task) -> list:
+        deps = []
+        for dependency in task.get("dependsOnTaskIds") or []:
+            for unit in units.get(dependency, [dependency]):
+                if unit not in deps:
+                    deps.append(unit)
+        return deps
+
+    expanded = []
+    for task in tasks:
+        unit_ids = units[task["id"]]
+        if len(unit_ids) == 1 and unit_ids[0] == task["id"]:
+            expanded.append({**task, "splittable": False, "dependsOnTaskIds": mapped_deps(task)})
+            continue
+        for index, unit_id in enumerate(unit_ids):
+            expanded.append({
+                **task,
+                "id": unit_id,
+                "title": f"{task.get('title', task['id'])} ({index + 1}/{len(unit_ids)})",
+                "durationMinutesRemaining": slot_minutes,
+                "splittable": False,
+                "dependsOnTaskIds": mapped_deps(task),
+            })
+    return {**payload, "tasks": expanded}
+
+
 @dataclass
 class Problem:
     """A parsed scheduling payload, mirroring what `solve.py` builds before the model."""
+
+    # `from_payload` expands splittable tasks (see `expand_splittable`), so every task seen here
+    # is a non-splittable unit that can be left unplaced independently.
 
     payload: dict
     config: dict
@@ -54,6 +106,7 @@ class Problem:
     # ---- construction ----------------------------------------------------------------
     @classmethod
     def from_payload(cls, payload: dict) -> "Problem":
+        payload = expand_splittable(payload)
         config = {**DEFAULT_CONFIG, **(payload.get("config") or {})}
         tz_name = config["timeZone"]
         slot_minutes = int(config["slotMinutes"])

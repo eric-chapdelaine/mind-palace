@@ -23,6 +23,7 @@ from instance import (
     Problem,
     check_eligibility,
     check_no_overlap,
+    expand_splittable,
     placement_from_assignments,
 )
 from usecase import SCENARIOS, build_payload
@@ -35,7 +36,7 @@ TIMING_RE = re.compile(
 
 
 def run_cp_sat(payload: dict, budget_seconds: float):
-    payload = dict(payload)
+    payload = dict(expand_splittable(payload))
     payload["config"] = {
         **(payload.get("config") or {}),
         "timeBudgetSeconds": budget_seconds,

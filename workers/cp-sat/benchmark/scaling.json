@@ -3,408 +3,408 @@
   "rows": [
     {
       "label": "s04",
-      "tasks": 71,
+      "tasks": 129,
       "cp": {
-        "placed": 71,
-        "of": 71,
-        "weightedDecision": 5669,
+        "placed": 129,
+        "of": 129,
+        "weightedDecision": 17849,
         "style": 1000,
         "byPriority": {
           "0": 41,
-          "1": 26,
+          "1": 84,
           "2": 4
         },
-        "buildSeconds": 0.03,
-        "solveSeconds": 2.12,
-        "modelSeconds": 2.16,
-        "wallSeconds": 2.1574982250167523,
+        "buildSeconds": 0.04,
+        "solveSeconds": 1.31,
+        "modelSeconds": 1.35,
+        "wallSeconds": 1.3543435460305773,
         "solverStatus": "OPTIMAL"
       },
       "greedy": {
-        "placed": 70,
-        "of": 71,
-        "weightedDecision": 5664,
-        "style": 1000,
+        "placed": 127,
+        "of": 129,
+        "weightedDecision": 17839,
+        "style": 975,
         "byPriority": {
           "0": 41,
-          "1": 25,
+          "1": 82,
           "2": 4
         },
-        "totalSeconds": 0.26068847900023684,
+        "totalSeconds": 0.3606592160067521,
         "restarts": 12,
         "hitBudget": false
       }
     },
     {
       "label": "s08",
-      "tasks": 75,
+      "tasks": 133,
       "cp": {
-        "placed": 75,
-        "of": 75,
-        "weightedDecision": 10205,
-        "style": 950,
+        "placed": 133,
+        "of": 133,
+        "weightedDecision": 32129,
+        "style": 960,
         "byPriority": {
           "0": 41,
-          "1": 26,
+          "1": 84,
           "2": 8
         },
-        "buildSeconds": 0.04,
+        "buildSeconds": 0.05,
         "solveSeconds": 30.01,
-        "modelSeconds": 30.05,
-        "wallSeconds": 30.049050973000703,
+        "modelSeconds": 30.07,
+        "wallSeconds": 30.069348705990706,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
-        "placed": 74,
-        "of": 75,
-        "weightedDecision": 10196,
-        "style": 925,
+        "placed": 132,
+        "of": 133,
+        "weightedDecision": 32120,
+        "style": 825,
         "byPriority": {
           "0": 41,
-          "1": 25,
+          "1": 83,
           "2": 8
         },
-        "totalSeconds": 0.29343828800483607,
+        "totalSeconds": 0.41496865201042965,
         "restarts": 12,
         "hitBudget": false
       }
     },
     {
       "label": "s12",
-      "tasks": 79,
+      "tasks": 137,
       "cp": {
-        "placed": 79,
-        "of": 79,
-        "weightedDecision": 14741,
-        "style": 825,
+        "placed": 137,
+        "of": 137,
+        "weightedDecision": 46409,
+        "style": 830,
         "byPriority": {
           "0": 41,
-          "1": 26,
+          "1": 84,
           "2": 12
         },
-        "buildSeconds": 0.04,
+        "buildSeconds": 0.05,
         "solveSeconds": 30.01,
-        "modelSeconds": 30.05,
-        "wallSeconds": 30.049328981986037,
+        "modelSeconds": 30.06,
+        "wallSeconds": 30.06636553100543,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
-        "placed": 78,
-        "of": 79,
-        "weightedDecision": 14728,
-        "style": 805,
+        "placed": 134,
+        "of": 137,
+        "weightedDecision": 46370,
+        "style": 675,
         "byPriority": {
           "0": 41,
-          "1": 25,
+          "1": 81,
           "2": 12
         },
-        "totalSeconds": 0.47875447999103926,
+        "totalSeconds": 0.38610323204193264,
         "restarts": 12,
         "hitBudget": false
       }
     },
     {
       "label": "s16",
-      "tasks": 83,
+      "tasks": 141,
       "cp": {
-        "placed": 83,
-        "of": 83,
-        "weightedDecision": 19277,
-        "style": 735,
+        "placed": 140,
+        "of": 141,
+        "weightedDecision": 60672,
+        "style": 660,
         "byPriority": {
           "0": 41,
-          "1": 26,
+          "1": 83,
           "2": 16
         },
-        "buildSeconds": 0.05,
+        "buildSeconds": 0.07,
         "solveSeconds": 30.01,
-        "modelSeconds": 30.06,
-        "wallSeconds": 30.06293350699707,
+        "modelSeconds": 30.09,
+        "wallSeconds": 30.091381617996376,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
-        "placed": 82,
-        "of": 83,
-        "weightedDecision": 19260,
-        "style": 650,
+        "placed": 137,
+        "of": 141,
+        "weightedDecision": 60621,
+        "style": 555,
         "byPriority": {
           "0": 41,
-          "1": 25,
+          "1": 80,
           "2": 16
         },
-        "totalSeconds": 0.34441612800583243,
+        "totalSeconds": 0.44285500497790053,
         "restarts": 12,
         "hitBudget": false
       }
     },
     {
       "label": "s24",
-      "tasks": 91,
+      "tasks": 149,
       "cp": {
-        "placed": 91,
-        "of": 91,
-        "weightedDecision": 28349,
-        "style": 360,
+        "placed": 149,
+        "of": 149,
+        "weightedDecision": 89249,
+        "style": 355,
         "byPriority": {
           "0": 41,
-          "1": 26,
+          "1": 84,
           "2": 24
         },
-        "buildSeconds": 0.06,
+        "buildSeconds": 0.07,
         "solveSeconds": 30.01,
-        "modelSeconds": 30.07,
-        "wallSeconds": 30.073862357996404,
+        "modelSeconds": 30.09,
+        "wallSeconds": 30.089167386002373,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
-        "placed": 90,
-        "of": 91,
-        "weightedDecision": 28324,
-        "style": 330,
+        "placed": 147,
+        "of": 149,
+        "weightedDecision": 89199,
+        "style": 340,
         "byPriority": {
           "0": 41,
-          "1": 25,
+          "1": 82,
           "2": 24
         },
-        "totalSeconds": 0.3847577710112091,
+        "totalSeconds": 0.42427851300453767,
         "restarts": 12,
         "hitBudget": false
       }
     },
     {
       "label": "s32",
-      "tasks": 99,
+      "tasks": 157,
       "cp": {
-        "placed": 99,
-        "of": 99,
-        "weightedDecision": 37421,
-        "style": 70,
+        "placed": 157,
+        "of": 157,
+        "weightedDecision": 117809,
+        "style": 55,
         "byPriority": {
           "0": 41,
-          "1": 26,
+          "1": 84,
           "2": 32
         },
-        "buildSeconds": 0.07,
-        "solveSeconds": 30.35,
-        "modelSeconds": 30.43,
-        "wallSeconds": 30.431821416015737,
+        "buildSeconds": 0.09,
+        "solveSeconds": 29.98,
+        "modelSeconds": 30.08,
+        "wallSeconds": 30.07926396804396,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
-        "placed": 98,
-        "of": 99,
-        "weightedDecision": 37388,
-        "style": -35,
+        "placed": 153,
+        "of": 157,
+        "weightedDecision": 117677,
+        "style": -105,
         "byPriority": {
           "0": 41,
-          "1": 25,
+          "1": 80,
           "2": 32
         },
-        "totalSeconds": 0.3089600800012704,
+        "totalSeconds": 0.38593258295441046,
         "restarts": 12,
         "hitBudget": false
       }
     },
     {
       "label": "s48",
-      "tasks": 123,
+      "tasks": 211,
       "cp": {
-        "placed": 108,
-        "of": 123,
-        "weightedDecision": 64622,
-        "style": -565,
+        "placed": 197,
+        "of": 211,
+        "weightedDecision": 310575,
+        "style": 40,
         "byPriority": {
           "0": 41,
-          "1": 26,
-          "2": 41
+          "1": 84,
+          "2": 72
         },
-        "buildSeconds": 0.1,
+        "buildSeconds": 0.11,
         "solveSeconds": 30.01,
-        "modelSeconds": 30.12,
-        "wallSeconds": 30.1194320069917,
+        "modelSeconds": 30.14,
+        "wallSeconds": 30.138251372030936,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
-        "placed": 114,
-        "of": 123,
-        "weightedDecision": 64572,
-        "style": -800,
+        "placed": 175,
+        "of": 211,
+        "weightedDecision": 310295,
+        "style": -890,
         "byPriority": {
           "0": 41,
-          "1": 25,
-          "2": 48
+          "1": 81,
+          "2": 53
         },
-        "totalSeconds": 0.7860804410011042,
+        "totalSeconds": 0.5348923980491236,
         "restarts": 12,
         "hitBudget": false
       }
     },
     {
       "label": "s64",
-      "tasks": 147,
+      "tasks": 257,
       "cp": {
-        "placed": 50,
-        "of": 147,
-        "weightedDecision": 30068,
-        "style": -300,
+        "placed": 213,
+        "of": 257,
+        "weightedDecision": 474765,
+        "style": 620,
         "byPriority": {
-          "0": 13,
-          "1": 20,
-          "2": 17
+          "0": 41,
+          "1": 84,
+          "2": 88
         },
-        "buildSeconds": 0.13,
-        "solveSeconds": 30.02,
-        "modelSeconds": 30.15,
-        "wallSeconds": 30.148437267984264,
+        "buildSeconds": 0.14,
+        "solveSeconds": 30.04,
+        "modelSeconds": 30.19,
+        "wallSeconds": 30.197345026012044,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
-        "placed": 119,
-        "of": 147,
-        "weightedDecision": 91745,
-        "style": -1125,
+        "placed": 176,
+        "of": 257,
+        "weightedDecision": 474068,
+        "style": -1225,
         "byPriority": {
           "0": 41,
-          "1": 25,
-          "2": 53
+          "1": 79,
+          "2": 56
         },
-        "totalSeconds": 0.7527187410159968,
+        "totalSeconds": 0.6199348890222609,
         "restarts": 12,
         "hitBudget": false
       }
     },
     {
       "label": "s96",
-      "tasks": 187,
+      "tasks": 313,
       "cp": {
-        "placed": 103,
-        "of": 187,
-        "weightedDecision": 137129,
-        "style": 520,
+        "placed": 213,
+        "of": 313,
+        "weightedDecision": 674629,
+        "style": 915,
         "byPriority": {
           "0": 41,
-          "1": 26,
-          "2": 36
+          "1": 84,
+          "2": 88
         },
-        "buildSeconds": 0.17,
-        "solveSeconds": 30.03,
-        "modelSeconds": 30.2,
-        "wallSeconds": 30.207602295005927,
+        "buildSeconds": 0.19,
+        "solveSeconds": 30.02,
+        "modelSeconds": 30.22,
+        "wallSeconds": 30.226872230996378,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
-        "placed": 123,
-        "of": 187,
-        "weightedDecision": 137029,
-        "style": -1030,
+        "placed": 172,
+        "of": 313,
+        "weightedDecision": 673836,
+        "style": -935,
         "byPriority": {
           "0": 41,
-          "1": 25,
-          "2": 57
+          "1": 80,
+          "2": 51
         },
-        "totalSeconds": 0.5966727540071588,
+        "totalSeconds": 0.6631787480437197,
         "restarts": 12,
         "hitBudget": false
       }
     },
     {
       "label": "s128",
-      "tasks": 235,
+      "tasks": 411,
       "cp": {
-        "placed": 82,
-        "of": 235,
-        "weightedDecision": 157710,
-        "style": -290,
+        "placed": 213,
+        "of": 411,
+        "weightedDecision": 1024391,
+        "style": 305,
         "byPriority": {
-          "0": 34,
-          "1": 15,
-          "2": 33
+          "0": 41,
+          "1": 84,
+          "2": 88
         },
-        "buildSeconds": 0.22,
-        "solveSeconds": 30.03,
-        "modelSeconds": 30.25,
-        "wallSeconds": 30.25665091400151,
+        "buildSeconds": 0.25,
+        "solveSeconds": 30.02,
+        "modelSeconds": 30.28,
+        "wallSeconds": 30.286847259034403,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
-        "placed": 123,
-        "of": 235,
-        "weightedDecision": 191365,
-        "style": -1050,
+        "placed": 175,
+        "of": 411,
+        "weightedDecision": 1024067,
+        "style": -915,
         "byPriority": {
           "0": 41,
-          "1": 25,
-          "2": 57
+          "1": 83,
+          "2": 51
         },
-        "totalSeconds": 0.5698968330107164,
+        "totalSeconds": 0.9983824359951541,
         "restarts": 12,
         "hitBudget": false
       }
     },
     {
       "label": "s192",
-      "tasks": 319,
+      "tasks": 553,
       "cp": {
-        "placed": 147,
-        "of": 319,
-        "weightedDecision": 286225,
-        "style": -1155,
+        "placed": 213,
+        "of": 553,
+        "weightedDecision": 1531189,
+        "style": 710,
         "byPriority": {
           "0": 41,
-          "1": 24,
-          "2": 82
+          "1": 84,
+          "2": 88
         },
-        "buildSeconds": 0.33,
-        "solveSeconds": 30.04,
-        "modelSeconds": 30.38,
-        "wallSeconds": 30.384482346009463,
+        "buildSeconds": 0.35,
+        "solveSeconds": 30.03,
+        "modelSeconds": 30.4,
+        "wallSeconds": 30.40140579396393,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
-        "placed": 125,
-        "of": 319,
-        "weightedDecision": 286455,
-        "style": -1285,
+        "placed": 176,
+        "of": 553,
+        "weightedDecision": 1529440,
+        "style": -1155,
         "byPriority": {
           "0": 41,
-          "1": 25,
-          "2": 59
+          "1": 80,
+          "2": 55
         },
-        "totalSeconds": 0.9036295459954999,
+        "totalSeconds": 1.55234664096497,
         "restarts": 12,
         "hitBudget": false
       }
     },
     {
       "label": "s256",
-      "tasks": 403,
+      "tasks": 699,
       "cp": {
-        "placed": 130,
-        "of": 403,
-        "weightedDecision": 345156,
-        "style": -555,
+        "placed": 214,
+        "of": 699,
+        "weightedDecision": 2051690,
+        "style": 175,
         "byPriority": {
-          "0": 37,
-          "1": 25,
-          "2": 68
+          "0": 41,
+          "1": 83,
+          "2": 90
         },
-        "buildSeconds": 0.42,
-        "solveSeconds": 30.05,
-        "modelSeconds": 30.47,
-        "wallSeconds": 30.478665030997945,
+        "buildSeconds": 0.48,
+        "solveSeconds": 30.04,
+        "modelSeconds": 30.53,
+        "wallSeconds": 30.53937762597343,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
-        "placed": 123,
-        "of": 403,
-        "weightedDecision": 381541,
-        "style": -1035,
+        "placed": 174,
+        "of": 699,
+        "weightedDecision": 2050502,
+        "style": -1005,
         "byPriority": {
           "0": 41,
-          "1": 25,
-          "2": 57
+          "1": 81,
+          "2": 52
         },
-        "totalSeconds": 1.3253722469962668,
+        "totalSeconds": 2.149445249000564,
         "restarts": 12,
         "hitBudget": false
       }
