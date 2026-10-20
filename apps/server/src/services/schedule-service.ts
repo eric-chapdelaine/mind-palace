@@ -52,12 +52,21 @@ const HORIZON_DAYS = 7;
  * control plane only states the choices that are product decisions. Kept in the payload so the
  * stored run is self-describing.
  *
- * `timeBudgetSeconds` is the solver's soft time limit (the worker defaults to 15s). It is raised
- * to 30s because the Raspberry Pi needs the extra budget to place the same tasks the dev machine
- * solves in a few seconds.
+ * `solver` selects which algorithm the worker runs. `greedy` (construction + local search) is the
+ * production choice: it is deterministic, finishes in a second or two, and models splittable work
+ * as k independent units so partially-finished work still gets scheduled. `cp-sat` is still
+ * available for experiments — see `workers/cp-sat/benchmark/REPORT.md` for the trade-off (CP-SAT
+ * packs soft preferences slightly better on small weeks; the greedy never fails to return a week).
+ *
+ * `timeBudgetSeconds` only applies to `cp-sat` (the worker defaults to 15s; 30s gives the
+ * Raspberry Pi enough time to place what a dev machine solves in a few seconds).
  */
 const SCHEDULER_TIME_BUDGET_SECONDS = 30;
-const SCHEDULER_CONFIG = { priorityMode: "weighted", timeBudgetSeconds: SCHEDULER_TIME_BUDGET_SECONDS } as const;
+const SCHEDULER_CONFIG = {
+  solver: "greedy",
+  priorityMode: "weighted",
+  timeBudgetSeconds: SCHEDULER_TIME_BUDGET_SECONDS,
+} as const;
 
 /**
  * Hard wall-clock cap for the worker process. Must exceed `timeBudgetSeconds` plus `uv` startup
@@ -130,7 +139,7 @@ export class ScheduleService {
       script: "scheduler.py",
       input,
       timeoutMs: WORKER_TIMEOUT_MS,
-      label: "CP-SAT worker",
+      label: "scheduler worker",
     });
   }
 }

@@ -12,7 +12,7 @@ Mind Palace is a single-owner task manager and weekly scheduler. Everything sche
 - Numeric priority with drag rank as the tie-breaker.
 - Multi-parent tag DAG with cycle prevention.
 - Reserved modular tags: `calendar_event` and `routine`.
-- Thirty-minute CP-SAT scheduling through a separate Python worker.
+- Thirty-minute scheduling through a separate Python worker (greedy by default; a CP-SAT solver is available).
 - Per-task schedule acceptance; accepted blocks are immutable.
 - Routine templates and independently completable child occurrences.
 - Google Calendar normalization into tagged tasks through an import endpoint.
@@ -56,13 +56,13 @@ TypeScript/Hono control plane
      |
 SQLite in WAL mode
      |
-     +-- Python CP-SAT process
+     +-- Python scheduler process
      +-- Python Garmin sync process
      +-- NWS weather adapter
      +-- normalized calendar imports
 ```
 
-Only the TypeScript control plane writes SQLite. The CP-SAT worker accepts JSON through standard input and returns JSON through standard output.
+Only the TypeScript control plane writes SQLite. The scheduling worker accepts JSON through standard input and returns JSON through standard output.
 
 ## Packages
 
@@ -75,7 +75,7 @@ Only the TypeScript control plane writes SQLite. The CP-SAT worker accepts JSON 
 
 ## Integration State
 
-Weather fetching and CP-SAT scheduling are operational. Google Calendar uses a normalized import endpoint in v0, allowing provider-specific OAuth and polling to be added without changing the domain model. Garmin Connect syncs sleep and recorded activities through the Python worker and stores only normalized rows in `sleep_sessions` / `health_activities`; raw provider payloads are not retained.
+Weather fetching and scheduling are operational. Google Calendar uses a normalized import endpoint in v0, allowing provider-specific OAuth and polling to be added without changing the domain model. Garmin Connect syncs sleep and recorded activities through the Python worker and stores only normalized rows in `sleep_sessions` / `health_activities`; raw provider payloads are not retained.
 
 ## Garmin Connect
 

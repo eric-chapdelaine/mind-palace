@@ -1,9 +1,21 @@
-"""Model construction, solving, and output shaping.
+"""Model preparation, solver dispatch, and output shaping.
 
 The worker is a pure function: `now` and `horizonDays` come from the payload, so the same payload
-always yields the same schedule. Work is placed as optional intervals (a non-splittable task is
-one interval, a splittable task is `remaining / slot` unit intervals) and one `NoOverlap` keeps
-everything apart. Accepted/completed blocks — and human-placed `manual` blocks — are busy.
+always yields the same schedule — with either solver.
+
+`solve` has three parts:
+
+  * `_prepare` parses the payload once: slot grid, day indexes, per-task hard eligibility, and the
+    priority weights. Both solvers consume the same parsed problem, so they cannot disagree about
+    what is placeable or how work is prioritized.
+  * `_cp_sat` builds and solves the CP-SAT model (optional intervals + one `NoOverlap`; a
+    non-splittable task is one interval, a splittable task is `remaining / slot` unit intervals
+    gated by a single all-or-nothing `scheduled` literal).
+  * `greedy.solve` runs the greedy + local-search scheduler, which models a splittable task as k
+    independent units and is the default (`config["solver"]`).
+
+Output shaping — assignments, unscheduled reasons, and scores — is identical for both, so the
+control plane and the UI do not care which solver produced a run.
 """
 
 import math
@@ -14,14 +26,16 @@ from zoneinfo import ZoneInfo
 
 from ortools.sat.python import cp_model
 
-from .config import DEFAULT_CONFIG, MODEL_VERSION
+from . import greedy
+from .config import DEFAULT_CONFIG, GREEDY_MODEL_VERSION, MODEL_VERSION
 from .objective import compact, decision_weights, group_day_counts, run_capacity, soft_totals
 from .rules import day_matches, eligible_slots, rule_applies, rule_strength, when_matches, window_slot_indices
 from .timegrid import build_slots, overlaps, parse_datetime
 from .weather import slot_weather, weather_by_hour, weather_is_nice
 
 
-def solve(payload):
+def _prepare(payload):
+    """Parse the payload into the shared problem both solvers consume."""
     config = {**DEFAULT_CONFIG, **(payload.get("config") or {})}
     tz = ZoneInfo(config["timeZone"])
     slot_minutes = int(config["slotMinutes"])
@@ -51,21 +65,67 @@ def solve(payload):
     for slot in slots:
         day_weekday[day_of[slot["index"]]] = slot["weekday"]
 
-    model = cp_model.CpModel()
-    build_started = time.perf_counter()
-    scheduled = {}
-    task_runs = {}
     eligible_by_task = {}
     required_by_task = {}
     hard_reasons_by_task = {}
-
     for task in tasks:
         task_id = task["id"]
-        required = math.ceil(task["durationMinutesRemaining"] / slot_minutes)
-        required_by_task[task_id] = required
+        required_by_task[task_id] = math.ceil(task["durationMinutesRemaining"] / slot_minutes)
         eligible, applied_hard = eligible_slots(task, slots, busy_indices, rules, weather_hours)
         eligible_by_task[task_id] = eligible
         hard_reasons_by_task[task_id] = applied_hard
+
+    return {
+        "config": config,
+        "tz": tz,
+        "slot_minutes": slot_minutes,
+        "slots": slots,
+        "slot_count": slot_count,
+        "horizon_start": horizon_start,
+        "horizon_end": horizon_end,
+        "tasks": tasks,
+        "task_by_id": {task["id"]: task for task in tasks},
+        "rules": rules,
+        "busy_indices": busy_indices,
+        "weather_hours": weather_hours,
+        "dates": dates,
+        "day_of": day_of,
+        "day_count": day_count,
+        "day_weekday": day_weekday,
+        "eligible_by_task": eligible_by_task,
+        "required_by_task": required_by_task,
+        "hard_reasons_by_task": hard_reasons_by_task,
+        "weights": decision_weights(tasks, config["priorityMode"]),
+    }
+
+
+def _cp_sat(ctx):
+    """Build and solve the CP-SAT model.
+
+    Returns `(placement, solver_status_name, objective_value)`.
+    """
+    started = time.perf_counter()
+    config = ctx["config"]
+    slot_minutes = ctx["slot_minutes"]
+    slots = ctx["slots"]
+    slot_count = ctx["slot_count"]
+    tasks = ctx["tasks"]
+    rules = ctx["rules"]
+    weather_hours = ctx["weather_hours"]
+    day_of = ctx["day_of"]
+    day_count = ctx["day_count"]
+    day_weekday = ctx["day_weekday"]
+    eligible_by_task = ctx["eligible_by_task"]
+    required_by_task = ctx["required_by_task"]
+
+    model = cp_model.CpModel()
+    scheduled = {}
+    task_runs = {}
+
+    for task in tasks:
+        task_id = task["id"]
+        required = required_by_task[task_id]
+        eligible = eligible_by_task[task_id]
         scheduled[task_id] = model.new_bool_var(f"scheduled_{task_id}")
         capacity = run_capacity(eligible, slot_count)
         starts_ok = [start for start in eligible if capacity[start] >= 1]
@@ -126,7 +186,7 @@ def solve(payload):
                             .only_enforce_if([prerequisite["present"], dependent["present"]])
 
     # ---- Objective: one weighted expression; decision scaled above all soft terms ----
-    weights = decision_weights(tasks, config["priorityMode"])
+    weights = ctx["weights"]
     decision_terms = [weights[task["priority"]] * scheduled[task["id"]] for task in tasks]
     soft_terms = []
     soft_bound = 0
@@ -215,7 +275,7 @@ def solve(payload):
                 add_soft(-value * excess, value * span)
 
     model.maximize((2 * soft_bound + 1) * sum(decision_terms) + sum(soft_terms))
-    build_time = time.perf_counter() - build_started
+    built_at = time.perf_counter()
 
     solver = cp_model.CpSolver()
     # Reproducibility: a deterministic payload must yield a deterministic schedule.
@@ -227,19 +287,46 @@ def solve(payload):
     solver.parameters.cp_model_presolve = False
     solver.parameters.max_time_in_seconds = float(config["timeBudgetSeconds"])
     status = solver.solve(model)
-    solve_time = time.perf_counter() - build_started
     solved = status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+    if config.get("debugTiming"):
+        print(f"[timing] build={built_at - started:.2f}s solve={time.perf_counter() - built_at:.2f}s "
+              f"total={time.perf_counter() - started:.2f}s", file=sys.stderr)
 
     placement = {}
     if solved:
         for task_id, runs in task_runs.items():
             if runs and solver.value(scheduled[task_id]):
                 placement[task_id] = [(solver.value(run["start"]), run["size"]) for run in runs]
-    if solved and config.get("compact", True):
-        placement = compact(placement, tasks, slots, day_of, eligible_by_task, rules, weather_hours, slot_minutes)
+        if config.get("compact", True):
+            placement = compact(placement, tasks, slots, day_of, eligible_by_task, rules, weather_hours, slot_minutes)
+    return placement, solver.status_name(status), (int(solver.objective_value) if solved else 0)
+
+
+def solve(payload):
+    started = time.perf_counter()
+    ctx = _prepare(payload)
+    config = ctx["config"]
+    solver_name = (config.get("solver") or "greedy").lower()
+
+    if solver_name == "cp-sat":
+        placement, solver_status, objective_value = _cp_sat(ctx)
+        model_version = MODEL_VERSION
+    else:
+        result = greedy.solve(ctx)
+        placement = result["placement"]
+        solver_status = "FEASIBLE"
+        model_version = GREEDY_MODEL_VERSION
+        # The greedy does not build CP-SAT's scaled objective; report the dominant (decision) term.
+        objective_value = sum(
+            ctx["weights"][ctx["task_by_id"][task_id]["priority"]] for task_id in placement
+        )
     if config.get("debugTiming"):
-        print(f"[timing] build={build_time:.2f}s solve={solve_time - build_time:.2f}s "
-              f"total={time.perf_counter() - build_started:.2f}s", file=sys.stderr)
+        print(f"[timing] solver={solver_name} total={time.perf_counter() - started:.2f}s", file=sys.stderr)
+
+    slots = ctx["slots"]
+    tasks = ctx["tasks"]
+    eligible_by_task = ctx["eligible_by_task"]
+    required_by_task = ctx["required_by_task"]
 
     # ---- Output -----------------------------------------------------------------------
     assignments = []
@@ -249,14 +336,13 @@ def solve(payload):
         task_id = task["id"]
         if task_id not in placement:
             reasons = []
-            eligible = eligible_by_task[task_id]
-            if not eligible:
+            if not eligible_by_task[task_id]:
                 reasons.append({"type": "no_eligible_slots", "detail": "No eligible slots in the horizon."})
-            elif required_by_task[task_id] > len(eligible):
+            elif required_by_task[task_id] > len(eligible_by_task[task_id]):
                 reasons.append({"type": "no_eligible_slots", "detail": "Not enough eligible slots to fit the estimate."})
             else:
                 reasons.append({"type": "capacity", "detail": "Did not fit the week."})
-            for reason in hard_reasons_by_task[task_id]:
+            for reason in ctx["hard_reasons_by_task"][task_id]:
                 reasons.append({"type": "rule", "detail": reason})
             unscheduled.append({"taskId": task_id, "reasons": reasons})
             continue
@@ -272,17 +358,16 @@ def solve(payload):
     placed = len(tasks) - len(unscheduled)
     scores = {
         "decision": {"placed": placed, "of": len(tasks), "byPriority": by_priority},
-        "style": soft_totals(placement, tasks, rules, slots, slot_minutes, weather_hours),
+        "style": soft_totals(placement, tasks, ctx["rules"], slots, ctx["slot_minutes"], ctx["weather_hours"]),
     }
-
     return {
-        "modelVersion": MODEL_VERSION,
-        "horizonStart": horizon_start.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "horizonEnd": horizon_end.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "modelVersion": model_version,
+        "horizonStart": ctx["horizon_start"].astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "horizonEnd": ctx["horizon_end"].astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
         "assignments": assignments,
         "unscheduled": unscheduled,
         "unscheduledTaskIds": [entry["taskId"] for entry in unscheduled],
         "scores": scores,
-        "solverStatus": solver.status_name(status),
-        "objectiveValue": int(solver.objective_value) if solved else 0,
+        "solverStatus": solver_status,
+        "objectiveValue": int(objective_value),
     }

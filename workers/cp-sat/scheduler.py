@@ -1,22 +1,29 @@
-"""CP-SAT scheduling worker.
+"""Scheduling worker.
 
 Reads one JSON scheduling problem from stdin and writes one JSON solution to stdout. It never
 touches SQLite; the TypeScript control plane remains the only database writer.
 
 The worker is a pure function: `now` and `horizonDays` arrive in the payload, so the same payload
-always yields the same schedule. Work is placed as time intervals — a non-splittable task is one
-optional interval, a splittable task is `remaining / slot` unit intervals — and a single
-`NoOverlap` keeps intervals and fixed commitments apart. Rules are data: `applies` selects tasks
-and `effect` shapes eligibility (hard) or the weighted objective (soft). `preferEarlier` is not an
-objective term; a greedy compaction pass applies it after the solve.
+always yields the same schedule. Rules are data: `applies` selects tasks and `effect` shapes
+eligibility (hard) or the weighted objective (soft).
 
-The implementation lives in the `schedulerlib` package so no single file has to hold the whole
-model. This module is the script entry point and re-exports the names the unit tests import.
+Two solvers implement the same protocol and are selected with `config.solver`:
+
+  * `greedy` (default) — priority-ordered construction plus relocate/insert/swap/eject local
+    search, iteration-bounded and deterministic. It models a splittable task as k independent
+    units, so partial progress is allowed.
+  * `cp-sat` — optional intervals with one `NoOverlap`; a splittable task is all-or-nothing.
+
+Both emit the same assignment/score shape, so the control plane does not care which one ran. The
+implementation lives in the `schedulerlib` package. This module is the script entry point and
+re-exports the names the unit tests import.
 """
 
 from schedulerlib import (  # noqa: F401 - re-exported for the tests
     DEFAULT_CONFIG,
+    GREEDY_MODEL_VERSION,
     MODEL_VERSION,
+    greedy,
     ZoneInfo,
     build_slots,
     condition_matches,

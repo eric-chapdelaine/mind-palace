@@ -14,10 +14,10 @@
           "1": 84,
           "2": 4
         },
-        "buildSeconds": 0.04,
-        "solveSeconds": 1.28,
-        "modelSeconds": 1.32,
-        "wallSeconds": 1.3221431429847144,
+        "buildSeconds": 0.03,
+        "solveSeconds": 1.2,
+        "modelSeconds": 1.23,
+        "wallSeconds": 1.2464510389836505,
         "solverStatus": "OPTIMAL"
       },
       "greedy": {
@@ -30,7 +30,7 @@
           "1": 83,
           "2": 4
         },
-        "totalSeconds": 0.6294022939982824,
+        "totalSeconds": 0.5074523880030029,
         "restarts": 12,
         "hitBudget": false
       }
@@ -48,10 +48,10 @@
           "1": 84,
           "2": 8
         },
-        "buildSeconds": 0.05,
-        "solveSeconds": 30.05,
+        "buildSeconds": 0.03,
+        "solveSeconds": 30.06,
         "modelSeconds": 30.1,
-        "wallSeconds": 30.100891812995542,
+        "wallSeconds": 30.112697892007418,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
@@ -64,7 +64,7 @@
           "1": 82,
           "2": 8
         },
-        "totalSeconds": 0.5682685250067152,
+        "totalSeconds": 0.5359343420132063,
         "restarts": 12,
         "hitBudget": false
       }
@@ -82,10 +82,10 @@
           "1": 84,
           "2": 12
         },
-        "buildSeconds": 0.05,
+        "buildSeconds": 0.03,
         "solveSeconds": 30.01,
-        "modelSeconds": 30.07,
-        "wallSeconds": 30.06766444403911,
+        "modelSeconds": 30.04,
+        "wallSeconds": 30.058928354003,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
@@ -98,7 +98,7 @@
           "1": 81,
           "2": 12
         },
-        "totalSeconds": 0.6132886669947766,
+        "totalSeconds": 0.5469948500394821,
         "restarts": 12,
         "hitBudget": false
       }
@@ -116,10 +116,10 @@
           "1": 83,
           "2": 16
         },
-        "buildSeconds": 0.06,
+        "buildSeconds": 0.05,
         "solveSeconds": 30.01,
-        "modelSeconds": 30.07,
-        "wallSeconds": 30.072908940026537,
+        "modelSeconds": 30.06,
+        "wallSeconds": 30.075670262041967,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
@@ -132,7 +132,7 @@
           "1": 81,
           "2": 16
         },
-        "totalSeconds": 0.578772614011541,
+        "totalSeconds": 0.6011668299906887,
         "restarts": 12,
         "hitBudget": false
       }
@@ -144,16 +144,16 @@
         "placed": 149,
         "of": 149,
         "weightedDecision": 89249,
-        "style": 355,
+        "style": 375,
         "byPriority": {
           "0": 41,
           "1": 84,
           "2": 24
         },
-        "buildSeconds": 0.07,
-        "solveSeconds": 30.04,
-        "modelSeconds": 30.11,
-        "wallSeconds": 30.116736067051534,
+        "buildSeconds": 0.06,
+        "solveSeconds": 30.01,
+        "modelSeconds": 30.07,
+        "wallSeconds": 30.09619583102176,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
@@ -166,7 +166,7 @@
           "1": 83,
           "2": 24
         },
-        "totalSeconds": 0.5689713669707999,
+        "totalSeconds": 0.5314835070166737,
         "restarts": 12,
         "hitBudget": false
       }
@@ -184,10 +184,10 @@
           "1": 84,
           "2": 32
         },
-        "buildSeconds": 0.08,
-        "solveSeconds": 30.27,
-        "modelSeconds": 30.36,
-        "wallSeconds": 30.365467286028434,
+        "buildSeconds": 0.07,
+        "solveSeconds": 30.01,
+        "modelSeconds": 30.08,
+        "wallSeconds": 30.09668131696526,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
@@ -200,7 +200,7 @@
           "1": 84,
           "2": 32
         },
-        "totalSeconds": 0.33133056096266955,
+        "totalSeconds": 0.3080360959866084,
         "restarts": 12,
         "hitBudget": false
       }
@@ -218,10 +218,10 @@
           "1": 84,
           "2": 72
         },
-        "buildSeconds": 0.12,
-        "solveSeconds": 30.01,
-        "modelSeconds": 30.14,
-        "wallSeconds": 30.14841120998608,
+        "buildSeconds": 0.1,
+        "solveSeconds": 30.02,
+        "modelSeconds": 30.11,
+        "wallSeconds": 30.138840421044733,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
@@ -234,7 +234,7 @@
           "1": 82,
           "2": 53
         },
-        "totalSeconds": 0.954136157000903,
+        "totalSeconds": 0.8626363560324535,
         "restarts": 12,
         "hitBudget": false
       }
@@ -252,10 +252,10 @@
           "1": 84,
           "2": 88
         },
-        "buildSeconds": 0.15,
-        "solveSeconds": 30.34,
-        "modelSeconds": 30.5,
-        "wallSeconds": 30.505897844966967,
+        "buildSeconds": 0.12,
+        "solveSeconds": 30.28,
+        "modelSeconds": 30.4,
+        "wallSeconds": 30.42534480104223,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
@@ -268,7 +268,7 @@
           "1": 82,
           "2": 52
         },
-        "totalSeconds": 1.218602855980862,
+        "totalSeconds": 0.9890395430265926,
         "restarts": 12,
         "hitBudget": false
       }
@@ -286,10 +286,10 @@
           "1": 84,
           "2": 88
         },
-        "buildSeconds": 0.23,
+        "buildSeconds": 0.17,
         "solveSeconds": 30.02,
-        "modelSeconds": 30.26,
-        "wallSeconds": 30.26095023698872,
+        "modelSeconds": 30.19,
+        "wallSeconds": 30.229253122990485,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
@@ -302,7 +302,7 @@
           "1": 81,
           "2": 53
         },
-        "totalSeconds": 1.0608928740257397,
+        "totalSeconds": 1.0361235570162535,
         "restarts": 12,
         "hitBudget": false
       }
@@ -320,10 +320,10 @@
           "1": 84,
           "2": 88
         },
-        "buildSeconds": 0.27,
+        "buildSeconds": 0.22,
         "solveSeconds": 30.03,
-        "modelSeconds": 30.32,
-        "wallSeconds": 30.32137204799801,
+        "modelSeconds": 30.25,
+        "wallSeconds": 30.29062831302872,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
@@ -336,7 +336,7 @@
           "1": 83,
           "2": 43
         },
-        "totalSeconds": 1.6440067189978436,
+        "totalSeconds": 1.6456461279885843,
         "restarts": 12,
         "hitBudget": false
       }
@@ -354,10 +354,10 @@
           "1": 84,
           "2": 88
         },
-        "buildSeconds": 0.37,
-        "solveSeconds": 30.04,
-        "modelSeconds": 30.42,
-        "wallSeconds": 30.42595695296768,
+        "buildSeconds": 0.35,
+        "solveSeconds": 30.03,
+        "modelSeconds": 30.39,
+        "wallSeconds": 30.43849594000494,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
@@ -370,7 +370,7 @@
           "1": 83,
           "2": 54
         },
-        "totalSeconds": 2.229554135003127,
+        "totalSeconds": 2.1271280469954945,
         "restarts": 12,
         "hitBudget": false
       }
@@ -388,10 +388,10 @@
           "1": 83,
           "2": 90
         },
-        "buildSeconds": 0.5,
+        "buildSeconds": 0.44,
         "solveSeconds": 30.04,
-        "modelSeconds": 30.55,
-        "wallSeconds": 30.56012884597294,
+        "modelSeconds": 30.48,
+        "wallSeconds": 30.538209274993278,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
@@ -404,7 +404,7 @@
           "1": 82,
           "2": 53
         },
-        "totalSeconds": 3.004418798023835,
+        "totalSeconds": 2.9769978229887784,
         "restarts": 12,
         "hitBudget": false
       }

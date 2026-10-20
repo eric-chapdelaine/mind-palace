@@ -39,6 +39,7 @@ def run_cp_sat(payload: dict, budget_seconds: float):
     payload = dict(expand_splittable(payload))
     payload["config"] = {
         **(payload.get("config") or {}),
+        "solver": "cp-sat",  # the worker defaults to greedy; pin the baseline here
         "timeBudgetSeconds": budget_seconds,
         "debugTiming": True,
     }

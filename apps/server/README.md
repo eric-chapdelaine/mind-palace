@@ -1,6 +1,6 @@
 # Server
 
-The Hono server is the single-owner control plane and sole SQLite writer. It hosts the built React application, invokes CP-SAT, and normalizes integration data.
+The Hono server is the single-owner control plane and sole SQLite writer. It hosts the built React application, invokes the scheduling worker, and normalizes integration data.
 
 ## Main API
 

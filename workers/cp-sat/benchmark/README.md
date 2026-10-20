@@ -1,12 +1,18 @@
 # Scheduler comparison benchmark
 
-A self-contained harness that runs the production CP-SAT worker and a hand-written
-greedy + local-search scheduler on the same generated instances, and measures wall-clock time and
-solution quality against the **exact same objective**.
+A self-contained harness that runs the worker's two solvers on the same generated instances and
+measures wall-clock time and solution quality against the **exact same objective**.
 
-Nothing here is imported by the app. It lives next to the worker so both competitors can re-use
-the worker's pure helpers (`eligible_slots`, `soft_totals`, `decision_weights`, `weather_is_nice`,
-the rule/when matchers) and therefore cannot drift from the real model.
+The two competitors are the real implementations, not re-writes:
+
+- **`cp-sat`** — `schedulerlib.solve` with `config.solver = "cp-sat"` (the harness pins it; the
+  worker's default is greedy).
+- **`greedy`** — `schedulerlib/greedy.py`, the production scheduler. `benchmark/greedy.py` is only
+  a thin adapter from the benchmark's parsed `Problem` to the context it expects.
+
+Nothing here is imported by the app. It lives next to the worker so both competitors re-use the
+worker's own helpers (`eligible_slots`, `soft_totals`, `decision_weights`, `weather_is_nice`, the
+rule/when matchers) and therefore cannot drift from the real model.
 
 ## Files
 
@@ -14,7 +20,7 @@ the rule/when matchers) and therefore cannot drift from the real model.
 |---|---|
 | `usecase.py` | Seeded demo-data generator for the "make the day decisive" use case (sleep, wake+outside, workouts, meals, grocery, outings, work backlog, weather). |
 | `instance.py` | Parses a payload into a `Problem`: slots, eligibility, required chunks, the soft objective scorecard, placement validation, and a per-rule style breakdown. Also expands splittable tasks into independent unit tasks (`expand_splittable`). |
-| `greedy.py` | Greedy construction + local search. Optimises the same objective (priority-weighted decision, then soft style). Multi-restart, relocate, swap (2-opt), and ejection-insert neighbourhoods. |
+| `greedy.py` | Adapter that runs the **production** greedy scheduler (`schedulerlib/greedy.py`) against a benchmark instance and adds timing/feasibility fields. |
 | `compare.py` | Runs both on every scenario/seed; writes `results.json`; prints tables. |
 | `scaling.py` | Sweeps task count to find where CP-SAT degrades; writes `scaling.json`. |
 | `budgets.py` | Sweeps the CP-SAT time budget on a small and a large instance. |

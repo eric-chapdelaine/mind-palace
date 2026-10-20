@@ -62,7 +62,14 @@ def run(payload, presolve, workers, budget):
     S.cp_model.CpSolver = Configured
     try:
         payload = expand_splittable(payload)
-        payload = {**payload, "config": {**payload.get("config", {}), "timeBudgetSeconds": budget}}
+        payload = {
+            **payload,
+            "config": {
+                **payload.get("config", {}),
+                "solver": "cp-sat",  # the worker defaults to greedy; this experiment tunes CP-SAT
+                "timeBudgetSeconds": budget,
+            },
+        }
         return S.solve(payload)
     finally:
         cp_model.CpSolver = original

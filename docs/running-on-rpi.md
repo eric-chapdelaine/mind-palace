@@ -15,8 +15,9 @@ expands to the service user's home).
 - **On the Pi:** the entire app — SQLite database (e.g.
   `/home/pi/mind-palace/mind-palace.db`), the Hono API server
   (`pnpm --filter @mind-palace/server start` → `tsx src/index.ts`), and the
-  Python workers the server spawns on demand as subprocesses: the CP-SAT
-  scheduler (`uv run --project workers/cp-sat python scheduler.py`) and,
+  Python workers the server spawns on demand as subprocesses: the scheduling
+  worker (`uv run --project workers/cp-sat python scheduler.py`, greedy by
+  default) and,
   once authenticated, the Garmin Connect sync
   (`uv run --project workers/garmin python sync.py`).
 - **On the dev machine:** the frontend **build**. Vite
