@@ -124,23 +124,27 @@ class SoftModel:
             total -= value * max(0, counts[d] - spec["soft_max"])
         return total
 
-    def delta(self, task_id: int, starts, sign: int) -> int:
-        """Score change from adding (sign=+1) / removing (sign=-1) a task's units. No mutation."""
-        gains = self.slot_gain[task_id]
-        total = sign * sum(gains[start] for start in starts)
+    def delta(self, task_id: int, runs, sign: int) -> int:
+        """Score change from adding (sign=+1) / removing (sign=-1) a task's runs. No mutation.
+
+        Window/weather/assignDays preferences count once per run (at its start), and per-day
+        group counts (spread, dailyBudget) accumulate run *minutes*, exactly matching
+        `soft_totals` and the production objective.
+        """
+        total = sign * sum(self.slot_gain[task_id][start] for start, _size in runs)
         if not self.group_specs:
             return total
-        days = [self.p.day_of[start] for start in starts]
+        day_units = [(self.p.day_of[start], size) for start, size in runs]
         for spec in self.group_specs:
             if task_id not in spec["task_ids"]:
                 continue
             counts = self.counts[spec["key"]]
             before = self.contribution(spec)
-            for day in days:
-                counts[day] += sign
+            for day, size in day_units:
+                counts[day] += sign * size
             after = self.contribution(spec)
-            for day in days:
-                counts[day] -= sign
+            for day, size in day_units:
+                counts[day] -= sign * size
             total += after - before
         return total
 
@@ -151,8 +155,8 @@ class SoftModel:
             if task_id not in spec["task_ids"]:
                 continue
             counts = self.counts[spec["key"]]
-            for start, _size in runs:
-                counts[self.p.day_of[start]] += sign
+            for start, size in runs:
+                counts[self.p.day_of[start]] += sign * size
 
 
 class GreedyScheduler:
@@ -190,7 +194,7 @@ class GreedyScheduler:
     # ---- state helpers ---------------------------------------------------------------
     def commit(self, task, runs):
         runs = [tuple(run) for run in runs]
-        self.running_style += self.soft.delta(task["id"], [start for start, _size in runs], +1)
+        self.running_style += self.soft.delta(task["id"], runs, +1)
         self.placement[task["id"]] = runs
         for start, size in runs:
             self.occupied.update(range(start, start + size))
@@ -198,7 +202,7 @@ class GreedyScheduler:
 
     def uncommit(self, task_id):
         runs = self.placement.pop(task_id)
-        self.running_style += self.soft.delta(task_id, [start for start, _size in runs], -1)
+        self.running_style += self.soft.delta(task_id, runs, -1)
         for start, size in runs:
             for slot in range(start, start + size):
                 self.occupied.discard(slot)
@@ -257,7 +261,7 @@ class GreedyScheduler:
                 break
             if any(slot not in eligible_set or slot in self.occupied for slot in range(start, end)):
                 continue
-            score = self.soft.delta(task["id"], range(start, end), +1)
+            score = self.soft.delta(task["id"], [(start, requirement)], +1)
             if self.explore:
                 score += self.rng.random() * self.explore
             if best_score is None or score > best_score or (score == best_score and start < best_start):
@@ -308,10 +312,10 @@ class GreedyScheduler:
         changed = False
         for task in self._priority_order(self.task_by_id[tid] for tid in self.placement):
             current = self.uncommit(task["id"])
-            current_score = self.soft.delta(task["id"], [start for start, _size in current], +1)
+            current_score = self.soft.delta(task["id"], current, +1)
             candidate = self.best_placement(task)
             if candidate is not None:
-                candidate_score = self.soft.delta(task["id"], [start for start, _size in candidate], +1)
+                candidate_score = self.soft.delta(task["id"], candidate, +1)
                 if candidate_score > current_score or (candidate_score == current_score and candidate < current):
                     self.commit(task, candidate)
                     if self.feasible():

@@ -15,22 +15,22 @@
           "2": 4
         },
         "buildSeconds": 0.04,
-        "solveSeconds": 1.31,
-        "modelSeconds": 1.35,
-        "wallSeconds": 1.3543435460305773,
+        "solveSeconds": 1.28,
+        "modelSeconds": 1.32,
+        "wallSeconds": 1.3221431429847144,
         "solverStatus": "OPTIMAL"
       },
       "greedy": {
-        "placed": 127,
+        "placed": 128,
         "of": 129,
-        "weightedDecision": 17839,
-        "style": 975,
+        "weightedDecision": 17844,
+        "style": 1000,
         "byPriority": {
           "0": 41,
-          "1": 82,
+          "1": 83,
           "2": 4
         },
-        "totalSeconds": 0.3606592160067521,
+        "totalSeconds": 0.6294022939982824,
         "restarts": 12,
         "hitBudget": false
       }
@@ -49,22 +49,22 @@
           "2": 8
         },
         "buildSeconds": 0.05,
-        "solveSeconds": 30.01,
-        "modelSeconds": 30.07,
-        "wallSeconds": 30.069348705990706,
+        "solveSeconds": 30.05,
+        "modelSeconds": 30.1,
+        "wallSeconds": 30.100891812995542,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
-        "placed": 132,
+        "placed": 131,
         "of": 133,
-        "weightedDecision": 32120,
-        "style": 825,
+        "weightedDecision": 32111,
+        "style": 875,
         "byPriority": {
           "0": 41,
-          "1": 83,
+          "1": 82,
           "2": 8
         },
-        "totalSeconds": 0.41496865201042965,
+        "totalSeconds": 0.5682685250067152,
         "restarts": 12,
         "hitBudget": false
       }
@@ -84,21 +84,21 @@
         },
         "buildSeconds": 0.05,
         "solveSeconds": 30.01,
-        "modelSeconds": 30.06,
-        "wallSeconds": 30.06636553100543,
+        "modelSeconds": 30.07,
+        "wallSeconds": 30.06766444403911,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
         "placed": 134,
         "of": 137,
         "weightedDecision": 46370,
-        "style": 675,
+        "style": 750,
         "byPriority": {
           "0": 41,
           "1": 81,
           "2": 12
         },
-        "totalSeconds": 0.38610323204193264,
+        "totalSeconds": 0.6132886669947766,
         "restarts": 12,
         "hitBudget": false
       }
@@ -116,23 +116,23 @@
           "1": 83,
           "2": 16
         },
-        "buildSeconds": 0.07,
+        "buildSeconds": 0.06,
         "solveSeconds": 30.01,
-        "modelSeconds": 30.09,
-        "wallSeconds": 30.091381617996376,
+        "modelSeconds": 30.07,
+        "wallSeconds": 30.072908940026537,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
-        "placed": 137,
+        "placed": 138,
         "of": 141,
-        "weightedDecision": 60621,
-        "style": 555,
+        "weightedDecision": 60638,
+        "style": 630,
         "byPriority": {
           "0": 41,
-          "1": 80,
+          "1": 81,
           "2": 16
         },
-        "totalSeconds": 0.44285500497790053,
+        "totalSeconds": 0.578772614011541,
         "restarts": 12,
         "hitBudget": false
       }
@@ -151,22 +151,22 @@
           "2": 24
         },
         "buildSeconds": 0.07,
-        "solveSeconds": 30.01,
-        "modelSeconds": 30.09,
-        "wallSeconds": 30.089167386002373,
+        "solveSeconds": 30.04,
+        "modelSeconds": 30.11,
+        "wallSeconds": 30.116736067051534,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
-        "placed": 147,
+        "placed": 148,
         "of": 149,
-        "weightedDecision": 89199,
-        "style": 340,
+        "weightedDecision": 89224,
+        "style": 335,
         "byPriority": {
           "0": 41,
-          "1": 82,
+          "1": 83,
           "2": 24
         },
-        "totalSeconds": 0.42427851300453767,
+        "totalSeconds": 0.5689713669707999,
         "restarts": 12,
         "hitBudget": false
       }
@@ -184,23 +184,23 @@
           "1": 84,
           "2": 32
         },
-        "buildSeconds": 0.09,
-        "solveSeconds": 29.98,
-        "modelSeconds": 30.08,
-        "wallSeconds": 30.07926396804396,
+        "buildSeconds": 0.08,
+        "solveSeconds": 30.27,
+        "modelSeconds": 30.36,
+        "wallSeconds": 30.365467286028434,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
-        "placed": 153,
+        "placed": 157,
         "of": 157,
-        "weightedDecision": 117677,
-        "style": -105,
+        "weightedDecision": 117809,
+        "style": -25,
         "byPriority": {
           "0": 41,
-          "1": 80,
+          "1": 84,
           "2": 32
         },
-        "totalSeconds": 0.38593258295441046,
+        "totalSeconds": 0.33133056096266955,
         "restarts": 12,
         "hitBudget": false
       }
@@ -218,23 +218,23 @@
           "1": 84,
           "2": 72
         },
-        "buildSeconds": 0.11,
+        "buildSeconds": 0.12,
         "solveSeconds": 30.01,
         "modelSeconds": 30.14,
-        "wallSeconds": 30.138251372030936,
+        "wallSeconds": 30.14841120998608,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
-        "placed": 175,
+        "placed": 176,
         "of": 211,
-        "weightedDecision": 310295,
-        "style": -890,
+        "weightedDecision": 310382,
+        "style": -705,
         "byPriority": {
           "0": 41,
-          "1": 81,
+          "1": 82,
           "2": 53
         },
-        "totalSeconds": 0.5348923980491236,
+        "totalSeconds": 0.954136157000903,
         "restarts": 12,
         "hitBudget": false
       }
@@ -252,23 +252,23 @@
           "1": 84,
           "2": 88
         },
-        "buildSeconds": 0.14,
-        "solveSeconds": 30.04,
-        "modelSeconds": 30.19,
-        "wallSeconds": 30.197345026012044,
+        "buildSeconds": 0.15,
+        "solveSeconds": 30.34,
+        "modelSeconds": 30.5,
+        "wallSeconds": 30.505897844966967,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
-        "placed": 176,
+        "placed": 175,
         "of": 257,
-        "weightedDecision": 474068,
-        "style": -1225,
+        "weightedDecision": 474463,
+        "style": -1245,
         "byPriority": {
           "0": 41,
-          "1": 79,
-          "2": 56
+          "1": 82,
+          "2": 52
         },
-        "totalSeconds": 0.6199348890222609,
+        "totalSeconds": 1.218602855980862,
         "restarts": 12,
         "hitBudget": false
       }
@@ -286,23 +286,23 @@
           "1": 84,
           "2": 88
         },
-        "buildSeconds": 0.19,
+        "buildSeconds": 0.23,
         "solveSeconds": 30.02,
-        "modelSeconds": 30.22,
-        "wallSeconds": 30.226872230996378,
+        "modelSeconds": 30.26,
+        "wallSeconds": 30.26095023698872,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
-        "placed": 172,
+        "placed": 175,
         "of": 313,
-        "weightedDecision": 673836,
-        "style": -935,
+        "weightedDecision": 674027,
+        "style": -830,
         "byPriority": {
           "0": 41,
-          "1": 80,
-          "2": 51
+          "1": 81,
+          "2": 53
         },
-        "totalSeconds": 0.6631787480437197,
+        "totalSeconds": 1.0608928740257397,
         "restarts": 12,
         "hitBudget": false
       }
@@ -320,23 +320,23 @@
           "1": 84,
           "2": 88
         },
-        "buildSeconds": 0.25,
-        "solveSeconds": 30.02,
-        "modelSeconds": 30.28,
-        "wallSeconds": 30.286847259034403,
+        "buildSeconds": 0.27,
+        "solveSeconds": 30.03,
+        "modelSeconds": 30.32,
+        "wallSeconds": 30.32137204799801,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
-        "placed": 175,
+        "placed": 167,
         "of": 411,
-        "weightedDecision": 1024067,
-        "style": -915,
+        "weightedDecision": 1024059,
+        "style": -1020,
         "byPriority": {
           "0": 41,
           "1": 83,
-          "2": 51
+          "2": 43
         },
-        "totalSeconds": 0.9983824359951541,
+        "totalSeconds": 1.6440067189978436,
         "restarts": 12,
         "hitBudget": false
       }
@@ -354,23 +354,23 @@
           "1": 84,
           "2": 88
         },
-        "buildSeconds": 0.35,
-        "solveSeconds": 30.03,
-        "modelSeconds": 30.4,
-        "wallSeconds": 30.40140579396393,
+        "buildSeconds": 0.37,
+        "solveSeconds": 30.04,
+        "modelSeconds": 30.42,
+        "wallSeconds": 30.42595695296768,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
-        "placed": 176,
+        "placed": 178,
         "of": 553,
-        "weightedDecision": 1529440,
-        "style": -1155,
+        "weightedDecision": 1530726,
+        "style": -1075,
         "byPriority": {
           "0": 41,
-          "1": 80,
-          "2": 55
+          "1": 83,
+          "2": 54
         },
-        "totalSeconds": 1.55234664096497,
+        "totalSeconds": 2.229554135003127,
         "restarts": 12,
         "hitBudget": false
       }
@@ -388,23 +388,23 @@
           "1": 83,
           "2": 90
         },
-        "buildSeconds": 0.48,
+        "buildSeconds": 0.5,
         "solveSeconds": 30.04,
-        "modelSeconds": 30.53,
-        "wallSeconds": 30.53937762597343,
+        "modelSeconds": 30.55,
+        "wallSeconds": 30.56012884597294,
         "solverStatus": "FEASIBLE"
       },
       "greedy": {
-        "placed": 174,
+        "placed": 176,
         "of": 699,
-        "weightedDecision": 2050502,
-        "style": -1005,
+        "weightedDecision": 2051078,
+        "style": -905,
         "byPriority": {
           "0": 41,
-          "1": 81,
-          "2": 52
+          "1": 82,
+          "2": 53
         },
-        "totalSeconds": 2.149445249000564,
+        "totalSeconds": 3.004418798023835,
         "restarts": 12,
         "hitBudget": false
       }
