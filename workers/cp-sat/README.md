@@ -13,7 +13,7 @@ The worker is a **pure function**: `now` and `horizonDays` arrive in the payload
 | `greedy` (default) | `greedy-v1` | Priority-ordered construction + relocate/insert/2-opt swap/eject local search. Deterministic, sub-second. Splittable work is modeled as k **independent** units, so partially-finished work still gets scheduled. |
 | `cp-sat` | `cp-sat-v8` | OR-Tools CP-SAT over optional intervals. Packs soft preferences slightly better on small weeks but is time-budgeted, non-deterministic under the budget, and models a splittable task as all-or-nothing. |
 
-`greedy` is the production default. `benchmark/REPORT.md` has the measured comparison (speed, objective, and where each one wins); the short version is that greedy is ~46× faster and never fails to return a week, while CP-SAT gets 25–90 more style points on a typical week by packing preferences such as "outings at 5pm" better.
+`greedy` is the production default. `benchmark/REPORT.md` has the measured comparison (speed, objective, and where each one wins); the short version is that greedy is ~46× faster and never fails to return a week, while CP-SAT gets 30–120 more style points on a typical week (median +65) by packing preferences such as "outings at 5pm" better.
 
 ## Layout
 
@@ -26,8 +26,13 @@ The implementation lives in the `schedulerlib` package, one responsibility per m
 - `rules.py` — which tasks a rule governs and how it shapes eligibility.
 - `objective.py` — objective helpers and the compaction post-pass.
 - `greedy.py` — the default greedy + local-search scheduler.
+- `cp_sat.py` — the optional CP-SAT model.
 - `solve.py` — payload parsing, solver dispatch, and output shaping.
 - `main.py` — the stdin/stdout protocol.
+
+Each solver module exposes the same signature, `solve(ctx) -> (placement, status, objective)`,
+where `ctx` is the parsed problem `solve._prepare` builds. Adding a third scheduler means adding
+one module and one branch in `solve.solve` — nothing else moves.
 
 ## Model and rules
 

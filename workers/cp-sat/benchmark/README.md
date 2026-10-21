@@ -7,8 +7,8 @@ The two competitors are the real implementations, not re-writes:
 
 - **`cp-sat`** — `schedulerlib.solve` with `config.solver = "cp-sat"` (the harness pins it; the
   worker's default is greedy).
-- **`greedy`** — `schedulerlib/greedy.py`, the production scheduler. `benchmark/greedy.py` is only
-  a thin adapter from the benchmark's parsed `Problem` to the context it expects.
+- **`greedy`** — `schedulerlib/greedy.py`, the production scheduler, called with the context
+  `Problem.context()` builds.
 
 Nothing here is imported by the app. It lives next to the worker so both competitors re-use the
 worker's own helpers (`eligible_slots`, `soft_totals`, `decision_weights`, `weather_is_nice`, the
@@ -19,27 +19,20 @@ rule/when matchers) and therefore cannot drift from the real model.
 | File | Purpose |
 |---|---|
 | `usecase.py` | Seeded demo-data generator for the "make the day decisive" use case (sleep, wake+outside, workouts, meals, grocery, outings, work backlog, weather). |
-| `instance.py` | Parses a payload into a `Problem`: slots, eligibility, required chunks, the soft objective scorecard, placement validation, and a per-rule style breakdown. Also expands splittable tasks into independent unit tasks (`expand_splittable`). |
-| `greedy.py` | Adapter that runs the **production** greedy scheduler (`schedulerlib/greedy.py`) against a benchmark instance and adds timing/feasibility fields. |
-| `compare.py` | Runs both on every scenario/seed; writes `results.json`; prints tables. |
-| `scaling.py` | Sweeps task count to find where CP-SAT degrades; writes `scaling.json`. |
+| `instance.py` | Parses a payload into a `Problem`: slots, eligibility, required chunks, the soft objective scorecard, placement validation (`check_no_overlap` / `check_eligibility` / `check_dependency_order`), a per-rule style breakdown, and `context()` for the greedy scheduler. Also expands splittable tasks into independent unit tasks (`expand_splittable`). |
+| `compare.py` | Runs both schedulers on every scenario/seed and prints per-run + aggregate tables (quality, time, winner). One runner per solver, both production entry points. |
+| `scaling.py` | Sweeps the unit count to find where CP-SAT degrades. |
 | `budgets.py` | Sweeps the CP-SAT time budget on a small and a large instance. |
-| `config_experiment.py` | Tests whether CP-SAT's large-instance failure is a tuning artifact (`presolve`, `num_search_workers`). |
-| `diagnose.py` | One instance, with the per-rule style breakdown and placement-by-priority. |
-| `analyze.py` | Pretty-prints `results.json` / `scaling.json` and the aggregate stats. |
 
 ## Running
 
 ```sh
-# full sweep (production 30s CP budget, 10s greedy cap)
+# full sweep: every scenario, 3 seeds, 30s CP-SAT budget
 uv run --project workers/cp-sat python -u workers/cp-sat/benchmark/compare.py \
-    --seeds 1,2,3 --cp-budget 30 --greedy-budget 10
+    --seeds 1,2,3 --cp-budget 30
 
-uv run --project workers/cp-sat python workers/cp-sat/benchmark/analyze.py
-uv run --project workers/cp-sat python -u workers/cp-sat/benchmark/scaling.py
+uv run --project workers/cp-sat python -u workers/cp-sat/benchmark/scaling.py --cp-budget 30
 uv run --project workers/cp-sat python -u workers/cp-sat/benchmark/budgets.py
-uv run --project workers/cp-sat python -u workers/cp-sat/benchmark/config_experiment.py
-uv run --project workers/cp-sat python workers/cp-sat/benchmark/diagnose.py --scenario typical --seed 1
 ```
 
 `--quick` runs one seed with short budgets for a smoke test.
@@ -62,8 +55,8 @@ uv run --project workers/cp-sat python workers/cp-sat/benchmark/diagnose.py --sc
   task is scheduled as k independent tasks and partial progress is allowed — it is no longer
   CP-SAT's all-or-nothing `scheduled` boolean. This is a deliberate deviation from the production
   worker's semantics; `fragmented` opts out with `work_splittable=False`.
-* **Greedy gets a real budget.** 10s and 12 restarts; it converges in 0.1–1.4s, so it is never
-  artificially starved.
+* **Greedy gets a real budget.** 12 restarts and up to 25 local-search passes; it converges in
+  0.2–3.1s, so it is never artificially starved.
 
 ## The greedy algorithm
 

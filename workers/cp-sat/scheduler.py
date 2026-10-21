@@ -15,7 +15,8 @@ Two solvers implement the same protocol and are selected with `config.solver`:
   * `cp-sat` — optional intervals with one `NoOverlap`; a splittable task is all-or-nothing.
 
 Both emit the same assignment/score shape, so the control plane does not care which one ran. The
-implementation lives in the `schedulerlib` package. This module is the script entry point and
+solvers live in `schedulerlib/greedy.py` and `schedulerlib/cp_sat.py`; `schedulerlib/solve.py`
+prepares the problem, dispatches, and shapes the output. This module is the script entry point and
 re-exports the names the unit tests import.
 """
 
@@ -23,6 +24,7 @@ from schedulerlib import (  # noqa: F401 - re-exported for the tests
     DEFAULT_CONFIG,
     GREEDY_MODEL_VERSION,
     MODEL_VERSION,
+    cp_sat,
     greedy,
     ZoneInfo,
     build_slots,

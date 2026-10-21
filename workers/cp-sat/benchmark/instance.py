@@ -166,6 +166,25 @@ class Problem:
             busy_indices=busy_indices,
         )
 
+    def context(self) -> dict:
+        """The context `schedulerlib.greedy.solve` consumes (what `solve._prepare` builds)."""
+        return {
+            "tasks": self.tasks,
+            "task_by_id": {task["id"]: task for task in self.tasks},
+            "rules": self.rules,
+            "slots": self.slots,
+            "slot_count": self.slot_count,
+            "slot_minutes": self.slot_minutes,
+            "eligible_by_task": self.eligible_by_task,
+            "required_by_task": self.required_by_task,
+            "weather_hours": self.weather_hours,
+            "day_of": self.day_of,
+            "day_count": self.day_count,
+            "day_weekday": self.day_weekday,
+            "dates": self.dates,
+            "weights": self.weights,
+        }
+
     # ---- scorecard -------------------------------------------------------------------
     def decision_score(self, placement: dict) -> int:
         return sum(self.weights[task["priority"]] for task in self.tasks if placement.get(task["id"]))
@@ -336,4 +355,36 @@ def check_eligibility(problem: Problem, placement: dict) -> list:
             for slot in range(start, start + size):
                 if slot not in eligible:
                     violations.append(f"task {task_id} uses ineligible slot {slot}")
+    return violations
+
+
+def check_dependency_order(problem: Problem, placement: dict) -> list:
+    """Dependencies placed in order, and `withinAfter` maximum gaps respected."""
+    violations = []
+    task_by_id = {task["id"]: task for task in problem.tasks}
+    for task_id, runs in placement.items():
+        first_start = min(start for start, _size in runs)
+        for dependency in task_by_id[task_id].get("dependsOnTaskIds") or []:
+            dependency_runs = placement.get(dependency)
+            if not dependency_runs:
+                violations.append(f"task {task_id} placed before unplaced dependency {dependency}")
+            elif first_start < max(start + size for start, size in dependency_runs):
+                violations.append(f"task {task_id} starts before dependency {dependency} ends")
+    for rule in problem.rules:
+        effect = rule.get("effect") or {}
+        if effect.get("type") != "withinAfter":
+            continue
+        gap = max(0, int(effect.get("maxMinutes", 30)) // problem.slot_minutes)
+        for task in problem.tasks:
+            runs = placement.get(task["id"])
+            if not runs or not rule_applies(rule, task):
+                continue
+            last_start = max(start for start, _size in runs)
+            for dependency in task.get("dependsOnTaskIds") or []:
+                dependency_runs = placement.get(dependency)
+                if not dependency_runs:
+                    continue
+                earliest_end = min(start + size for start, size in dependency_runs)
+                if last_start > earliest_end + gap:
+                    violations.append(f"task {task['id']} breaks withinAfter on {dependency}")
     return violations

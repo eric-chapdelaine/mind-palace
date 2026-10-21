@@ -1,9 +1,10 @@
 """Greedy + local-search scheduler.
 
-A deterministic alternative to the CP-SAT model in `solve.py`. It optimises the *same* objective:
-the worker's `decision_weights` (priority-weighted amount of work placed) dominates, and
-`soft_totals`' rule semantics (per-run window/weather gains, per-day spread/daily-budget counts)
-break ties.
+The default scheduler. A deterministic alternative to the CP-SAT model in `cp_sat.py`; `solve.py`
+dispatches between them and both return `(placement, status_name, objective)`. It optimises the
+*same* objective: the worker's `decision_weights` (priority-weighted amount of work placed)
+dominates, and `soft_totals`' rule semantics (per-run window/weather gains, per-day
+spread/daily-budget counts) break ties.
 
 Two properties are deliberate:
 
@@ -471,6 +472,9 @@ class _Scheduler:
 def solve(ctx, time_budget_seconds=None, restarts=12, max_iters=25):
     """Multi-restart greedy construction, then local search on the best packing.
 
+    Returns `(placement, "FEASIBLE", objective)` — the same shape `cp_sat.solve` returns, where the
+    objective is the dominant (priority-weighted) term the worker reports.
+
     By default this is a pure function of `ctx` (no wall clock), so the same payload always yields
     the same schedule. `time_budget_seconds` is only for benchmarking.
     """
@@ -509,16 +513,16 @@ def solve(ctx, time_budget_seconds=None, restarts=12, max_iters=25):
             best = scheduler
         completed += 1
 
-    if best is None:
-        return {"placement": {}, "iterations": 0, "restarts": completed}
+    placement = {}
+    if best is not None:
+        best.explore = 0.0
+        best.local_search(deadline)
+        placement = _collapse(best.placement, best.unit_by_id)
 
-    best.explore = 0.0
-    iterations = best.local_search(deadline)
-    return {
-        "placement": _collapse(best.placement, best.unit_by_id),
-        "iterations": iterations,
-        "restarts": completed,
-    }
+    objective = sum(
+        ctx["weights"][ctx["task_by_id"][task_id]["priority"]] for task_id in placement
+    )
+    return placement, "FEASIBLE", objective
 
 
 def _collapse(placement, unit_by_id):

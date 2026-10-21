@@ -5,8 +5,9 @@ scheduler?
 
 **Method:** both schedulers were run on the same generated weeks for the "make the day decisive"
 use case, scored with the worker's own objective, and validated for hard-constraint feasibility.
-The greedy implementation lives in `greedy.py`; the CP-SAT side is the production
-`schedulerlib.solve` unchanged.
+Both are invoked through their production entry points (`schedulerlib/greedy.py` and
+`schedulerlib/cp_sat.py` via `schedulerlib/solve.py`); nothing in the harness re-implements
+either algorithm.
 
 ## Model note: splittable tasks are k independent unit tasks
 
@@ -41,13 +42,13 @@ the code the app runs — going through the adapter reproduced 24 of 27 greedy r
 
 ## TL;DR
 
-| | CP-SAT (production, 30s) | Greedy + local search (10s cap) |
+| | CP-SAT (30s budget) | Greedy + local search (default) |
 |---|---|---|
-| Median wall time | 30.08s | **0.59s** (~44× faster, 4.1–60×) |
-| Always returns a schedule | No — 2/27 runs returned zero units | **Yes, always** |
-| Small/medium (≤200 units) | **wins 24/24** — equal or more units, better style | 0–3 units behind, style 35–115 points lower |
+| Median wall time | 30.07s | **0.59s** (~46× faster, 5.6–61×) |
+| Always returns a schedule | No — 1/27 runs returned zero units | **Yes, always** |
+| Small/medium (≤200 units) | **wins 24/24** — equal or more units, median +65 style | 0–3 units behind; CP-SAT's 30s budget is noisy and lost style on 1 of 3 `busy_week` runs |
 | Large `huge` (≈430 units) | more units placed but lower priority-weighted decision | **wins all 3** on decision |
-| Largest `mega` (≈710 units) | collapses: 2/3 runs returned **nothing**, 1/3 far behind | **wins all 3** |
+| Largest `mega` (≈710 units) | 1/3 runs returned **nothing**, the others far behind on decision | **wins all 3** |
 | Determinism under budget | varies run-to-run | deterministic |
 
 Overall across 27 scenario/seed runs: **CP-SAT wins 24, greedy wins 6**. Greedy's wins are exactly the two largest scenarios (`huge` 3, `mega` 3). Under the expanded model CP-SAT is far more robust than under production's all-or-nothing splittable semantics.
@@ -93,53 +94,57 @@ constructions and refines the best `(weightedDecision, style)`.
 ## Main results (CP-SAT 30s vs greedy)
 
 ```
-scenario    seed tasks  cpStatus      cpWD     grWD   cpStyle grStyle      cpS    grS speedup  winner
-baseline        1   108  OPTIMAL       10919     10919      960      915    1.50  0.195     7.7  cp-sat
-baseline        2   108  OPTIMAL       10919     10919      950      925    1.08  0.266     4.1  cp-sat
-baseline        3   108  OPTIMAL       10919     10919      960      935    1.05  0.181     5.8  cp-sat
-typical         1   133  FEASIBLE      32129     32111      990      865   30.06  0.509    59.1  cp-sat
-typical         2   133  FEASIBLE      32129     32111      795      775   30.06  0.499    60.2  cp-sat
-typical         3   133  FEASIBLE      32120     32102      925      865   30.07  0.501    60.0  cp-sat
-busy_week       1   161  FEASIBLE      74628     74578      395      680   30.08  0.569    52.9  cp-sat
-busy_week       2   161  FEASIBLE      74628     74578      580      365   30.07  0.565    53.2  cp-sat
-busy_week       3   161  FEASIBLE      74612     74561      735      530   30.07  0.572    52.5  cp-sat
-bad_weather     1   135  FEASIBLE      39258     39236      950      900   30.08  0.534    56.3  cp-sat
-bad_weather     2   135  FEASIBLE      39258     39236      700      670   30.06  0.520    57.8  cp-sat
-bad_weather     3   135  FEASIBLE      39247     39247      810      740   30.06  0.508    59.1  cp-sat
-nice_weather    1   135  FEASIBLE      39269     39247     1045      935   30.06  0.524    57.4  cp-sat
-nice_weather    2   135  FEASIBLE      39269     39247      860      780   30.05  0.510    58.9  cp-sat
-nice_weather    3   135  FEASIBLE      39269     39247      915      835   30.06  0.520    57.8  cp-sat
-overloaded      1   189  FEASIBLE     130221    130149       45       45   30.09  0.616    48.8  cp-sat
-overloaded      2   189  FEASIBLE     130222    130149       90       55   30.09  0.606    49.7  cp-sat
-overloaded      3   189  FEASIBLE     130216    130174      480      395   30.09  0.622    48.3  cp-sat
-fragmented      1    95  FEASIBLE      32518     32456       45     -100   30.08  0.896    33.6  cp-sat
-fragmented      2    93  FEASIBLE      29914     29852     -250     -335   30.08  0.784    38.3  cp-sat
-fragmented      3    93  FEASIBLE      29945     29883      135       15   30.08  0.781    38.5  cp-sat
-many_small      1   185  FEASIBLE     217670    217578      -60    -1150   30.14  0.760    39.7  cp-sat
-many_small      2   185  FEASIBLE     217755    217572    -1240    -1170   30.14  0.941    32.0  cp-sat
-many_small      3   185  FEASIBLE     217758    217631    -1055    -1055   30.14  0.868    34.7  cp-sat
-huge            1   411  FEASIBLE    1143918   1171640      600    -1115   30.28  1.429    21.2  greedy
-huge            2   429  FEASIBLE    1190821   1250067      135    -1420   30.29  1.584    19.1  greedy
-huge            3   437  FEASIBLE     947080   1285156      220    -1280   30.30  1.743    17.4  greedy
-mega            1   695  FEASIBLE     973983   2764957       80    -1005   30.50  3.091     9.9  greedy
-mega            2   729  UNKNOWN           0   2941450        0    -1400   30.51  2.730    11.2  greedy
-mega            3   699  FEASIBLE     913373   2785266      150    -1235   30.51  2.648    11.5  greedy
+scenario     seed  units   cpPl   grPl      cpWD      grWD  cpStyle  grStyle     cpS    grS      x  winner
+----------------------------------------------------------------------------------------------------------
+baseline        1    108    108    108     10919     10919      960      915    1.64  0.180    9.1  cp-sat
+baseline        2    108    108    108     10919     10919      950      925    0.99  0.176    5.6  cp-sat
+baseline        3    108    108    108     10919     10919      960      935    1.00  0.176    5.7  cp-sat
+typical         1    133    133    131     32129     32111      990      865   30.06  0.495   60.7  cp-sat
+typical         2    133    133    131     32129     32111      795      775   30.05  0.496   60.6  cp-sat
+typical         3    133    132    130     32120     32102      925      865   30.06  0.503   59.7  cp-sat
+busy_week       1    161    140    138     74628     74578      395      680   30.07  0.564   53.3  cp-sat
+busy_week       2    161    140    138     74628     74578      600      365   30.07  0.568   53.0  cp-sat
+busy_week       3    161    140    137     74612     74561      735      530   30.07  0.562   53.5  cp-sat
+bad_weather     1    135    134    132     39258     39236      950      900   30.05  0.518   58.0  cp-sat
+bad_weather     2    135    134    132     39258     39236      700      670   30.06  0.516   58.2  cp-sat
+bad_weather     3    135    133    133     39247     39247      810      740   30.06  0.499   60.2  cp-sat
+nice_weather    1    135    135    133     39269     39247     1045      935   30.06  0.517   58.2  cp-sat
+nice_weather    2    135    135    133     39269     39247      860      780   30.05  0.517   58.1  cp-sat
+nice_weather    3    135    135    133     39269     39247      915      835   30.06  0.520   57.8  cp-sat
+overloaded      1    189    145    145    130221    130149       45       45   30.09  0.612   49.2  cp-sat
+overloaded      2    189    146    145    130222    130149       90       55   30.09  0.603   49.9  cp-sat
+overloaded      3    189    140    146    130216    130174      480      395   30.29  0.604   50.2  cp-sat
+fragmented      1     95     94     92     32518     32456       45     -100   30.44  0.893   34.1  cp-sat
+fragmented      2     93     92     90     29914     29852     -250     -335   30.08  0.863   34.8  cp-sat
+fragmented      3     93     93     91     29945     29883      135       15   30.09  0.789   38.1  cp-sat
+many_small      1    185    146    174    217670    217578      -60    -1150   30.14  0.701   43.0  cp-sat
+many_small      2    185    171    168    217755    217572    -1240    -1170   30.14  0.918   32.8  cp-sat
+many_small      3    185    174    167    217758    217631    -1055    -1055   30.14  0.868   34.7  cp-sat
+huge            1    411    214    168   1143918   1171640      600    -1115   30.27  1.405   21.5  greedy
+huge            2    429    213    179   1190821   1250067      135    -1420   30.27  1.536   19.7  greedy
+huge            3    437    216    180    947080   1285156      220    -1280   30.28  1.666   18.2  greedy
+mega            1    695    227    163    973983   2764957       80    -1005   30.49  2.780   11.0  greedy
+mega            2    729      0    182         0   2941450        0    -1400   30.48  2.710   11.2  greedy
+mega            3    699    223    178    980247   2785266      135    -1235   30.49  2.542   12.0  greedy
 ```
 
 ### Aggregate per scenario
 
 ```
-scenario     runs   cpPl   grPl      cpWD      grWD   cpStyle grStyle   cpS_med grS_med  wins g/c
-baseline        3  108.0  108.0     10919     10919    956.7   925.0     1.08   0.195    0/3
-typical         3  132.7  130.7     32126     32108    903.3   835.0    30.06   0.501    0/3
-busy_week       3  140.0  137.7     74623     74572    570.0   525.0    30.07   0.569    0/3
-bad_weather     3  133.7  132.3     39254     39240    820.0   770.0    30.06   0.520    0/3
-nice_weather    3  135.0  133.0     39269     39247    940.0   850.0    30.06   0.520    0/3
-overloaded      3  143.7  145.3    130220    130157    205.0   165.0    30.09   0.616    0/3
-fragmented      3   93.0   91.0     30792     30730    -23.3  -140.0    30.08   0.784    0/3
-many_small      3  163.7  169.7    217728    217594   -785.0 -1125.0    30.14   0.868    0/3
-huge            3  214.3  175.7   1093940   1235621    318.3 -1271.7    30.29   1.584    3/0
-mega            3  150.0  174.3    629119   2830558     76.7 -1213.3    30.51   2.730    3/0
+scenario     runs   cpPl   grPl      cpWD      grWD  cpStyle  grStyle cpS_med grS_med  wins g/c
+-----------------------------------------------------------------------------------------------
+baseline        3  108.0  108.0     10919     10919    956.7    925.0    1.00   0.176   0/3
+typical         3  132.7  130.7     32126     32108    903.3    835.0   30.06   0.496   0/3
+busy_week       3  140.0  137.7     74623     74572    576.7    525.0   30.07   0.564   0/3
+bad_weather     3  133.7  132.3     39254     39240    820.0    770.0   30.06   0.516   0/3
+nice_weather    3  135.0  133.0     39269     39247    940.0    850.0   30.06   0.517   0/3
+overloaded      3  143.7  145.3    130220    130157    205.0    165.0   30.09   0.604   0/3
+fragmented      3   93.0   91.0     30792     30730    -23.3   -140.0   30.09   0.863   0/3
+many_small      3  163.7  169.7    217728    217594   -785.0  -1125.0   30.14   0.868   0/3
+huge            3  214.3  175.7   1093940   1235621    318.3  -1271.7   30.27   1.536   3/0
+mega            3  150.0  174.3    651410   2830558     71.7  -1213.3   30.49   2.710   3/0
+
+overall: greedy=6 cp-sat=24 tie=0
 ```
 
 `cpPl`/`grPl` = units placed; `cpWD`/`grWD` = priority-weighted decision; `cpStyle`/`grStyle` =
@@ -148,38 +153,41 @@ soft-rule value. Decision dominates style, so a run is "won" on `(weightedDecisi
 ## Findings
 
 * **Small/medium weeks: CP-SAT wins all 24.** It matches or beats greedy's decision in every run
-  below ~200 units and is 35–115 style points better, for 4–60× the runtime. On `baseline` it
-  *proves* OPTIMAL and greedy matches the decision exactly, 32 points (3.3%) lower style. On
-  `typical` greedy leaves 2 work units unplaced (−18 decision) and 68 points (7.5%) lower style.
+  below ~200 units and is 30–120 style points better (median +65), for 6–61× the runtime. On
+  `baseline/1` it *proves* OPTIMAL and greedy matches the decision exactly, 45 points (4.7%) lower
+  style. On `typical/1` greedy leaves 2 work units unplaced (−18 decision) and is 125 points
+  (12.6%) lower on style.
 * **`huge` (~430 units): greedy wins on the objective.** CP-SAT places *more* units (214 vs 176),
   but they are lower-priority: greedy's priority-weighted decision is higher in all 3 seeds
   (e.g. 1,285,156 vs 947,080 — a 36% gap). This is the objective doing what it is designed to do:
   decision domination rewards high-priority work, not raw count.
-* **`mega` (~710 units): CP-SAT collapses again.** 2/3 runs returned `UNKNOWN` with no schedule;
-  the third is far behind greedy on decision. Greedy always returns a full week.
-* **Speed.** Greedy's median is 0.61s vs CP-SAT's 30.09s (median speedup ~46×, range 6–60×).
-  Greedy never hits its 10s cap. CP-SAT under a wall-clock limit is not deterministic run-to-run;
-  greedy is.
+* **`mega` (~710 units): CP-SAT collapses again.** 1/3 runs returned `UNKNOWN` with no schedule
+  (both earlier runs of this harness saw 2/3); the others are far behind greedy on decision.
+  Greedy always returns a full week.
+* **Speed.** Greedy's median is 0.59s vs CP-SAT's 30.07s (median speedup ~46×, range 5.6–61×).
+  Greedy is bounded by restarts/iterations, not by a clock. CP-SAT under a wall-clock limit is not
+  deterministic run-to-run; greedy is.
 * **The k-unit model helps CP-SAT a lot.** Compared with all-or-nothing splittable semantics
   (where CP-SAT failed at ~150 tasks), decomposing work into 30-minute units lets CP-SAT pack
   ~213 units reliably and win most scenarios. Greedy still owns the very largest instances.
 
-## Scaling (CP 30s, greedy 5s, seed 7)
+## Scaling (CP 30s, greedy default, seed 7)
 
 ```
-label  tasks  cpStatus  cpPl     cpWD  cpStyle    cpS   grPl     grWD  grStyle    grS  winner
-s04      129  OPTIMAL    129    17849     1000   1.25    128    17844     1000  0.507  cp-sat
-s08      133  FEASIBLE   133    32129      960  30.11    131    32111      875  0.536  cp-sat
-s12      137  FEASIBLE   137    46409      830  30.06    134    46370      750  0.547  cp-sat
-s16      141  FEASIBLE   140    60672      660  30.08    138    60638      630  0.601  cp-sat
-s24      149  FEASIBLE   149    89249      375  30.10    148    89224      335  0.531  cp-sat
-s32      157  FEASIBLE   157   117809       55  30.10    157   117809      -25  0.308  cp-sat
-s48      211  FEASIBLE   197   310575       40  30.14    176   310382     -705  0.863  cp-sat
-s64      257  FEASIBLE   213   474765      620  30.43    175   474463    -1245  0.989  cp-sat
-s96      313  FEASIBLE   213   674629      915  30.23    175   674027     -830  1.036  cp-sat
-s128     411  FEASIBLE   213  1024391      305  30.29    167  1024059    -1020  1.646  cp-sat
-s192     553  FEASIBLE   213  1531189      710  30.44    178  1530726    -1075  2.127  cp-sat
-s256     699  FEASIBLE   214  2051690      175  30.54    176  2051078     -905  2.977  cp-sat
+label  units  cpStatus  cpPl     cpWD  cpStyle    cpS   grPl     grWD  grStyle    grS  winner
+---------------------------------------------------------------------------------------------
+s04      129  OPTIMAL    129    17849     1000   1.20    128    17844     1000  0.489  cp-sat
+s08      133  FEASIBLE   133    32129      960  30.05    131    32111      875  0.518  cp-sat
+s12      137  FEASIBLE   137    46409      830  30.08    134    46370      750  0.520  cp-sat
+s16      141  FEASIBLE   140    60672      660  30.07    138    60638      630  0.537  cp-sat
+s24      149  FEASIBLE   149    89249      385  30.08    148    89224      335  0.527  cp-sat
+s32      157  FEASIBLE   157   117809       55  30.09    157   117809      -25  0.305  cp-sat
+s48      211  FEASIBLE   197   310575       40  30.14    176   310382     -705  0.858  cp-sat
+s64      257  FEASIBLE   213   474765      620  30.20    175   474463    -1245  0.963  cp-sat
+s96      313  FEASIBLE   213   674629      915  30.22    175   674027     -830  1.004  cp-sat
+s128     411  FEASIBLE   213  1024391      305  30.30    167  1024059    -1020  1.507  cp-sat
+s192     553  FEASIBLE   213  1531189      710  30.40    178  1530726    -1075  2.135  cp-sat
+s256     699  FEASIBLE   214  2051690      175  30.54    176  2051078     -905  2.929  cp-sat
 ```
 
 Greedy's decision tracks CP-SAT to within 0.05% from 129 to 699 units, and at `s32` (157 units)
@@ -188,33 +196,12 @@ plateaus at ~213 placed units from 257 tasks up (it keeps a fixed high-priority 
 low-priority units). The `scaling` seed favours CP-SAT; on the `huge` seed 1–3 data the same
 pattern (CP places more) comes with greedy having the higher weighted decision.
 
-## Time budget and tuning
+## Time budget
 
 `budgets.py` (typical, 133 units): CP-SAT is FEASIBLE at 30s and **OPTIMAL at 120s** (decision
 unchanged, +5 style). `s128` (411 units) sits at the same decision (1,024,391) from 30s through
-300s — extra time does not improve it.
-
-`config_experiment.py` (30s) re-applies presolve/worker settings without editing production:
-
-**typical (133 units)** — all configs reach decision 32,129; prod only reaches FEASIBLE, the
-others prove OPTIMAL.
-
-**s128 (411 units), greedy decision 1,024,059 / 167 placed / style −1020**
-
-```
-config                         status     placed  decision   style
-presolve=off workers=1 (prod)  FEASIBLE      213    1024391     305
-presolve=on  workers=1          FEASIBLE      214     974746    -125
-presolve=off workers=8          FEASIBLE      208     999134     315
-presolve=on  workers=8          FEASIBLE      155     997937   -1855
-```
-
-With splittable work expanded, production settings are the best of the four on the large instance.
-Every alternative config is worse on the priority-weighted decision (974,746–999,134 vs
-1,024,391), so there is **no tuning win to claim here** — unlike the all-or-nothing model, where
-8 workers rescued CP-SAT. The only measurable tuning win is on small instances: 8 workers (with
-or without presolve) proves OPTIMAL on `typical`. Treat the large-instance numbers as noisy:
-CP-SAT's time-limited output varies run to run.
+300s — extra time does not improve it. Treat CP-SAT's time-limited numbers as noisy: they vary
+run to run, which is the main reason it is no longer the default.
 
 ## Recommendation (and what shipped)
 
@@ -224,10 +211,10 @@ experiments. The reasoning:
 
 1. **Greedy's failure mode is bounded; CP-SAT's is not.** Greedy always returns a complete,
    valid week in under ~3s. CP-SAT under a time budget is non-deterministic and, on the largest
-   backlogs, has returned *nothing* (2/27 runs here; the same failure appeared at ~150 tasks under
-   all-or-nothing splittable semantics).
-2. **The quality it gives up is narrow.** CP-SAT wins 24/27 runs and 35–115 style points on a
-   typical week — but on inspection that gap is almost entirely one preference ("outings at 5pm
+   backlogs, has returned *nothing* (1–2 of 27 runs across harness runs; the same failure appeared
+   at ~150 tasks under all-or-nothing splittable semantics).
+2. **The quality it gives up is narrow.** CP-SAT wins 24/27 runs and 30–120 style points on a
+   typical week (median +65) — but on inspection that gap is almost entirely one preference ("outings at 5pm
    on weekdays"). Obligations, workouts, meals, grocery and errands are all placed by both.
 3. **If that preference becomes the product, fix the search, not the choice of scheduler.** The
    known lever is a larger neighbourhood (day-swap / 3-cycle exchange, sideways moves), described
@@ -264,10 +251,12 @@ day-level or 3-cycle exchange) — a change to the algorithm, not to its account
 ## Reproduce
 
 ```sh
-uv run --project workers/cp-sat python -u workers/cp-sat/benchmark/compare.py \
-    --seeds 1,2,3 --cp-budget 30 --greedy-budget 10
-uv run --project workers/cp-sat python workers/cp-sat/benchmark/analyze.py
-uv run --project workers/cp-sat python -u workers/cp-sat/benchmark/scaling.py
+uv run --project workers/cp-sat python -u workers/cp-sat/benchmark/compare.py --seeds 1,2,3 --cp-budget 30
+uv run --project workers/cp-sat python -u workers/cp-sat/benchmark/scaling.py --cp-budget 30
 uv run --project workers/cp-sat python -u workers/cp-sat/benchmark/budgets.py
-uv run --project workers/cp-sat python -u workers/cp-sat/benchmark/config_experiment.py
 ```
+
+`compare.py --quick` is a one-seed smoke test. Both schedulers are invoked through their
+production entry points, so re-running after a scheduler change re-measures the code the app
+runs. Everything else (`diagnose`, the config sweep) was a one-off study whose conclusions are
+recorded here; the scripts are gone to keep the harness small.

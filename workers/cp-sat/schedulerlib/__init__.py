@@ -9,6 +9,7 @@ single file has to hold the whole model. Imports are grouped by responsibility:
   * `rules`     — task/effect evaluation and hard eligibility.
   * `objective` — weighted-objective helpers and the compaction post-pass.
   * `greedy`    — the default greedy + local-search scheduler.
+  * `cp_sat`    — the optional integer-programming scheduler.
   * `solve`     — payload parsing, solver dispatch, and output shaping.
   * `main`      — stdin/stdout protocol.
 
@@ -16,7 +17,7 @@ The public names below are re-exported so the script and the unit tests can impo
 place.
 """
 
-from . import greedy
+from . import cp_sat, greedy
 from .config import DEFAULT_CONFIG, GREEDY_MODEL_VERSION, MODEL_VERSION
 from .objective import decision_weights
 from .rules import condition_matches, day_matches, rule_strength, window_slot_indices
@@ -32,6 +33,7 @@ __all__ = [
     "build_slots",
     "condition_matches",
     "day_matches",
+    "cp_sat",
     "decision_weights",
     "greedy",
     "parse_datetime",

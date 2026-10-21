@@ -16,7 +16,7 @@ pnpm monorepo. Packages import each other as **TypeScript source** (`"exports": 
 | `apps/web/src/api.ts` | The **only** place in the frontend that calls `fetch`. One typed method per endpoint. |
 | `apps/web/src/*Page.tsx` | Route-level pages. Own data fetching, polling, and error display. |
 | `apps/web/src/components/` | Presentational components. Receive data + callbacks via props; never fetch. |
-| `workers/cp-sat/scheduler.py` | Python OR-Tools solver. JSON in on stdin, JSON out on stdout. Never touches SQLite. |
+| `workers/cp-sat/scheduler.py` | Python scheduling worker (greedy default, CP-SAT optional). JSON in on stdin, JSON out on stdout. Never touches SQLite. |
 
 Commands:
 
@@ -119,17 +119,20 @@ useEffect(() => {
 ## Scheduling worker (`workers/cp-sat/scheduler.py`)
 
 - **Two solvers, one protocol.** `config.solver` selects them and `modelVersion` records the choice
-  on every stored run. `greedy` (`greedy-v1`) is the **production default**: priority-ordered
-  construction + relocate/insert/2-opt-swap/eject local search in `schedulerlib/greedy.py`. It is
+  on every stored run. `greedy` (`greedy-v1`, in `schedulerlib/greedy.py`) is the **production
+  default**: priority-ordered construction + relocate/insert/2-opt-swap/eject local search. It is
   deterministic (bounded by restarts/iterations, not wall clock), sub-second, and models a
   splittable task as k **independent** units so partially-finished work still gets scheduled.
-  `cp-sat` (`cp-sat-v8`) is optional and kept for experiments. Both share `_prepare` (eligibility
-  + weights) and the same output shaping, so nothing downstream cares which ran.
+  `cp-sat` (`cp-sat-v8`, in `schedulerlib/cp_sat.py`) is optional. `schedulerlib/solve.py` only
+  parses the payload (`_prepare`), dispatches on `config.solver`, and shapes the output; both
+  solvers expose `solve(ctx) -> (placement, status, objective)`. A third scheduler is one module
+  plus one branch there — do not merge solver code back into `solve.py`.
   `benchmark/REPORT.md` has the measured trade-off: greedy is ~46x faster and never returns an
-  empty week; CP-SAT scores 25-90 more style points on a typical week (it packs preferences like
-  "outings at 5pm" better). Don't rewrite one to imitate the other without re-running that harness.
+  empty week; CP-SAT scores 30-120 more style points on a typical week, median +65 (it packs
+  preferences like "outings at 5pm" better). Don't rewrite one to imitate the other without
+  re-running that harness.
 
-- Protocol (both solvers): `ScheduleService.generate()` sends `{ now, horizonDays, config, tasks, timeBlocks, weather, rules }` as JSON on stdin; worker prints one JSON object on stdout. The worker is a **pure function** (it uses the payload's `now`, never its own clock) and reports its own `modelVersion` (`cp-sat-v8`); `createScheduleRun` stores that value — **bump it when the problem/solution shape changes**.
+- Protocol (both solvers): `ScheduleService.generate()` sends `{ now, horizonDays, config, tasks, timeBlocks, weather, rules }` as JSON on stdin; worker prints one JSON object on stdout. The worker is a **pure function** (it uses the payload's `now`, never its own clock) and reports its own `modelVersion` (`greedy-v1` / `cp-sat-v8`); `createScheduleRun` stores that value — **bump it when the problem/solution shape changes**.
 - CP-SAT model: 30-minute slots over `config.dayStart`–`dayEnd` (00:00–24:00 default, full day) in `config.timeZone`, for `horizonDays`; runs may cross midnight. Accepted/completed blocks are busy, as are human-placed (`manual`) blocks even while still `proposed` (a manual block is a commitment; a solver proposal is ephemeral). Work is placed as **optional intervals**, not one boolean per slot: a non-splittable task is a single interval, a splittable task is that many 30-minute unit intervals (splitting is free — `min/maxChunkMinutes` are ignored), and one `NoOverlap` keeps every interval and fixed commitment apart. Rules compile into eligible start domains (hard) and a single weighted objective (soft) whose decision term is scaled above the soft total so a preference never drops a task; effects also cover per-day count budgets (`dailyBudget`), nice-weather gates/bonuses (`weatherGate`, evaluated per placement against `weather[]`), distinct-day spreading (`spread`), and prerequisite max-gaps (`withinAfter`). Effects may carry a placement-scoped `when.dayOfWeek`. `preferEarlier` is not an objective term: after solving, a greedy compaction pass pulls blocks earlier while preserving hard eligibility, soft windows/weather, spread/budget days, dependencies, and `withinAfter`. `minimizeChunks` is dropped. `cp_model_presolve = False` because the domain encoding makes CP-SAT presolve slow and can burn the budget before the first incumbent (see `workers/cp-sat/README.md`).
 - Errors: print `{"error": "..."}` and `exit 1`; `ScheduleService` converts that to a thrown `Error`.
 - Never import SQLite or the TS packages in the worker.
