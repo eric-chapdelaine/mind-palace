@@ -496,7 +496,6 @@ def solve(ctx, time_budget_seconds=None, restarts=12, max_iters=25):
 
     best = None
     best_score = None
-    completed = 0
     for restart in range(restarts):
         if construct_deadline is not None and restart > 0 and time.perf_counter() >= construct_deadline:
             break
@@ -511,7 +510,6 @@ def solve(ctx, time_budget_seconds=None, restarts=12, max_iters=25):
         if best_score is None or candidate_score > best_score:
             best_score = candidate_score
             best = scheduler
-        completed += 1
 
     placement = {}
     if best is not None:
