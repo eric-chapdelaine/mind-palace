@@ -10,13 +10,13 @@ pnpm monorepo. Packages import each other as **TypeScript source** (`"exports": 
 |---|---|
 | `apps/server/src/index.ts` | Composition root: creates `Database` → `TaskRepository` → services → Hono app. New services get wired here. |
 | `apps/server/src/http/app.ts` | All HTTP routes. Body validation/coercion + response shaping only. No business logic. |
-| `apps/server/src/services/*.ts` | Process & provider boundaries (CP-SAT subprocess, NWS fetch, provider normalization, recurrence materialization). |
+| `apps/server/src/services/*.ts` | Process & provider boundaries (scheduler subprocess, NWS fetch, provider normalization, recurrence materialization). |
 | `packages/database/src/` | `database.ts` (SQLite connection), `migrations/` (numbered schema history), `repositories/` (all SQL), `rows.ts` (row-coercion helpers). |
 | `packages/shared/src/index.ts` | Single source of truth for API contracts: `TaskSummary`, `TaskDetail`, `CreateTaskInput`, `UpdateTaskInput`, status enums, etc. |
 | `apps/web/src/api.ts` | The **only** place in the frontend that calls `fetch`. One typed method per endpoint. |
 | `apps/web/src/*Page.tsx` | Route-level pages. Own data fetching, polling, and error display. |
 | `apps/web/src/components/` | Presentational components. Receive data + callbacks via props; never fetch. |
-| `workers/cp-sat/scheduler.py` | Python OR-Tools solver. JSON in on stdin, JSON out on stdout. Never touches SQLite. |
+| `workers/cp-sat/scheduler.py` | Python scheduling worker (greedy default, CP-SAT optional). JSON in on stdin, JSON out on stdout. Never touches SQLite. |
 
 Commands:
 
@@ -40,8 +40,8 @@ pnpm build && pnpm start  # production; server also hosts apps/web/dist
 
 - `tasks` — the unified work item: kanban column (`kanban_status`), lifecycle (`lifecycle_status`), priority + rank (rank is the drag-order tiebreaker), `duration_minutes_remaining` (time not yet represented by a time block; `NULL`/0-remaining tasks are never auto-scheduled), earliest/deadline windows, `origin` (manual / calendar_import / recurrence). There is no parent-task column — parent/child relationships between tasks are expressed by shared tags (a parent task is mapped by a tag it and its children both carry, see `ensureTaskTag`).
 - `tags`, `tag_parents`, `task_tags` — multi-parent acyclic tag graph ("derived" tags = ancestors) and direct task assignments. `tags.public_id` starting with `mind-palace:` marks **reserved** tags: seeded by a migration (shipped defaults). Tags are selectors; behavior lives in scheduler rules, not in the tag.
-- `scheduler_rules` — the rule set the CP-SAT worker compiles into hard constraints and weighted soft terms (one objective, no tiers). A rule references any tag (seeded or user-created) through its `applies` condition; effects are `assignDays`, `timeWindow`, `preferTimeOfDay`, `spread`, `dailyBudget`, `weatherGate`, and `withinAfter`. The seeded rows are the default rule set (weekday pins).
-- `time_blocks`, `schedule_runs` — schedule results. Blocks carry a `type` (`work` default, `calendar_event` for fixed commitment windows) and `source` (manual / solver / calendar / recurrence); accepted blocks are **immutable** (repo enforces: accepted → only completed/missed). Creating a block subtracts its minutes from the task's `duration_minutes_remaining`; deleting or superseding gives them back. **Manual** (human-placed) blocks are commitments: they are not superseded by regeneration and reserve their slot in the worker. The CP-SAT worker emits one assignment per 30-minute slot; `ScheduleService` merges adjacent slots for the same task into a single contiguous block before persisting, so a 10:00-11:00 block is stored as one row, not two half-hour rows. Schedule runs store the exact solver input/output JSON for reproducibility.
+- `scheduler_rules` — the rule set the scheduling worker compiles into hard constraints and weighted soft terms (one objective, no tiers). A rule references any tag (seeded or user-created) through its `applies` condition; effects are `assignDays`, `timeWindow`, `preferTimeOfDay`, `spread`, `dailyBudget`, `weatherGate`, and `withinAfter`. The seeded rows are the default rule set (weekday pins).
+- `time_blocks`, `schedule_runs` — schedule results. Blocks carry a `type` (`work` default, `calendar_event` for fixed commitment windows) and `source` (manual / solver / calendar / recurrence); accepted blocks are **immutable** (repo enforces: accepted → only completed/missed). Creating a block subtracts its minutes from the task's `duration_minutes_remaining`; deleting or superseding gives them back. **Manual** (human-placed) blocks are commitments: they are not superseded by regeneration and reserve their slot in the worker. The worker emits one assignment per 30-minute slot; `ScheduleService` merges adjacent slots for the same task into a single contiguous block before persisting, so a 10:00-11:00 block is stored as one row, not two half-hour rows. Schedule runs store the exact solver input/output JSON for reproducibility.
 - `recurrence_rules`, `recurrence_occurrences` — routine templates and the child tasks they generated (one per date).
 - `integration_accounts`, `external_task_mappings` — provider identity; mappings make calendar/garmin imports idempotent. Raw provider payloads are never stored.
 - `sleep_sessions`, `health_activities` — normalized Garmin Connect facts (one table per health domain: a night's sleep and a recorded activity). Populated only by the Garmin sync service (`GarminService` + `workers/garmin/`); shown as read-only context in the schedule and on `/health_observation/:id` / `/health_activity/:id`, never schedulable tasks. Garmin-owned columns (including `health_activities.provider_title`) are refreshed on every sync, while `health_activities.title` and both tables' `notes` are owner-owned and never overwritten by a sync. `health_observations` (migration 001) is the earlier generic table and is no longer written.
@@ -58,7 +58,7 @@ pnpm build && pnpm start  # production; server also hosts apps/web/dist
 
 ### Services (`apps/server/src/services/`)
 
-- Own anything that is a **process or provider boundary**: spawning the CP-SAT worker, fetching NWS weather, normalizing Garmin/calendar payloads, materializing recurrences.
+- Own anything that is a **process or provider boundary**: spawning the scheduler worker, fetching NWS weather, normalizing Garmin/calendar payloads, materializing recurrences.
 - Services call repository methods and return domain objects. They never write SQL and never import `Database`.
 - New behavior that just reads/writes rows usually needs **no service at all** — call the repository directly from the route (e.g. `GET /api/tasks`).
 
@@ -116,10 +116,24 @@ useEffect(() => {
 
 - Plain CSS in `apps/web/src/styles.css` only. System fonts, neutral borders, native-HTML feel. No CSS framework, no Tailwind, no CSS-in-JS. Add utility-ish classes there as the design needs them; the existing naming (`detail-`, `calendar-`, `task-card-`) is the convention.
 
-## CP-SAT worker (`workers/cp-sat/scheduler.py`)
+## Scheduling worker (`workers/cp-sat/scheduler.py`)
 
-- Protocol: `ScheduleService.generate()` sends `{ now, horizonDays, config, tasks, timeBlocks, weather, rules }` as JSON on stdin; worker prints one JSON object on stdout. The worker is a **pure function** (it uses the payload's `now`, never its own clock) and reports its own `modelVersion` (`cp-sat-v8`); `createScheduleRun` stores that value — **bump it when the problem/solution shape changes**.
-- Model: 30-minute slots over `config.dayStart`–`dayEnd` (00:00–24:00 default, full day) in `config.timeZone`, for `horizonDays`; runs may cross midnight. Accepted/completed blocks are busy, as are human-placed (`manual`) blocks even while still `proposed` (a manual block is a commitment; a solver proposal is ephemeral). Work is placed as **optional intervals**, not one boolean per slot: a non-splittable task is a single interval, a splittable task is that many 30-minute unit intervals (splitting is free — `min/maxChunkMinutes` are ignored), and one `NoOverlap` keeps every interval and fixed commitment apart. Rules compile into eligible start domains (hard) and a single weighted objective (soft) whose decision term is scaled above the soft total so a preference never drops a task; effects also cover per-day count budgets (`dailyBudget`), nice-weather gates/bonuses (`weatherGate`, evaluated per placement against `weather[]`), distinct-day spreading (`spread`), and prerequisite max-gaps (`withinAfter`). Effects may carry a placement-scoped `when.dayOfWeek`. `preferEarlier` is not an objective term: after solving, a greedy compaction pass pulls blocks earlier while preserving hard eligibility, soft windows/weather, spread/budget days, dependencies, and `withinAfter`. `minimizeChunks` is dropped. `cp_model_presolve = False` because the domain encoding makes CP-SAT presolve slow and can burn the budget before the first incumbent (see `workers/cp-sat/README.md`).
+- **Two solvers, one protocol.** `config.solver` selects them and `modelVersion` records the choice
+  on every stored run. `greedy` (`greedy-v1`, in `schedulerlib/greedy.py`) is the **production
+  default**: priority-ordered construction + relocate/insert/2-opt-swap/eject local search. It is
+  deterministic (bounded by restarts/iterations, not wall clock), sub-second, and models a
+  splittable task as k **independent** units so partially-finished work still gets scheduled.
+  `cp-sat` (`cp-sat-v8`, in `schedulerlib/cp_sat.py`) is optional. `schedulerlib/solve.py` only
+  parses the payload (`_prepare`), dispatches on `config.solver`, and shapes the output; both
+  solvers expose `solve(ctx) -> (placement, status, objective)`. A third scheduler is one module
+  plus one branch there — do not merge solver code back into `solve.py`.
+  `benchmark/REPORT.md` has the measured trade-off: greedy is ~46x faster and never returns an
+  empty week; CP-SAT scores 30-120 more style points on a typical week, median +65 (it packs
+  preferences like "outings at 5pm" better). Don't rewrite one to imitate the other without
+  re-running that harness.
+
+- Protocol (both solvers): `ScheduleService.generate()` sends `{ now, horizonDays, config, tasks, timeBlocks, weather, rules }` as JSON on stdin; worker prints one JSON object on stdout. The worker is a **pure function** (it uses the payload's `now`, never its own clock) and reports its own `modelVersion` (`greedy-v1` / `cp-sat-v8`); `createScheduleRun` stores that value — **bump it when the problem/solution shape changes**.
+- CP-SAT model: 30-minute slots over `config.dayStart`–`dayEnd` (00:00–24:00 default, full day) in `config.timeZone`, for `horizonDays`; runs may cross midnight. Accepted/completed blocks are busy, as are human-placed (`manual`) blocks even while still `proposed` (a manual block is a commitment; a solver proposal is ephemeral). Work is placed as **optional intervals**, not one boolean per slot: a non-splittable task is a single interval, a splittable task is that many 30-minute unit intervals (splitting is free — `min/maxChunkMinutes` are ignored), and one `NoOverlap` keeps every interval and fixed commitment apart. Rules compile into eligible start domains (hard) and a single weighted objective (soft) whose decision term is scaled above the soft total so a preference never drops a task; effects also cover per-day count budgets (`dailyBudget`), nice-weather gates/bonuses (`weatherGate`, evaluated per placement against `weather[]`), distinct-day spreading (`spread`), and prerequisite max-gaps (`withinAfter`). Effects may carry a placement-scoped `when.dayOfWeek`. `preferEarlier` is not an objective term: after solving, a greedy compaction pass pulls blocks earlier while preserving hard eligibility, soft windows/weather, spread/budget days, dependencies, and `withinAfter`. `minimizeChunks` is dropped. `cp_model_presolve = False` because the domain encoding makes CP-SAT presolve slow and can burn the budget before the first incumbent (see `workers/cp-sat/README.md`).
 - Errors: print `{"error": "..."}` and `exit 1`; `ScheduleService` converts that to a thrown `Error`.
 - Never import SQLite or the TS packages in the worker.
 

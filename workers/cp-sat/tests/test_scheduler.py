@@ -50,12 +50,14 @@ def task(task_id, **overrides):
     return base
 
 
-def payload(tasks, rules=None, config=None, time_blocks=None, horizon_days=7, weather=None):
+def payload(tasks, rules=None, config=None, time_blocks=None, horizon_days=7, weather=None, solver="cp-sat"):
+    """A worker payload. These tests cover the CP-SAT model, so `solver` defaults to it even
+    though the worker's production default is the greedy scheduler (`test_greedy.py`)."""
     return {
         "modelVersion": S.MODEL_VERSION,
         "now": NOW.isoformat(),
         "horizonDays": horizon_days,
-        "config": config or {},
+        "config": {"solver": solver, **(config or {})},
         "tasks": tasks,
         "timeBlocks": time_blocks or [],
         "weather": weather or [],
