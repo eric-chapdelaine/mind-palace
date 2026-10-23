@@ -12,7 +12,8 @@ The Hono server is the single-owner control plane and sole SQLite writer. It hos
 - `POST /api/tasks/:id/recurrence`, `POST /api/recurrences/materialize`: recurring template support.
 - `GET /api/weather`, `POST /api/weather/refresh`: cached Boston forecast.
 - `GET /api/jobs`: background job scheduler status.
-- `POST /api/integrations/calendar/import`: normalized Google Calendar event import.
+- `POST /api/integrations/calendar/import`: normalized Google Calendar event import (manual/legacy push endpoint; the live integration is the two-way sync below).
+- `GET /api/integrations/google-calendar/status`, `POST .../auth-url`, `POST .../sync`, `POST .../disconnect`, `GET .../callback`: Google Calendar OAuth + reconcile.
 - `POST /api/integrations/garmin/import`, `GET /api/health-observations`: plan-versus-actual health data.
 - `POST /api/tasks/:id/lifecycle`: lifecycle transitions such as `archived`.
 
@@ -48,6 +49,26 @@ Garmin import:
 ```
 
 Provider-specific clients should produce these normalized shapes. Do not pass raw provider payloads into repositories.
+
+## Google Calendar sync
+
+`services/google-calendar-service.ts` owns the reconcile loop; `services/google-calendar-client.ts` owns
+the Google HTTP/OAuth boundary and the token store. One `calendar_event` task ⇄ one event.
+
+- **Pull first, then push.** Google is authoritative for commitments that originated there; the
+  push is computed from SQLite on every pass, so a dropped push self-heals on the next tick.
+- **Echo suppression.** A pull skips an event whose `updated` is not newer than the mapping's
+  `last_pushed_at`; a push skips an event whose local edit is not newer than `local_synced_at`.
+  Both watermarks are written after each successful write.
+- **Tombstones.** A cancelled event cancels the mapped task and keeps the mapping so the event is
+  never re-imported. Cancelling a task deletes its event and clears the mapping.
+- **Adoption.** An unmapped event carrying `extendedProperties.private.mindPalaceTaskId` is adopted
+  instead of duplicated, so losing a mapping row cannot fork a commitment.
+- **All-day events are skipped** by default (`importAllDay: false`); set it in the integration's
+  `config_json` to import them as 24h commitments.
+
+The offline smoke harness drives the whole loop against a stubbed client:
+`pnpm --filter @mind-palace/server exec tsx scripts/google-calendar-smoke.ts`.
 
 ## Security
 

@@ -100,7 +100,59 @@ env-based secrets, add them to the unit, not to `.env`.
 Integrations read their own environment on top of these. Garmin Connect
 uses `GARMINTOKENSTORE` to locate its credential/token store; it is
 optional (the server falls back to `~/.garminconnect` then `~/.garth`) and
-only matters once you authenticate — see [§9](#9-optional-integrations-garmin-connect).
+only matters once you authenticate — see [§9](#9-optional-integrations-garmin-connect-google-calendar).
+
+Google Calendar needs an OAuth **client** (not a token) plus its own token
+store. Set in the systemd unit:
+
+```ini
+Environment=GOOGLE_CALENDAR_CLIENT_ID=...apps.googleusercontent.com
+Environment=GOOGLE_CALENDAR_CLIENT_SECRET=...
+Environment=GOOGLE_CALENDAR_TOKEN_STORE=/home/pi/.config/mind-palace/google-calendar.json
+Environment=PUBLIC_BASE_URL=https://mind-palace.<tailnet>.ts.net:4310
+```
+
+The token store defaults to `~/.config/mind-palace/google-calendar.json`, so
+that line is optional. **`PUBLIC_BASE_URL` matters:** the server builds its
+OAuth redirect URI from it (default `http://127.0.0.1:4310`) because `HOST`
+becomes `0.0.0.0` in production, which Google rejects as a redirect target.
+The authorized redirect URI in the Google console must be exactly
+`$PUBLIC_BASE_URL/api/integrations/google-calendar/callback`. Register one
+redirect URI per origin you actually browse from (the Tailscale name, and
+`http://127.0.0.1:4310/...` for local debugging), then set `PUBLIC_BASE_URL`
+to the origin you'll click Connect from. Alternatively drop the downloaded
+`google-oauth-client.json` beside the token store and skip the two client env
+lines.
+
+### Google Calendar
+
+1. **Create the OAuth client** in the Google Cloud console (APIs & Services →
+   Credentials → *OAuth client ID* → *Web application*), enable the **Google
+   Calendar API**, and add the redirect URI(s) above. Scope requested is
+   `https://www.googleapis.com/auth/calendar.events` (events only, not the whole
+   calendar list).
+2. **Connect** by opening the Schedule page and clicking **Connect Google
+   Calendar**; consent writes the refresh token to the store. Do not copy the
+   store between machines — each deployment completes its own consent (the
+   refresh token is bound to the client + user, and the Pi is the only writer).
+3. **Verify**:
+
+   ```sh
+   curl -s http://localhost:4310/api/integrations | grep google-calendar
+   ```
+
+   `connected:true` shows the sync chip on `/schedule` and makes
+   `calendar_event` blocks draggable.
+4. **Syncing is already scheduled** — a 5-minute reconcile tick in
+   `apps/server/src/jobs.ts` plus an immediate debounced push after local edits.
+   `POST /api/integrations/google-calendar/sync` forces a pass; `/api/jobs`
+   reports the tick's last run.
+5. **Disconnect** with the chip's *Disconnect* button — it clears the refresh
+   token in the store, so the next sync/status check reports `connected:false`.
+   Mirrored tasks stay in Mind Palace and their events stay in Google; the
+   events simply stop being updated. Revoke the app's access in the Google
+   account's third-party permissions page if you want the grant invalidated as
+   well.
 
 ## 4. First manual run (sanity check before systemd)
 
@@ -136,6 +188,8 @@ Environment=HOST=0.0.0.0
 Environment=PORT=4310
 Environment=DATABASE_PATH=/home/pi/mind-palace/mind-palace.db
 Environment=GARMINTOKENSTORE=/home/pi/.garminconnect
+# Only if you use Google Calendar (§9): the origin browsers reach the server on.
+# Environment=PUBLIC_BASE_URL=http://rpi:4310
 ExecStart=/home/pi/.local/share/pnpm/bin/pnpm --filter @mind-palace/server start
 Restart=on-failure
 RestartSec=5
@@ -164,6 +218,11 @@ Details that matter:
 - **`Environment=GARMINTOKENSTORE` is optional** but recommended: it pins
   the token store path so the server doesn't have to guess the home
   directory under systemd. Harmless if you never authenticate.
+- **`Environment=PUBLIC_BASE_URL` is only for Google Calendar.** `HOST=0.0.0.0`
+  cannot be used to build the OAuth redirect URI (Google rejects it), so the
+  server falls back to `http://127.0.0.1:4310`. Set this to the origin you
+  actually browse from and register the matching callback in the Google console
+  — see [§9](#9-optional-integrations-garmin-connect-google-calendar).
 - **`ExecStart` uses the absolute pnpm path**
   (`~/.local/share/pnpm/bin/pnpm`): systemd does not run your login shell,
   so it would otherwise not find pnpm or node.
@@ -277,7 +336,7 @@ cp /tmp/restore.db ~/mind-palace/mind-palace.db
 sudo systemctl start mind-palace.service   # server migrates forward if the snapshot is older
 ```
 
-## 9. Optional integrations (Garmin Connect)
+## 9. Optional integrations (Garmin Connect, Google Calendar)
 
 The app ships an optional Garmin Connect integration: it syncs sleep and
 recorded activities and shows them as read-only context on the Schedule

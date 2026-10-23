@@ -75,7 +75,30 @@ Only the TypeScript control plane writes SQLite. The scheduling worker accepts J
 
 ## Integration State
 
-Weather fetching and scheduling are operational. Google Calendar uses a normalized import endpoint in v0, allowing provider-specific OAuth and polling to be added without changing the domain model. Garmin Connect syncs sleep and recorded activities through the Python worker and stores only normalized rows in `sleep_sessions` / `health_activities`; raw provider payloads are not retained.
+Weather fetching and scheduling are operational. Google Calendar syncs two-way: `calendar_event` tasks mirror to events in a connected Google calendar and events created or edited there mirror back as `calendar_event` tasks. Garmin Connect syncs sleep and recorded activities through the Python worker and stores only normalized rows in `sleep_sessions` / `health_activities`; raw provider payloads are not retained.
+
+## Google Calendar
+
+OAuth is the switch: nothing runs until a token store exists, so a fresh install behaves exactly as
+before Google Calendar support. Create one by visiting the Schedule page and clicking
+**Connect Google Calendar** — the server opens Google's consent screen and writes the refresh token
+to `$GOOGLE_CALENDAR_TOKEN_STORE` (default `~/.config/mind-palace/google-calendar.json`, never
+committed).
+Both `GOOGLE_CALENDAR_CLIENT_ID` and `GOOGLE_CALENDAR_CLIENT_SECRET` must be set, and the OAuth
+client's redirect URI must be `<server>/api/integrations/google-calendar/callback`.
+
+Once connected, a task whose time block is type `calendar_event` is pushed to Google within about a
+second of being created, renamed, moved, or cancelled. Events in Google's sync window (1 day back,
+30 days forward by default) are pulled in on the same schedule; all-day events are skipped by
+default (`importAllDay` in the integration's `config_json`). A 5-minute interval tick is the safety
+net for dropped pushes and edits made while the server was down, and
+`POST /api/integrations/google-calendar/sync` forces a pass on demand. Design and the
+direction-of-truth table live in `docs/google-calendar-sync.md`; the reconcile loop's smoke harness
+is `apps/server/scripts/google-calendar-smoke.ts` (no network, stubbed client):
+
+```sh
+pnpm --filter @mind-palace/server exec tsx scripts/google-calendar-smoke.ts
+```
 
 ## Garmin Connect
 
@@ -105,6 +128,8 @@ tick can land at any moment and `runOnStart` can fire on a restart. Current jobs
 
 - `weather-refresh` — pinned at 00:00, 08:00, 16:00 `America/New_York` (matches the eight-hour cache).
 - `garmin-sync` — pinned at 11:00 `America/New_York`; no-ops until a Garmin token store exists.
+- `google-calendar-sync` — every 5 minutes; no-ops until Google Calendar is connected, and
+  incremental reads make an unchanged pull a single request.
 
 The nightly database backup is deliberately *not* here: it runs on the dev machine and needs
 `Persistent=true`, so it stays a systemd user timer (see `docs/running-on-rpi.md` §8).

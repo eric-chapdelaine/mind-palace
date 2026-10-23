@@ -306,6 +306,13 @@ body.dragging .task-card:hover .task-card-expand > div { opacity: 0; }
 .calendar-event.health-event time, .calendar-event.health-event span { color: inherit; opacity: .85; }
 .garmin-sync { display: flex; align-items: center; gap: .5rem; margin-left: auto; }
 .garmin-sync-error { color: #a33; font-size: .85rem; }
+/* Secondary inline action (e.g. Disconnect) that should not compete with the primary buttons. */
+.link-button { border: none; background: none; padding: 0; color: #666; font-size: .85rem; text-decoration: underline; }
+.link-button:hover { color: #222; }
+.link-button:disabled { cursor: wait; }
+/* A mirrored commitment is draggable when Google Calendar is connected; make that legible. */
+.calendar-event.calendar-event-fixed.calendar-event-movable { cursor: grab; }
+.calendar-event.calendar-event-fixed.calendar-event-movable:hover { filter: brightness(.97); box-shadow: 0 1px 4px #0002; }
 .health-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .25rem 1rem; margin: 0; }
 .health-metric { display: grid; gap: .1rem; border-bottom: 1px solid #eee; padding: .35rem 0; }
 .health-metric dt { color: #666; font-size: .78rem; }
