@@ -11,7 +11,7 @@ import {
   type WeatherForecast,
 } from "@mind-palace/shared";
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "./api";
 import { formatClock, formatMinutes } from "./lib/health";
 
@@ -249,6 +249,9 @@ export function SchedulePage() {
   const [sleepSessions, setSleepSessions] = useState<SleepSession[]>([]);
   const [healthActivities, setHealthActivities] = useState<HealthActivity[]>([]);
   const [garmin, setGarmin] = useState<IntegrationSummary | null>(null);
+  const [googleCalendar, setGoogleCalendar] = useState<IntegrationSummary | null>(null);
+  const [calendarBusy, setCalendarBusy] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [rangeStart, setRangeStart] = useState(() => startOfDay(new Date()));
   const [busy, setBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -305,11 +308,13 @@ export function SchedulePage() {
   // The integration is gated on authentication: only ask for (and render) Garmin context once a
   // token store exists. `connected` comes from GET /api/integrations, so this stays generic.
   const garminConnected = garmin?.connected ?? false;
+  const calendarConnected = googleCalendar?.connected ?? false;
 
   async function loadIntegrations() {
     try {
       const list = await api.integrations();
       setGarmin(list.find((entry) => entry.key === "garmin") ?? null);
+      setGoogleCalendar(list.find((entry) => entry.key === "google-calendar") ?? null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError));
     }
@@ -318,6 +323,55 @@ export function SchedulePage() {
   useEffect(() => {
     void loadIntegrations();
   }, []);
+
+  // The OAuth callback lands back here with `?calendar=connected|error`; clear it so a reload does
+  // not replay the message, and refresh the integration chip right away.
+  useEffect(() => {
+    const outcome = searchParams.get("calendar");
+    if (!outcome) return;
+    if (outcome === "error") {
+      setError(`Google Calendar authorization failed: ${searchParams.get("reason") ?? "unknown error"}`);
+    }
+    setSearchParams({}, { replace: true });
+    void loadIntegrations();
+    void load();
+  }, [searchParams]);
+
+  async function connectGoogleCalendar() {
+    setCalendarBusy(true);
+    try {
+      const { url } = await api.googleCalendarAuthUrl();
+      // Full-page navigation: Google's consent screen cannot be framed.
+      window.location.assign(url);
+    } catch (connectError) {
+      setError(connectError instanceof Error ? connectError.message : String(connectError));
+      setCalendarBusy(false);
+    }
+  }
+
+  async function syncGoogleCalendar() {
+    setCalendarBusy(true);
+    try {
+      await api.googleCalendarSync();
+      await Promise.all([loadIntegrations(), load()]);
+    } catch (syncError) {
+      setError(syncError instanceof Error ? syncError.message : String(syncError));
+    } finally {
+      setCalendarBusy(false);
+    }
+  }
+
+  async function disconnectGoogleCalendar() {
+    setCalendarBusy(true);
+    try {
+      await api.googleCalendarDisconnect();
+      await loadIntegrations();
+    } catch (disconnectError) {
+      setError(disconnectError instanceof Error ? disconnectError.message : String(disconnectError));
+    } finally {
+      setCalendarBusy(false);
+    }
+  }
 
   async function loadHealth() {
     const from = addDays(rangeStart, -1).toISOString();
@@ -553,7 +607,9 @@ export function SchedulePage() {
     const rect = event.currentTarget.getBoundingClientRect();
     if (blockRaw !== "") {
       const block = schedule?.timeBlocks.find((entry) => entry.id === Number(blockRaw));
-      if (!block || block.status !== "proposed") return;
+      // Mirrored commitments are movable too, but only while the Google connection can take the move.
+      const draggable = block && (block.status === "proposed" || (block.type === "calendar_event" && calendarConnected));
+      if (!block || !draggable) return;
       const durationMinutes = (new Date(block.endAt).getTime() - new Date(block.startAt).getTime()) / 60_000;
       const cursorMinutes = (event.clientY - rect.top) / hourHeight * 60 - blockGrabOffsetMinutes.current;
       try {
@@ -644,6 +700,23 @@ export function SchedulePage() {
       <button className="primary-button" disabled={busy} onClick={() => void generate()}>
         {busy ? "Optimizing..." : "Generate schedule"}
       </button>
+      <div className="garmin-sync">
+        {calendarConnected
+          ? <>
+            <button onClick={() => void syncGoogleCalendar()} disabled={calendarBusy}>
+              {calendarBusy ? "Syncing calendar..." : "Sync Google Calendar"}
+            </button>
+            {googleCalendar?.lastError
+              ? <span className="garmin-sync-error" title={googleCalendar.lastError}>Calendar error</span>
+              : googleCalendar?.lastSyncedAt
+                ? <span className="muted">Calendar synced {new Date(googleCalendar.lastSyncedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+                : <span className="muted">Calendar never synced</span>}
+            <button className="link-button" onClick={() => void disconnectGoogleCalendar()} disabled={calendarBusy}>Disconnect</button>
+          </>
+          : <button onClick={() => void connectGoogleCalendar()} disabled={calendarBusy}>
+            {calendarBusy ? "Connecting..." : "Connect Google Calendar"}
+          </button>}
+      </div>
       {garmin?.connected && <div className="garmin-sync">
         <button onClick={() => void syncGarmin()} disabled={syncing}>
           {syncing ? "Syncing Garmin..." : "Sync Garmin"}
@@ -829,14 +902,15 @@ export function SchedulePage() {
                 // Calendar imports are fixed commitments the solver cannot move; tint them like the
                 // Garmin health windows so they read as external time rather than schedulable work.
                 const fixed = block.type === "calendar_event";
-                // Proposed blocks can be dragged to a new time; accepted/imported blocks cannot.
-                const movable = block.status === "proposed" && !fixed;
+                // Proposed blocks can be dragged to a new time. A mirrored commitment is draggable
+                // once Google Calendar is connected: the move is pushed back as an event patch.
+                const movable = block.status === "proposed" || (fixed && calendarConnected);
 
                 return <article
                   className={`calendar-event block-${block.status}${fixed ? " calendar-event-fixed" : ""} ${compact ? "calendar-event-compact" : ""} ${new Date(block.endAt) <= now ? "schedule-past" : ""}${movable ? " calendar-event-movable" : ""}${draggingBlockId === block.id ? " calendar-event-dragging" : ""}`}
                   key={`${block.key}-${day.toISOString()}`}
                   style={{ top, height }}
-                  title={`${title}: ${startLabel} - ${endLabel}${movable ? " — drag to move" : ""}`}
+                  title={`${title}: ${startLabel} - ${endLabel}${movable && fixed ? " — drag to move (also moves the Google event)" : movable ? " — drag to move" : ""}`}
                   draggable={movable}
                   onDragStart={(event) => { if (movable) startBlockDrag(event, block.id); }}
                   onDragEnd={endBlockDrag}

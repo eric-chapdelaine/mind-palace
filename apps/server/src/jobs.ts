@@ -1,4 +1,5 @@
 import type { GarminService } from "./services/garmin-service.js";
+import type { GoogleCalendarService } from "./services/google-calendar-service.js";
 import type { ScheduledJob } from "./services/job-scheduler.js";
 import type { WeatherService } from "./services/weather-service.js";
 
@@ -13,7 +14,11 @@ const TIME_ZONE = "America/New_York";
  * Jobs must be idempotent: an interval tick or pinned time can land at any moment, and `runOnStart`
  * can fire on a restart. Prefer a cheap "is anything actually due?" check inside `run`.
  */
-export function scheduledJobs({ weather, garmin }: { weather: WeatherService; garmin: GarminService }): ScheduledJob[] {
+export function scheduledJobs({ weather, garmin, calendarSync }: {
+  weather: WeatherService;
+  garmin: GarminService;
+  calendarSync: GoogleCalendarService;
+}): ScheduledJob[] {
   return [
     {
       name: "weather-refresh",
@@ -32,6 +37,17 @@ export function scheduledJobs({ weather, garmin }: { weather: WeatherService; ga
       run: async () => {
         if (!garmin.status().connected) return;
         await garmin.sync();
+      },
+    },
+    {
+      name: "google-calendar-sync",
+      // Reconciliation, so a missed tick catches up on the next one; incremental reads make an
+      // unchanged pull a single request returning zero items. Local edits push within ~1s via
+      // `queuePush()`; this interval is the safety net (dropped push, change made elsewhere).
+      schedule: { kind: "interval", everyMs: 5 * 60_000 },
+      run: async () => {
+        if (!calendarSync.isConnected()) return;
+        await calendarSync.sync();
       },
     },
   ];

@@ -214,6 +214,64 @@ export interface UpdateHealthActivityInput {
   notes?: string | null;
 }
 
+/**
+ * Settings for the Google Calendar integration, stored in `integration_accounts.config_json`.
+ * `calendarId` is the one calendar mirrored in both directions; events that exist there are the
+ * commitments, and every `calendar_event` task is one event there.
+ */
+export interface CalendarSyncConfig {
+  calendarId: string;
+  calendarSummary: string | null;
+  timeZone: string;
+  /** All-day events (birthdays, holidays) are skipped unless this is true. */
+  importAllDay: boolean;
+  /** Days after today that the pull covers. */
+  windowDays: number;
+}
+
+/** One `calendar_event` task linked to a Google event (the pull/push working set). */
+export interface CalendarEventTask {
+  taskId: number;
+  publicId: string;
+  title: string;
+  description: string | null;
+  kanbanStatus: KanbanStatus;
+  lifecycleStatus: LifecycleStatus;
+  blockId: number;
+  startAt: string;
+  endAt: string;
+  /** Google event id, or null when the task has not been pushed yet. */
+  externalId: string | null;
+  /** The event's own `updated` timestamp as last seen. */
+  externalUpdatedAt: string | null;
+  /** When this app last wrote the event; older Google updates are the echo of that write. */
+  lastPushedAt: string | null;
+  /** Newest local edit already mirrored; anything newer than this still needs a push. */
+  localSyncedAt: string | null;
+  /** Set once the Google event was deleted (mapping kept as a tombstone). */
+  externalDeletedAt: string | null;
+  /** Local edit clocks: a push is needed when either is newer than `lastPushedAt`. */
+  taskUpdatedAt: string;
+  blockUpdatedAt: string | null;
+}
+
+/** `GET /api/integrations/google-calendar/status`: connection state + the mirrored calendar. */
+export interface GoogleCalendarStatus extends IntegrationConnection {
+  /** Google's incremental `nextSyncToken`; null until the first full window walk. */
+  syncCursor: string | null;
+  config: CalendarSyncConfig | null;
+}
+
+/** Result of a Google Calendar two-way sync pass (pull first, then push). */
+export interface CalendarSyncResult {
+  pulled: number;
+  pushed: number;
+  deleted: number;
+  /** Events ignored on purpose: all-day, `cancelled` without a mapping, or out of window. */
+  skipped: number;
+  syncedAt: string;
+}
+
 /** Result of a manual or scheduled Garmin Connect sync. */
 export interface GarminSyncResult {
   sleepImported: number;

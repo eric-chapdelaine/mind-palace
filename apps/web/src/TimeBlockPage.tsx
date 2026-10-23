@@ -21,6 +21,7 @@ export function TimeBlockPage() {
   const [endAt, setEndAt] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [calendarConnected, setCalendarConnected] = useState(false);
 
   async function load() {
     try {
@@ -37,6 +38,10 @@ export function TimeBlockPage() {
 
   useEffect(() => {
     void load();
+    // Only the mirrored-commitment hint depends on this; a failed lookup just hides the note.
+    void api.integrations()
+      .then((list) => setCalendarConnected(list.some((entry) => entry.key === "google-calendar" && entry.connected)))
+      .catch(() => setCalendarConnected(false));
   }, [id]);
 
   async function save(event: FormEvent) {
@@ -99,6 +104,9 @@ export function TimeBlockPage() {
               ? "A calendar event keeps 0 minutes remaining — this block is the whole commitment."
               : "Editing the window moves time in or out of the task's remaining estimate."}
           </p>
+          {block.type === "calendar_event" && block.source === "calendar" && calendarConnected && (
+            <p className="muted">Mirrored to Google Calendar — a time change here is pushed to the linked event.</p>
+          )}
         </div>
         <div className="detail-actions">
           <button className="mini-block-delete" onClick={() => void deleteBlock()} disabled={busy}>Delete block</button>

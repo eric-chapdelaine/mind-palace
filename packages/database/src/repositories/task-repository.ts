@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import {
   reservedTagPublicIds,
+  type CalendarEventTask,
+  type CalendarSyncConfig,
   type CreateTagInput,
   type CreateTaskInput,
   type CreateTimeBlockInput,
@@ -164,6 +166,33 @@ function mapHealthActivity(value: Row): HealthActivity {
     avgHeartRate: nullableNumber(value.avg_heart_rate),
     maxHeartRate: nullableNumber(value.max_heart_rate),
     details: json(value.details_json, {}),
+  };
+}
+
+/** One row of `external_task_mappings`: a task ⇄ provider object link, plus sync timestamps. */
+export interface ExternalTaskMapping {
+  id: number;
+  integrationAccountId: number;
+  externalId: string;
+  taskId: number;
+  externalUpdatedAt: string | null;
+  externalEtag: string | null;
+  lastPushedAt: string | null;
+  localSyncedAt: string | null;
+  externalDeletedAt: string | null;
+}
+
+function mapExternalTaskMapping(value: Row): ExternalTaskMapping {
+  return {
+    id: integer(value.id),
+    integrationAccountId: integer(value.integration_account_id),
+    externalId: text(value.external_id),
+    taskId: integer(value.task_id),
+    externalUpdatedAt: nullableText(value.external_updated_at),
+    externalEtag: nullableText(value.external_etag),
+    lastPushedAt: nullableText(value.last_pushed_at),
+    localSyncedAt: nullableText(value.local_synced_at),
+    externalDeletedAt: nullableText(value.external_deleted_at),
   };
 }
 
@@ -1203,10 +1232,7 @@ export class TaskRepository {
   }
 
   findMappedTask(integrationAccountId: number, externalId: string): number | null {
-    const value = this.database.connection
-      .prepare("SELECT task_id FROM external_task_mappings WHERE integration_account_id = ? AND external_id = ?")
-      .get(integrationAccountId, externalId);
-    return value ? integer(row(value, "external task mapping").task_id) : null;
+    return this.findTaskMapping(integrationAccountId, externalId)?.taskId ?? null;
   }
 
   mapExternalTask(integrationAccountId: number, externalId: string, taskId: number, externalUpdatedAt?: string): void {
@@ -1220,6 +1246,220 @@ export class TaskRepository {
            external_updated_at = excluded.external_updated_at, updated_at = excluded.updated_at`,
       )
       .run(integrationAccountId, externalId, taskId, externalUpdatedAt ?? null, timestamp, timestamp);
+  }
+
+  // ---- Google Calendar two-way sync ---------------------------------------------------------
+  //
+  // One `calendar_event` task ⇄ one Google event, linked by the external_task_mappings row.
+  // The pull/push flow lives in GoogleCalendarService; these are the only SQL entry points.
+
+  /** The single Google Calendar account row, created on first use (`external_account_id = 'default'`). */
+  calendarAccountId(): number {
+    return this.ensureIntegrationAccount("google_calendar", "default");
+  }
+
+  getCalendarStatus(): IntegrationStatus & { syncCursor: string | null; config: CalendarSyncConfig | null } {
+    const value = this.database.connection
+      .prepare("SELECT status, last_synced_at, last_error, sync_cursor, config_json FROM integration_accounts WHERE kind = 'google_calendar' LIMIT 1")
+      .get();
+    if (!value) return { lastSyncedAt: null, lastError: null, status: "configured", syncCursor: null, config: null };
+    const item = row(value, "google calendar integration account");
+    const config = json<Partial<CalendarSyncConfig>>(item.config_json, {});
+    return {
+      lastSyncedAt: nullableText(item.last_synced_at),
+      lastError: nullableText(item.last_error),
+      status: text(item.status) as IntegrationStatus["status"],
+      syncCursor: nullableText(item.sync_cursor),
+      config: typeof config.calendarId === "string"
+        ? {
+            calendarId: config.calendarId,
+            calendarSummary: config.calendarSummary ?? null,
+            timeZone: config.timeZone ?? "America/New_York",
+            importAllDay: config.importAllDay === true,
+            windowDays: typeof config.windowDays === "number" ? config.windowDays : 30,
+          }
+        : null,
+    };
+  }
+
+  /** Record the outcome of a sync pass; `error` also flips the account to `error` for the UI chip. */
+  markCalendarSynced(error: string | null): void {
+    const timestamp = now();
+    this.calendarAccountId();
+    this.database.connection
+      .prepare(
+        `UPDATE integration_accounts SET status = ?, last_synced_at = ?, last_error = ?, updated_at = ?
+         WHERE kind = 'google_calendar'`,
+      )
+      .run(error ? "error" : "healthy", timestamp, error, timestamp);
+  }
+
+  /** Store Google's incremental `nextSyncToken` (null clears it, forcing a full window walk). */
+  saveCalendarSyncCursor(cursor: string | null, config?: CalendarSyncConfig): void {
+    this.calendarAccountId();
+    this.database.connection
+      .prepare(
+        `UPDATE integration_accounts SET sync_cursor = ?, config_json = COALESCE(?, config_json), updated_at = ?
+         WHERE kind = 'google_calendar'`,
+      )
+      .run(cursor, config ? JSON.stringify(config) : null, now());
+  }
+
+  /** Mapping for one Google event id, including the timestamps that decide who wins a conflict. */
+  findTaskMapping(integrationAccountId: number, externalId: string): ExternalTaskMapping | null {
+    const value = this.database.connection
+      .prepare("SELECT * FROM external_task_mappings WHERE integration_account_id = ? AND external_id = ?")
+      .get(integrationAccountId, externalId);
+    return value ? mapExternalTaskMapping(value) : null;
+  }
+
+  /** Mapping for one task — the other direction, used by the push side. */
+  findMappingForTask(integrationAccountId: number, taskId: number): ExternalTaskMapping | null {
+    const value = this.database.connection
+      .prepare("SELECT * FROM external_task_mappings WHERE integration_account_id = ? AND task_id = ?")
+      .get(integrationAccountId, taskId);
+    return value ? mapExternalTaskMapping(value) : null;
+  }
+
+  /**
+   * Mark a mapping as written by us. `last_pushed_at` is what the pull compares against so our own
+   * writes do not come back as remote changes (see migration 014).
+   */
+  touchMappingPushed(integrationAccountId: number, externalId: string, externalUpdatedAt: string | null): void {
+    const timestamp = now();
+    this.database.connection
+      .prepare(
+        `UPDATE external_task_mappings
+         SET external_updated_at = ?, external_etag = ?, last_pushed_at = ?, updated_at = ?
+         WHERE integration_account_id = ? AND external_id = ?`,
+      )
+      .run(externalUpdatedAt, externalUpdatedAt, timestamp, timestamp, integrationAccountId, externalId);
+  }
+
+  /**
+   * Record that the local rows for this mapping match what Google now holds. The watermark is the
+   * newest of the task's and its calendar block's `updated_at`, read *after* the write, so a push
+   * never has to guess which local edit it just covered.
+   */
+  markMappingSynced(integrationAccountId: number, externalId: string, taskId: number): void {
+    const newest = this.database.connection
+      .prepare(
+        `SELECT MAX(stamp) AS stamp FROM (
+           SELECT updated_at AS stamp FROM tasks WHERE id = ?
+           UNION ALL
+           SELECT updated_at AS stamp FROM time_blocks WHERE task_id = ? AND source = 'calendar'
+         )`,
+      )
+      .get(taskId, taskId);
+    const watermark = newest ? nullableText(row(newest, "sync watermark").stamp) : null;
+    this.database.connection
+      .prepare(
+        `UPDATE external_task_mappings SET local_synced_at = ?, updated_at = ?
+         WHERE integration_account_id = ? AND external_id = ?`,
+      )
+      .run(watermark, now(), integrationAccountId, externalId);
+  }
+
+  /** Mark the remote side gone while keeping the row (tombstone; see migration 014). */
+  markMappingDeleted(integrationAccountId: number, externalId: string): void {
+    this.database.connection
+      .prepare(
+        `UPDATE external_task_mappings SET external_deleted_at = ?, updated_at = ?
+         WHERE integration_account_id = ? AND external_id = ? AND external_deleted_at IS NULL`,
+      )
+      .run(now(), now(), integrationAccountId, externalId);
+  }
+
+  deleteTaskMapping(integrationAccountId: number, externalId: string): void {
+    this.database.connection
+      .prepare("DELETE FROM external_task_mappings WHERE integration_account_id = ? AND external_id = ?")
+      .run(integrationAccountId, externalId);
+  }
+
+  /**
+   * Every mapping for one account. The push uses this to notice events whose task stopped being a
+   * `calendar_event` (tag removed, block gone) so it can delete the orphaned event.
+   */
+  listCalendarMappings(integrationAccountId: number): Array<{ externalId: string; taskId: number; externalDeletedAt: string | null }> {
+    return this.database.connection
+      .prepare("SELECT external_id, task_id, external_deleted_at FROM external_task_mappings WHERE integration_account_id = ?")
+      .all(integrationAccountId)
+      .map((value) => {
+        const item = row(value, "external task mapping");
+        return {
+          externalId: text(item.external_id),
+          taskId: integer(item.task_id),
+          externalDeletedAt: nullableText(item.external_deleted_at),
+        };
+      });
+  }
+
+  /**
+   * The mirrored set: every task carrying the `calendar_event` tag, with its single `calendar`
+   * block and (if pushed) its mapping. Tasks without a block are left out — there is no window to
+   * mirror yet. Cancelled tasks are included so the push can delete their event.
+   */
+  listCalendarEventTasks(): CalendarEventTask[] {
+    return this.database.connection
+      .prepare(
+        `SELECT task.id, task.public_id, task.title, task.description, task.kanban_status,
+                task.lifecycle_status, task.updated_at AS task_updated_at,
+                block.id AS block_id, block.start_at, block.end_at, block.updated_at AS block_updated_at,
+                mapping.external_id, mapping.external_updated_at, mapping.last_pushed_at,
+                mapping.local_synced_at, mapping.external_deleted_at
+         FROM tasks task
+         JOIN task_tags assignment ON assignment.task_id = task.id
+         JOIN tags tag ON tag.id = assignment.tag_id AND tag.public_id = ?
+         JOIN time_blocks block ON block.task_id = task.id AND block.source = 'calendar'
+         LEFT JOIN integration_accounts account ON account.kind = 'google_calendar'
+         LEFT JOIN external_task_mappings mapping
+           ON mapping.integration_account_id = account.id AND mapping.task_id = task.id
+         ORDER BY block.start_at`,
+      )
+      .all(reservedTagIds.calendarEvent)
+      .map((value) => {
+        const item = row(value, "calendar event task");
+        return {
+          taskId: integer(item.id),
+          publicId: text(item.public_id),
+          title: text(item.title),
+          description: nullableText(item.description),
+          kanbanStatus: text(item.kanban_status) as KanbanStatus,
+          lifecycleStatus: text(item.lifecycle_status) as LifecycleStatus,
+          blockId: integer(item.block_id),
+          startAt: text(item.start_at),
+          endAt: text(item.end_at),
+          externalId: nullableText(item.external_id),
+          externalUpdatedAt: nullableText(item.external_updated_at),
+          lastPushedAt: nullableText(item.last_pushed_at),
+          localSyncedAt: nullableText(item.local_synced_at),
+          externalDeletedAt: nullableText(item.external_deleted_at),
+          taskUpdatedAt: text(item.task_updated_at),
+          blockUpdatedAt: nullableText(item.block_updated_at),
+        };
+      });
+  }
+
+  /**
+   * Write title/description from the provider side. Deliberately not `updateTask`: the user path
+   * must stay distinct from the sync path (and must not touch `updated_at` semantics the sync
+   * uses to detect local edits).
+   */
+  updateCalendarEventTask(taskId: number, input: { title?: string; description?: string | null }): void {
+    const assignments: string[] = [];
+    const values: Array<string | null> = [];
+    if (input.title !== undefined) {
+      assignments.push("title = ?");
+      values.push(input.title.trim());
+    }
+    if (input.description !== undefined) {
+      assignments.push("description = ?");
+      values.push(input.description?.trim() || null);
+    }
+    if (assignments.length === 0) return;
+    assignments.push("updated_at = ?");
+    values.push(now());
+    this.database.connection.prepare(`UPDATE tasks SET ${assignments.join(", ")} WHERE id = ?`).run(...values, taskId);
   }
 
   tagId(publicId: string): number {

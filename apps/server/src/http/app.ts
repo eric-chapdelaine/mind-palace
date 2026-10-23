@@ -20,6 +20,7 @@ import {
 import { Hono } from "hono";
 import type { CalendarImportService } from "../services/calendar-import-service.js";
 import type { GarminService } from "../services/garmin-service.js";
+import type { GoogleCalendarService } from "../services/google-calendar-service.js";
 import type { ScheduleService } from "../services/schedule-service.js";
 import type { WeatherService } from "../services/weather-service.js";
 import type { RecurrenceService } from "../services/recurrence-service.js";
@@ -33,6 +34,7 @@ interface Dependencies {
   weather: WeatherService;
   calendar: CalendarImportService;
   garmin: GarminService;
+  calendarSync: GoogleCalendarService;
   integrationRegistry: IntegrationRegistration[];
   recurrence: RecurrenceService;
   scheduler: JobScheduler;
@@ -45,7 +47,7 @@ export interface IntegrationRegistration {
   status: () => IntegrationConnection;
 }
 
-export function createHttpApp({ tasks, schedule, weather, calendar, garmin, integrationRegistry, recurrence, scheduler }: Dependencies): Hono {
+export function createHttpApp({ tasks, schedule, weather, calendar, garmin, calendarSync, integrationRegistry, recurrence, scheduler }: Dependencies): Hono {
   const app = new Hono();
 
   app.onError((error, context) => {
@@ -102,7 +104,10 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
           }
         : {}),
     };
-    return context.json(tasks.getTask(tasks.createTask(input).id), 201);
+    const created = tasks.getTask(tasks.createTask(input).id);
+    // A commitment captured in-app must appear in Google too (the push reconciles, so no-op if off).
+    if (created.timeBlocks.some((block) => block.type === "calendar_event")) calendarSync.queuePush();
+    return context.json(created, 201);
   });
 
   app.patch("/api/tasks/:id", async (context) => {
@@ -126,7 +131,10 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
       ...(Array.isArray(body.tagIds) ? { tagIds: body.tagIds.map(Number) } : {}),
       ...(Array.isArray(body.dependsOnTaskIds) ? { dependsOnTaskIds: body.dependsOnTaskIds.map(Number) } : {}),
     });
-    return context.json(tasks.getTask(taskId));
+    const updated = tasks.getTask(taskId);
+    // Title/description/cancel edits of a mirrored commitment are pushed back to Google.
+    if (updated.timeBlocks.some((block) => block.type === "calendar_event")) calendarSync.queuePush();
+    return context.json(updated);
   });
 
   app.post("/api/scheduler-rules", async (context) => {
@@ -188,7 +196,7 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
     if (!timeBlockStatuses.includes(status)) throw new Error("Invalid time block status");
     const type = (body.type ?? "work") as TimeBlockType;
     if (!timeBlockTypes.includes(type)) throw new Error("Invalid time block type");
-    return context.json(tasks.createTimeBlock({
+    const created = tasks.createTimeBlock({
       taskId: numberParam(String(body.taskId), "task id"),
       startAt: requiredString(body.startAt, "startAt"),
       endAt: requiredString(body.endAt, "endAt"),
@@ -196,20 +204,29 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
       type,
       source: "manual",
       ...(typeof body.notes === "string" ? { notes: body.notes } : {}),
-    }), 201);
+    });
+    if (created.type === "calendar_event") calendarSync.queuePush();
+    return context.json(created, 201);
   });
 
   app.delete("/api/time-blocks/:id", (context) => {
-    tasks.deleteTimeBlock(numberParam(context.req.param("id"), "time block id"));
+    const blockId = numberParam(context.req.param("id"), "time block id");
+    const block = tasks.getTimeBlock(blockId);
+    tasks.deleteTimeBlock(blockId);
+    // A deleted commitment window means its event is gone: the push deletes it (or re-creates one).
+    if (block.type === "calendar_event") calendarSync.queuePush();
     return context.json(schedule.getSchedule());
   });
 
   app.patch("/api/time-blocks/:id", async (context) => {
     const body = (await context.req.json()) as Record<string, unknown>;
-    return context.json(tasks.updateTimeBlock(numberParam(context.req.param("id"), "time block id"), {
+    const moved = tasks.updateTimeBlock(numberParam(context.req.param("id"), "time block id"), {
       ...(typeof body.startAt === "string" ? { startAt: body.startAt } : {}),
       ...(typeof body.endAt === "string" ? { endAt: body.endAt } : {}),
-    }));
+    });
+    // Dragging a commitment in the MP grid moves the Google event with it.
+    if (moved.type === "calendar_event") calendarSync.queuePush();
+    return context.json(moved);
   });
 
   app.post("/api/time-blocks/:id/status", async (context) => {
@@ -258,6 +275,28 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
   });
 
   app.post("/api/integrations/garmin/sync", async (context) => context.json(await garmin.sync()));
+
+  app.get("/api/integrations/google-calendar/status", (context) => context.json(calendarSync.status()));
+  app.post("/api/integrations/google-calendar/auth-url", (context) => context.json({ url: calendarSync.client.authUrl() }));
+  app.post("/api/integrations/google-calendar/sync", async (context) => context.json(await calendarSync.sync()));
+  app.post("/api/integrations/google-calendar/disconnect", (context) => {
+    calendarSync.client.disconnect();
+    return context.json(calendarSync.status());
+  });
+  // OAuth loopback callback: exchange the code, then bounce the browser back to the schedule page.
+  app.get("/api/integrations/google-calendar/callback", async (context) => {
+    const error = context.req.query("error");
+    if (error) {
+      return context.redirect(`/schedule?calendar=error&reason=${encodeURIComponent(error)}`);
+    }
+    const code = context.req.query("code");
+    const state = context.req.query("state");
+    if (!code || !state) throw new Error("Google callback is missing code/state");
+    await calendarSync.client.completeAuth(code, state);
+    // First sync happens immediately so the calendar page has data as soon as it loads.
+    await calendarSync.sync();
+    return context.redirect("/schedule?calendar=connected");
+  });
   app.get("/api/integrations", (context) => context.json(
     integrationRegistry.map((entry) => ({ key: entry.key, label: entry.label, ...entry.status() })),
   ));

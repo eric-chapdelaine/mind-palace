@@ -1,7 +1,9 @@
 import type {
+  CalendarSyncResult,
   CreateTaskInput,
   CreateTimeBlockInput,
   GarminSyncResult,
+  GoogleCalendarStatus,
   HealthActivity,
   IntegrationSummary,
   LifecycleStatus,
@@ -57,6 +59,10 @@ export const api = {
   updateHealthActivity: (id: number, input: UpdateHealthActivityInput) =>
     request<HealthActivity>(`/api/health-activities/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
   garminSync: () => request<GarminSyncResult>("/api/integrations/garmin/sync", { method: "POST" }),
+  googleCalendarStatus: () => request<GoogleCalendarStatus>("/api/integrations/google-calendar/status"),
+  googleCalendarAuthUrl: () => request<{ url: string }>("/api/integrations/google-calendar/auth-url", { method: "POST" }),
+  googleCalendarSync: () => request<CalendarSyncResult>("/api/integrations/google-calendar/sync", { method: "POST" }),
+  googleCalendarDisconnect: () => request<GoogleCalendarStatus>("/api/integrations/google-calendar/disconnect", { method: "POST" }),
   integrations: () => request<IntegrationSummary[]>("/api/integrations"),
   task: (id: number) => request<TaskDetail>(`/api/tasks/${id}`),
   timeBlock: (id: number) => request<TimeBlock>(`/api/time-blocks/${id}`),

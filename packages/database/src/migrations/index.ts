@@ -11,6 +11,7 @@ import { taskDependenciesMigration } from "./010-task-dependencies.js";
 import { schedulerRulesMigration } from "./011-scheduler-rules.js";
 import { schedulerRulesDropTierMigration } from "./012-scheduler-rules-drop-tier.js";
 import { weatherDetailMigration } from "./013-weather-detail.js";
+import { googleCalendarSyncMigration } from "./014-google-calendar-sync.js";
 
 export interface Migration {
   version: number;
@@ -34,4 +35,5 @@ export const migrations: Migration[] = [
   schedulerRulesMigration,
   schedulerRulesDropTierMigration,
   weatherDetailMigration,
+  googleCalendarSyncMigration,
 ];
