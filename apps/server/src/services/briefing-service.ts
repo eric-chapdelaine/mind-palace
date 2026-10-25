@@ -92,6 +92,20 @@ interface LocalParts {
   date: string;
 }
 
+/**
+ * Parse a timestamp from the database, or null when it is not a real instant.
+ *
+ * `tasks.deadline_at` is free-form text written by the app and by imports, so one malformed row used
+ * to throw `RangeError: Invalid time value` out of `Intl.DateTimeFormat` and turn the whole briefing
+ * into an HTTP 400 - no printout at all, from one bad deadline. A task with an unreadable deadline
+ * is a task with no deadline for print purposes, which is a far better failure.
+ */
+function instantOf(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const instant = new Date(value);
+  return Number.isNaN(instant.getTime()) ? null : instant;
+}
+
 function partsOf(instant: Date): LocalParts {
   const fields = new Map(localParts.formatToParts(instant).map((part) => [part.type, part.value]));
   const hour = Number(fields.get("hour")) % 24;
@@ -435,8 +449,8 @@ export class BriefingService {
       dueTasks: tasks
         .filter((task) => {
           if (terminalStatuses.has(task.kanbanStatus) || routineTaskIds.has(task.id)) return false;
-          if (!task.deadlineAt) return false;
-          return partsOf(new Date(task.deadlineAt)).date === date;
+          const deadline = instantOf(task.deadlineAt);
+          return deadline !== null && partsOf(deadline).date === date;
         })
         .sort((left, right) => left.priority - right.priority || right.rank - left.rank)
         .map((task) => this.printTask(task, routineTaskIds)),
@@ -526,8 +540,8 @@ export class BriefingService {
    * already carries the count.
    */
   private deadlineLabel(task: TaskSummary): string | null {
-    if (!task.deadlineAt) return null;
-    const deadline = new Date(task.deadlineAt);
+    const deadline = instantOf(task.deadlineAt);
+    if (!deadline) return null;
     const today = this.today();
     const deadlineDate = partsOf(deadline).date;
     if (deadlineDate < today) return null;
@@ -547,8 +561,9 @@ export class BriefingService {
     let overdue = 0;
     for (const task of tasks) {
       if (terminalStatuses.has(task.kanbanStatus) || routineTaskIds.has(task.id)) continue;
-      if (!task.deadlineAt) continue;
-      const deadlineDate = partsOf(new Date(task.deadlineAt)).date;
+      const deadline = instantOf(task.deadlineAt);
+      if (!deadline) continue;
+      const deadlineDate = partsOf(deadline).date;
       // Past-due rows are noise one by one; the count is the signal.
       if (deadlineDate < date) {
         overdue += 1;

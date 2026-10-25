@@ -56,7 +56,7 @@ PAPER: dict[str, dict[str, str]] = {
         "small": "6.8pt",
         "tiny": "6.0pt",
         "graph": "1.0in",
-        "ribbon": "0.30in",
+        "day": "2.70in",
     },
     "a4": {
         "size": "a4",
@@ -67,7 +67,7 @@ PAPER: dict[str, dict[str, str]] = {
         "small": "6.8pt",
         "tiny": "6.0pt",
         "graph": "1.0in",
-        "ribbon": "0.30in",
+        "day": "2.70in",
     },
 }
 
@@ -94,7 +94,7 @@ INK = {
     "muted": "#6d6d6d",
     "faint": "#8f8f8f",
     "accent": "#2f5d8a",   # accepted work
-    "proposal": "#9aa8b6",  # proposed work (lighter, hatched in the ribbon)
+    "proposal": "#9aa8b6",                 # proposed work
     "event": "#5c5c5c",    # calendar event / fixed commitment
     "night": "#ececec",    # non-daylight background band
     "rain": "#7f9db8",
@@ -257,33 +257,21 @@ section.sec {{ margin-top: 5.5pt; break-inside: auto; }}
 .weather .stats .row .k {{ color: {INK['muted']}; }}
 .weather .stats .row .v {{ font-weight: 600; font-variant-numeric: tabular-nums; }}
 
-/* ---- today: ribbon + agenda ----------------------------------------------------------- */
-.ribbon {{ position: relative; height: {paper['ribbon']}; border: 0.4pt solid {INK['hair']}; background: #fbfbfb; }}
-.ribbon .span {{ position: absolute; display: flex; align-items: center; border-right: 0.4pt solid #fff; border-bottom: 0.4pt solid #fff; overflow: hidden; }}
-.ribbon .span span {{ font-size: {paper['tiny']}; padding: 0 1.5pt; white-space: nowrap; overflow: hidden; }}
-.ribbon .tick {{ position: absolute; top: 0; bottom: 0; border-left: 0.3pt solid #e2e2e2; }}
+/* ---- today: vertical day calendar ------------------------------------------------------ */
+.vcal {{ position: relative; height: {paper['day']}; }}
+.vcal .hlabel {{ position: absolute; left: 0; width: 22pt; text-align: right;
+                 font-size: {paper['tiny']}; color: {INK['muted']}; transform: translateY(-50%); }}
+.vcal .hlabel.last {{ transform: translateY(-100%); }}
+.vcal .vtrack {{ position: absolute; left: 26pt; right: 0; top: 0; bottom: 0;
+                 border-left: 0.4pt solid {INK['hair']}; }}
+.vcal .hrule {{ position: absolute; left: 0; right: 0; border-top: 0.3pt solid #e6e6e6; }}
+.vcal .vb {{ position: absolute; overflow: hidden; padding: 0.4pt 2.5pt; border: 0.5pt solid #ffffff; }}
+.vcal .vn {{ font-size: {paper['tiny']}; font-weight: 700; line-height: 1.06; white-space: nowrap; overflow: hidden; }}
+.vcal .vm {{ font-size: {paper['tiny']}; line-height: 1.06; white-space: nowrap; overflow: hidden; opacity: 0.85; }}
+.vcal .vtg {{ font-size: {paper['tiny']}; line-height: 1.06; white-space: nowrap; overflow: hidden; opacity: 0.7; }}
 .legend {{ display: flex; gap: 10pt; font-size: {paper['tiny']}; color: {INK['muted']}; padding: 1.5pt 0 0; }}
 .legend .lg {{ display: flex; align-items: center; gap: 2.5pt; }}
 .legend .sw {{ width: 7pt; height: 4.5pt; display: inline-block; border: 0.3pt solid #b0b0b0; }}
-.ribbon .now {{ position: absolute; top: -2pt; bottom: -2pt; border-left: 1pt solid {INK['warn']}; }}
-.axis {{ position: relative; height: 9pt; }}
-.axis span {{ position: absolute; font-size: {paper['tiny']}; color: {INK['muted']}; transform: translateX(-50%); }}
-
-.agendas {{ display: table; width: 100%; table-layout: fixed; margin-top: 3pt; }}
-.agendas > div {{ display: table-cell; vertical-align: top; }}
-.agendas.two > div:first-child {{ width: 52%; padding-right: 11pt; }}
-.agenda {{ width: 100%; border-collapse: collapse; }}
-.agenda th {{
-  text-align: left; font-size: {paper['tiny']}; text-transform: uppercase; letter-spacing: 0.07em;
-  color: {INK['faint']}; font-weight: 600; border-bottom: 0.4pt solid {INK['hair']}; padding: 1.5pt 3pt;
-}}
-.agenda td {{ padding: 1.15pt 3pt; border-bottom: 0.3pt dotted {INK['hair']}; vertical-align: baseline; }}
-.agenda tr {{ break-inside: avoid; }}
-.agenda td.t {{ white-space: nowrap; font-variant-numeric: tabular-nums; width: 0.92in; }}
-.agenda td.d {{ white-space: nowrap; text-align: right; width: 0.4in; color: {INK['muted']}; }}
-.agenda td.s {{ white-space: nowrap; width: 0.62in; font-size: {paper['tiny']}; text-transform: uppercase; letter-spacing: 0.05em; }}
-.agenda .swatch {{ display: inline-block; width: 4pt; height: 4pt; margin-right: 3pt; vertical-align: middle; }}
-.agenda tr.past td {{ color: #9a9a9a; }}
 
 /* ---- today's tasks -------------------------------------------------------------------- */
 .tasks {{ display: table; width: 100%; table-layout: fixed; }}
@@ -615,138 +603,106 @@ def _clock(minute: int) -> str:
 
 
 # ---------------------------------------------------------------------------------------------
-# Section: today's schedule (ribbon + agenda)
+# Section: today's schedule (vertical day calendar)
 # ---------------------------------------------------------------------------------------------
 
-# Each agenda half repeats the head, because the two halves sit side by side and are read
-# independently.
-AGENDA_HEAD = (
-    '<thead><tr><th>Time</th><th>Block</th><th style="text-align:right">Len</th><th>Kind</th></tr></thead>'
-)
-
-# The household printer is black and white, so the timeline encodes category by *value* only:
-# a fixed commitment is dark, routine scaffolding is pale, and real work sits between them. That
-# survives a grayscale print, a photocopy, and a photograph of the page.
-# Three shades, black-and-white printer: a fixed commitment has to be the darkest thing on the page,
-# routine is the papery background of the day, and everything else sits in between.
-BLOCK_GREY = {
-    "calendar": "#3d3d3d",     # calendar event: cannot move
-    "routine": "#d2d2d2",      # sleep, meals, wind-down: the shape of the day
-    "other": "#8d8d8d",        # everything else
-}
-BLOCK_STATUS_WORD = {
-    "accepted": "accepted",
-    "completed": "done",
-    "proposed": "planned",
-    "missed": "missed",
-}
-
-
-def block_category(block: dict[str, Any]) -> str:
-    if block.get("type") == "calendar_event":
-        return "calendar"
-    if block.get("isRoutine"):
-        return "routine"
-    return "other"
-
-
-def _block_ink(block: dict[str, Any]) -> str:
-    """Label colour for a bar. #d2d2d2 needs dark text; the two darker greys need light text."""
-    return "#ffffff" if block_category(block) in ("calendar", "other") else "#333333"
-
-
-def _block_fill(block: dict[str, Any]) -> str:
-    return BLOCK_GREY[block_category(block)]
-
-
-def block_kind_label(block: dict[str, Any]) -> str:
-    """The agenda's KIND column: what the block *is* (and, separately, how settled it is)."""
-    category = block_category(block)
-    status = BLOCK_STATUS_WORD.get(block.get("status", ""), block.get("status", ""))
-    return category if status == "planned" else f"{category} · {status}"
-
-
 def section_today_schedule(payload: dict[str, Any], options: dict[str, Any], paper: dict[str, str]) -> str:
+    """A day calendar with time running down the page, like Google Calendar.
+
+    Vertical time means conflicting blocks sit side by side instead of on top of each other, which is
+    the reading a calendar is supposed to give you. It also buys each block a wide box, so the block
+    can carry its own time, name, length and kind - there is no separate agenda table to keep in sync
+    with it, and nothing to read twice.
+    """
     blocks = payload["facts"].get("todayBlocks") or []
     if not blocks:
         return section_shell("today-schedule", '<p class="muted small">Nothing scheduled today.</p>')
 
-    # The ribbon spans the waking day only. Nobody needs to see 12-6am drawn to scale, so the strip
-    # starts at 6am by default and clips anything earlier; the agenda below still lists every block,
-    # so no scheduled time is lost.
-    start_min = options.get("fromHour", 6) * 60
-    end_min = options.get("toHour", 24) * 60
+    # The window hugs whatever the day actually contains, within the 6am-midnight bounds. A fixed
+    # 6am-midnight window spends most of its height on hours with nothing in them: at 18 hours of
+    # span a 30-minute block is 5.4pt tall and one line of text needs 7.8pt, so a short standup
+    # printed as an unlabelled sliver. Narrowing the window is what makes the resolution available
+    # for short blocks to say anything at all.
+    floor_min = options.get("fromHour", 6) * 60
+    ceiling_min = options.get("toHour", 24) * 60
+    starts = [max(block["startMinutes"], floor_min) for block in blocks]
+    ends = [min(block["endMinutes"], ceiling_min) for block in blocks]
+    first, last = min(starts), max(ends)
+    # Round out to whole hours so the axis reads cleanly, and never show less than a shift's worth:
+    # a day with one 30-minute errand should not fill the page with three hours.
+    start_min = max(floor_min, (first // 60) * 60)
+    end_min = min(ceiling_min, -(-last // 60) * 60)
+    while end_min - start_min < 360:
+        if start_min > floor_min:
+            start_min = max(floor_min, start_min - 60)
+        elif end_min < ceiling_min:
+            end_min = min(ceiling_min, end_min + 60)
+        else:
+            break
     span = max(60, end_min - start_min)
+    visible = _visible(blocks, start_min, end_min)
+    placed, lanes = _pack_lanes(visible)
 
-    # Overlapping blocks stack into lanes instead of covering each other. Google Calendar solves the
-    # same problem on a vertical time axis by placing events side by side; with time running left to
-    # right here, "side by side" is vertical, so the ribbon grows by a lane per conflict.
-    placed, lanes = _pack_lanes(blocks)
+    # One line of tiny text, and the box's own padding.
+    line_pt = 6.0 * 1.06
+    pt_per_minute = float(paper["day"].replace("in", "")) * 72 / span
 
-    spans: list[str] = []
-    for block, top, height in placed:
-        # Clip to the window: a 12-6:30am sleep block becomes a stub at the left edge.
-        visible_start = max(block["startMinutes"], start_min)
-        visible_end = min(block["endMinutes"], end_min)
-        if visible_end <= visible_start:
-            continue
-        left = (visible_start - start_min) / span * 100
-        width = max(0.55, (visible_end - visible_start) / span * 100)
-        fill = _block_fill(block)
-        # The bar carries the name, not just a colour: the ribbon is the agenda, read left to right.
-        # A percentage of the ribbon converts to about 1.7 characters of tiny text, so the label is
-        # clipped to what actually fits rather than to a fixed guess.
-        room = int(width * 1.7)
-        label = escape(truncate(block["title"], room)) if room >= 4 else ""
-        tooltip = f'{escape(block["startLabel"])}–{escape(block["endLabel"])} {escape(block["title"])}'
-        spans.append(
-            f'<div class="span" style="left:{left:.2f}%;width:{width:.2f}%;top:{top * 100:.3f}%;'
-            f'height:{height * 100:.3f}%;background:{fill};color:{_block_ink(block)}" title="{tooltip}">'
-            f'<span>{label}</span></div>'
-        )
-
-    ticks: list[str] = []
+    labels: list[str] = []
+    rules: list[str] = []
     for minute in range(start_min, end_min + 1, 60):
-        ticks.append(f'<div class="tick" style="left:{(minute - start_min) / span * 100:.2f}%"></div>')
-    axis = "".join(
-        f'<span style="left:{(minute - start_min) / span * 100:.2f}%">{_clock(minute)}</span>'
-        for minute in range(start_min, end_min + 1, 180)
-    )
+        top = (minute - start_min) / span * 100
+        rules.append(f'<div class="hrule" style="top:{top:.3f}%"></div>')
+        if minute in (start_min, end_min) or (minute % 120 == 0 and minute < end_min):
+            last = " last" if minute == end_min else ""
+            labels.append(f'<div class="hlabel{last}" style="top:{top:.3f}%">{_clock(minute)}</div>')
 
-    rows: list[str] = []
-    for block in blocks:
-        swatch = _block_fill(block)
-        rows.append(
-            "<tr>"
-            f'<td class="t">{escape(block["startLabel"])}–{escape(block["endLabel"])}</td>'
-            f'<td><span class="swatch" style="background:{swatch}"></span>{escape(block["title"])}</td>'
-            f'<td class="d">{dur(block["endMinutes"] - block["startMinutes"])}</td>'
-            f'<td class="s muted">{escape(block_kind_label(block))}</td>'
-            "</tr>"
+    boxes: list[str] = []
+    for block, first, width_lanes, cluster_lanes in placed:
+        start = max(block["startMinutes"], start_min)
+        end = min(block["endMinutes"], end_min)
+        top = (start - start_min) / span * 100
+        height = (end - start) / span * 100
+        left = first / cluster_lanes * 100
+        width = width_lanes / cluster_lanes * 100
+
+        # How many lines of text this box can hold decides how much of the block it reports: a 15
+        # minute block is a name, a two hour block explains itself.
+        lines = int(((end - start) * pt_per_minute - 1.4) // line_pt)
+        fill, ink = _block_fill(block), _block_ink(block)
+        tooltip = f'{escape(block["startLabel"])}–{escape(block["endLabel"])} {escape(block["title"])}'
+
+        # A box too short for one line gets no text at all: clipped glyphs read as a broken strip,
+        # and the block is visible by its shade and position.
+        #
+        # Height decides how much the box reports, and a one-line box is the common case (an hour of
+        # an 18-hour day is about one line). There is room *across* the page even when there is none
+        # down it, so a single-line block carries its time inline beside the name instead of losing
+        # it - the alternative was a calendar where most blocks never said when they were.
+        if lines < 1:
+            content = ""
+        elif lines < 2:
+            when = f'{_short_clock(start)}–{_short_clock(end)}'
+            content = f'<div class="vn">{escape(block["title"])} · {when}</div>'
+        else:
+            content = f'<div class="vn">{escape(block["title"])}</div>'
+            meta = [f'{block["startLabel"]}–{block["endLabel"]}', dur(end - start), block_kind_label(block)]
+            content += f'<div class="vm">{" · ".join(meta)}</div>'
+
+        boxes.append(
+            f'<div class="vb" style="left:{left:.3f}%;width:{width:.3f}%;top:{top:.3f}%;'
+            f'height:{height:.3f}%;background:{fill};color:{ink}" title="{tooltip}">{content}</div>'
         )
 
-    # Split the agenda across two columns: a 10-block day costs half the vertical space, and the
-    # reading order (down the left, then down the right) still matches the clock.
-    half = (len(rows) + 1) // 2
-    columns = [rows[:half], rows[half:]] if len(rows) > 6 else [rows]
-    cells = "".join(
-        f'<div><table class="agenda">{AGENDA_HEAD}<tbody>' + "".join(column) + "</tbody></table></div>"
-        for column in columns
-        if column
-    )
-    agenda = f'<div class="agendas{" two" if len(columns) == 2 else ""}">{cells}</div>'
-
-    # 0.15in per lane holds one line of tiny text; a conflicted day gets a taller ribbon rather
-    # than an unreadable one.
-    ribbon_height = max(0.30, 0.15 * lanes)
     body = (
-        f'<div class="ribbon" style="height:{ribbon_height:.2f}in">{"".join(ticks)}{"".join(spans)}</div>'
-        f'<div class="axis">{axis}</div>'
+        f'<div class="vcal">{"".join(labels)}'
+        f'<div class="vtrack">{"".join(rules)}{"".join(boxes)}</div></div>'
         f"{_block_legend()}"
-        f"{agenda}"
     )
     total = sum(block["endMinutes"] - block["startMinutes"] for block in blocks)
-    return section_shell("today-schedule", body, note=f"{len(blocks)} blocks · {minutes_label(total)} scheduled")
+    note = f"{len(blocks)} blocks · {minutes_label(total)} scheduled"
+    if lanes > 1:
+        note += f" · {lanes} wide"
+    return section_shell("today-schedule", body, note=note)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -789,7 +745,7 @@ def section_today_tasks(payload: dict[str, Any], options: dict[str, Any], paper:
             + "</div></div>"
         )
     half = (len(cards) + 1) // 2
-    columns = [cards[:half], cards[half:]] if len(cards) > 4 else [cards]
+    columns = [cards[:half], cards[half:]] if len(cards) > 2 else [cards]
     cells = "".join(f'<div class="tcol">{"".join(column)}</div>' for column in columns if column)
     two = " two" if len(columns) == 2 else ""
     return section_shell("today-tasks", f'<div class="tasks{two}">{cells}</div>', note=f"{len(tasks)} tasks")
@@ -855,73 +811,122 @@ def section_week_ahead(payload: dict[str, Any], options: dict[str, Any], paper: 
     return section_shell("week-ahead", f'<div class="week">{"".join(columns)}</div>{att_html}', note=note)
 
 
-def _overlapping(a: dict[str, Any], b: dict[str, Any]) -> bool:
-    return a["startMinutes"] < b["endMinutes"] and b["startMinutes"] < a["endMinutes"]
+# Three shades, black-and-white printer: a fixed commitment has to be the darkest thing on the page,
+# routine is the papery background of the day, and everything else sits in between.
+BLOCK_GREY = {
+    "calendar": "#3d3d3d",     # calendar event: cannot move
+    "routine": "#d2d2d2",      # sleep, meals, wind-down: the shape of the day
+    "other": "#8d8d8d",        # everything else
+}
+BLOCK_STATUS_WORD = {
+    "accepted": "accepted",
+    "completed": "done",
+    "proposed": "planned",
+    "missed": "missed",
+}
 
 
-def _pack_lanes(blocks: list[dict[str, Any]]) -> tuple[list[tuple[dict[str, Any], float, float]], int]:
-    """Lay the day out in vertical lanes, and let every block claim the height it can actually reach.
+def block_category(block: dict[str, Any]) -> str:
+    if block.get("type") == "calendar_event":
+        return "calendar"
+    if block.get("isRoutine"):
+        return "routine"
+    return "other"
+
+
+def _block_fill(block: dict[str, Any]) -> str:
+    return BLOCK_GREY[block_category(block)]
+
+
+def _block_ink(block: dict[str, Any]) -> str:
+    """Label colour for a block. #d2d2d2 needs dark text; the two darker greys need light text."""
+    return "#ffffff" if block_category(block) in ("calendar", "other") else "#333333"
+
+
+def block_kind_label(block: dict[str, Any]) -> str:
+    """What the block *is* (and, separately, how settled it is)."""
+    category = block_category(block)
+    status = BLOCK_STATUS_WORD.get(block.get("status", ""), block.get("status", ""))
+    return category if status == "planned" else f"{category} · {status}"
+
+
+def _overlapping(a: tuple, b: tuple) -> bool:
+    return a[1] < b[2] and b[1] < a[2]
+
+
+def _visible(
+    blocks: list[dict[str, Any]], start_min: int, end_min: int
+) -> list[tuple[dict[str, Any], int, int]]:
+    """Clip blocks to the drawn window. A 12-6:30am sleep block becomes 6:00-6:30."""
+    visible: list[tuple[dict[str, Any], int, int]] = []
+    for block in blocks:
+        start = max(block["startMinutes"], start_min)
+        end = min(block["endMinutes"], end_min)
+        if end > start:
+            visible.append((block, start, end))
+    return visible
+
+
+def _pack_lanes(
+    bounds: list[tuple[dict[str, Any], int, int]]
+) -> tuple[list[tuple[dict[str, Any], int, int, int]], int]:
+    """Assign each block a lane span: `(block, first_lane, lane_width, cluster_width)`.
 
     Three rules, in order:
 
-    1. Only blocks that actually conflict share vertical space. Conflicts are transitive, so they
-       form clusters (a 9-11 meeting that touches a 10-12 call is one cluster); each cluster is
-       packed independently and they all share the full ribbon height, because clusters never
-       overlap each other in time.
-    2. Within a cluster, first-fit lane assignment in start order. A day has a few dozen blocks at
-       most, so greedy is exactly as good as anything cleverer here.
-    3. A block then expands into every adjacent lane that is free for its whole span. A long block
-       that merely brushes a conflict at one end no longer gives up the rest of its height: it takes
-       everything except the lanes genuinely occupied while it runs.
+    1. Only blocks that actually conflict share space. Conflicts are transitive, so they form
+       clusters; each cluster is packed independently, and clusters never overlap each other in
+       time, so they all use the full extent.
+    2. Inside a cluster, first-fit in start order. A day has a few dozen blocks at most, so greedy
+       is exactly as good as anything cleverer here.
+    3. A block then expands into every adjacent lane free for its whole span, so a long block that
+       merely brushes a conflict at one end keeps the rest of its room.
 
-    Returns (block, top fraction, height fraction) plus the lane count the ribbon needs.
+    In the vertical calendar a "lane" is a column, which is exactly how Google Calendar puts
+    double-booked events side by side. `cluster_width` is the column count of that block's own
+    cluster: a lone block is full width even on a day where something else conflicts, and only the
+    blocks that actually collide share the row. The second return value is the widest cluster, for
+    the section's note.
     """
-    ordered = sorted(blocks, key=lambda item: (item["startMinutes"], -item["endMinutes"]))
+    ordered = sorted(bounds, key=lambda item: (item[1], -item[2]))
 
-    # 1. Connected clusters of conflicting blocks.
-    clusters: list[list[dict[str, Any]]] = []
+    clusters: list[list[tuple]] = []
     cluster_end = -1
-    for block in ordered:
-        if clusters and block["startMinutes"] < cluster_end:
-            clusters[-1].append(block)
-            cluster_end = max(cluster_end, block["endMinutes"])
+    for item in ordered:
+        if clusters and item[1] < cluster_end:
+            clusters[-1].append(item)
+            cluster_end = max(cluster_end, item[2])
         else:
-            clusters.append([block])
-            cluster_end = block["endMinutes"]
+            clusters.append([item])
+            cluster_end = item[2]
 
-    placed: list[tuple[dict[str, Any], float, float]] = []
+    placed: list[tuple[dict[str, Any], int, int, int]] = []
     widest = 1
     for cluster in clusters:
-        # 2. First-fit lanes inside the cluster.
         lane_ends: list[int] = []
         lane_of: dict[int, int] = {}
-        for block in cluster:
+        for item in cluster:
             for index, end in enumerate(lane_ends):
-                if block["startMinutes"] >= end:
-                    lane_ends[index] = block["endMinutes"]
-                    lane_of[id(block)] = index
+                if item[1] >= end:
+                    lane_ends[index] = item[2]
+                    lane_of[id(item)] = index
                     break
             else:
-                lane_of[id(block)] = len(lane_ends)
-                lane_ends.append(block["endMinutes"])
+                lane_of[id(item)] = len(lane_ends)
+                lane_ends.append(item[2])
         lanes = len(lane_ends)
         widest = max(widest, lanes)
 
-        # 3. Expand each block across adjacent lanes that are free for its whole span.
-        for block in cluster:
-            own = lane_of[id(block)]
-            taken = {
-                lane_of[id(other)]
-                for other in cluster
-                if other is not block and _overlapping(block, other)
-            }
+        for item in cluster:
+            own = lane_of[id(item)]
+            taken = {lane_of[id(other)] for other in cluster if other is not item and _overlapping(item, other)}
             low = own
             while low - 1 >= 0 and low - 1 not in taken:
                 low -= 1
             high = own
             while high + 1 < lanes and high + 1 not in taken:
                 high += 1
-            placed.append((block, low / lanes, (high - low + 1) / lanes))
+            placed.append((item[0], low, high - low + 1, lanes))
     return placed, max(1, widest)
 
 
@@ -943,7 +948,7 @@ def _short_clock(minute: int) -> str:
 
 
 def mini_timeline(blocks: list[dict[str, Any]]) -> str:
-    """A 5pt day-density strip: the same shape as the big ribbon, at one glance per column."""
+    """A 5pt day-density strip: the same shape as the big calendar, at one glance per column."""
     if not blocks:
         return ""
     spans = "".join(
@@ -967,7 +972,7 @@ def line_html(block: dict[str, Any]) -> str:
 
 def section_board_snapshot(payload: dict[str, Any], options: dict[str, Any], paper: dict[str, str]) -> str:
     wanted = options.get("columns") or ["inbox", "ready", "in_progress", "waiting"]
-    per_column = options.get("perColumn", 6)
+    per_column = options.get("perColumn", 3)
     columns = [column for status in wanted for column in payload["facts"].get("board") or [] if column["status"] == status]
     if not columns:
         return section_shell("board-snapshot", '<p class="muted small">No board data.</p>')
