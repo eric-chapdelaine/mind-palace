@@ -65,10 +65,16 @@ Top to bottom, one letter page (0.36in margins, 8.2pt):
 3. **Weather** — a full-width graph: temperature curve over the day, precipitation probability bars,
    night shading, hour axis, plus high/low/peak-rain/daylight/wind stats and the day's conditions in
    words. Bars have a 2pt floor so a 3% hour is visible rather than absent.
-4. **Today** — a ribbon timeline spanning only the hours that actually have blocks, then the agenda
-   split into two columns (down the left, then down the right) so a 10-block day costs half the
-   height. Planned vs accepted vs calendar is carried by ink *and* by an uppercase word, so it
-   survives grayscale.
+4. **Today** — a ribbon timeline spanning 6am to midnight, then the agenda split into two columns
+   (down the left, then down the right) so a 10-block day costs half the height. The ribbon and the
+   agenda are the same data: the bar is the list, read left to right.
+   - Bars are shaded in three greys — **calendar** (fixed commitment, darkest), **routine** (the
+     shape of the day, lightest), **other** (everything in between) — because the printer is black
+     and white. A legend sits under the ribbon so the shades are never guesswork.
+   - Overlapping blocks stack into **lanes** instead of covering each other. Google Calendar solves
+     this on a vertical time axis by putting events side by side; with time running left to right
+     here, "side by side" is vertical, so a double-booked hour grows the ribbon rather than hiding
+     work under other work.
 5. **Do today** — full-width cards, two columns, with priority pill, remaining time, tags, due label,
    and the Markdown-flattened description clipped to ~220 chars. Which tasks appear here is a server
    decision: anything with a block today, anything pinned by weekday tag, anything in progress; then

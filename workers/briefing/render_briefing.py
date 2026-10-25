@@ -259,8 +259,8 @@ section.sec {{ margin-top: 5.5pt; break-inside: auto; }}
 
 /* ---- today: ribbon + agenda ----------------------------------------------------------- */
 .ribbon {{ position: relative; height: {paper['ribbon']}; border: 0.4pt solid {INK['hair']}; background: #fbfbfb; }}
-.ribbon .span {{ position: absolute; top: 0; bottom: 0; border-right: 0.4pt solid #fff; overflow: hidden; }}
-.ribbon .span span {{ font-size: {paper['tiny']}; padding-left: 1.5pt; white-space: nowrap; color: #fff; line-height: {paper['ribbon']}; }}
+.ribbon .span {{ position: absolute; display: flex; align-items: center; border-right: 0.4pt solid #fff; border-bottom: 0.4pt solid #fff; overflow: hidden; }}
+.ribbon .span span {{ font-size: {paper['tiny']}; padding: 0 1.5pt; white-space: nowrap; overflow: hidden; }}
 .ribbon .tick {{ position: absolute; top: 0; bottom: 0; border-left: 0.3pt solid #e2e2e2; }}
 .legend {{ display: flex; gap: 10pt; font-size: {paper['tiny']}; color: {INK['muted']}; padding: 1.5pt 0 0; }}
 .legend .lg {{ display: flex; align-items: center; gap: 2.5pt; }}
@@ -627,10 +627,12 @@ AGENDA_HEAD = (
 # The household printer is black and white, so the timeline encodes category by *value* only:
 # a fixed commitment is dark, routine scaffolding is pale, and real work sits between them. That
 # survives a grayscale print, a photocopy, and a photograph of the page.
+# Three shades, black-and-white printer: a fixed commitment has to be the darkest thing on the page,
+# routine is the papery background of the day, and everything else sits in between.
 BLOCK_GREY = {
-    "calendar": "#3d3d3d",     # fixed commitment: cannot move
+    "calendar": "#3d3d3d",     # calendar event: cannot move
     "routine": "#d2d2d2",      # sleep, meals, wind-down: the shape of the day
-    "work": "#8d8d8d",         # actual work
+    "other": "#8d8d8d",        # everything else
 }
 BLOCK_STATUS_WORD = {
     "accepted": "accepted",
@@ -645,7 +647,12 @@ def block_category(block: dict[str, Any]) -> str:
         return "calendar"
     if block.get("isRoutine"):
         return "routine"
-    return "work"
+    return "other"
+
+
+def _block_ink(block: dict[str, Any]) -> str:
+    """Label colour for a bar. #d2d2d2 needs dark text; the two darker greys need light text."""
+    return "#ffffff" if block_category(block) in ("calendar", "other") else "#333333"
 
 
 def _block_fill(block: dict[str, Any]) -> str:
@@ -671,8 +678,13 @@ def section_today_schedule(payload: dict[str, Any], options: dict[str, Any], pap
     end_min = options.get("toHour", 24) * 60
     span = max(60, end_min - start_min)
 
+    # Overlapping blocks stack into lanes instead of covering each other. Google Calendar solves the
+    # same problem on a vertical time axis by placing events side by side; with time running left to
+    # right here, "side by side" is vertical, so the ribbon grows by a lane per conflict.
+    placed, lanes = _pack_lanes(blocks)
+
     spans: list[str] = []
-    for block in blocks:
+    for block, lane in placed:
         # Clip to the window: a 12-6:30am sleep block becomes a stub at the left edge.
         visible_start = max(block["startMinutes"], start_min)
         visible_end = min(block["endMinutes"], end_min)
@@ -681,10 +693,15 @@ def section_today_schedule(payload: dict[str, Any], options: dict[str, Any], pap
         left = (visible_start - start_min) / span * 100
         width = max(0.55, (visible_end - visible_start) / span * 100)
         fill = _block_fill(block)
-        label = escape(truncate(block["title"], 16)) if width > 7 else ""
+        # The bar carries the name, not just a colour: the ribbon is the agenda, read left to right.
+        # A percentage of the ribbon converts to about 1.7 characters of tiny text, so the label is
+        # clipped to what actually fits rather than to a fixed guess.
+        room = int(width * 1.7)
+        label = escape(truncate(block["title"], room)) if room >= 4 else ""
+        tooltip = f'{escape(block["startLabel"])}–{escape(block["endLabel"])} {escape(block["title"])}'
         spans.append(
-            f'<div class="span" style="left:{left:.2f}%;width:{width:.2f}%;background:{fill}" '
-            f'title="{escape(block["startLabel"])}–{escape(block["endLabel"])} {escape(block["title"])}">'
+            f'<div class="span" style="left:{left:.2f}%;width:{width:.2f}%;top:{lane / lanes * 100:.3f}%;'
+            f'height:{100 / lanes:.3f}%;background:{fill};color:{_block_ink(block)}" title="{tooltip}">'
             f'<span>{label}</span></div>'
         )
 
@@ -719,8 +736,11 @@ def section_today_schedule(payload: dict[str, Any], options: dict[str, Any], pap
     )
     agenda = f'<div class="agendas{" two" if len(columns) == 2 else ""}">{cells}</div>'
 
+    # 0.15in per lane holds one line of tiny text; a conflicted day gets a taller ribbon rather
+    # than an unreadable one.
+    ribbon_height = max(0.30, 0.15 * lanes)
     body = (
-        f'<div class="ribbon">{"".join(ticks)}{"".join(spans)}</div>'
+        f'<div class="ribbon" style="height:{ribbon_height:.2f}in">{"".join(ticks)}{"".join(spans)}</div>'
         f'<div class="axis">{axis}</div>'
         f"{_block_legend()}"
         f"{agenda}"
@@ -835,11 +855,32 @@ def section_week_ahead(payload: dict[str, Any], options: dict[str, Any], paper: 
     return section_shell("week-ahead", f'<div class="week">{"".join(columns)}</div>{att_html}', note=note)
 
 
+def _pack_lanes(blocks: list[dict[str, Any]]) -> tuple[list[tuple[dict[str, Any], int]], int]:
+    """First-fit lane assignment in start order.
+
+    Only blocks that actually conflict share vertical space, so an ordinary day stays one lane tall
+    and a badly double-booked one grows instead of hiding work under other work. A day has at most
+    a few dozen blocks, so greedy is exactly as good as anything cleverer here.
+    """
+    lane_ends: list[int] = []
+    placed: list[tuple[dict[str, Any], int]] = []
+    for block in sorted(blocks, key=lambda item: (item["startMinutes"], -item["endMinutes"])):
+        for index, end in enumerate(lane_ends):
+            if block["startMinutes"] >= end:
+                lane_ends[index] = block["endMinutes"]
+                placed.append((block, index))
+                break
+        else:
+            placed.append((block, len(lane_ends)))
+            lane_ends.append(block["endMinutes"])
+    return placed, max(1, len(lane_ends))
+
+
 def _block_legend() -> str:
     """Three swatches and three words: without this the grey shades are guesswork."""
     items = "".join(
         f'<span class="lg"><span class="sw" style="background:{BLOCK_GREY[key]}"></span>{label}</span>'
-        for key, label in (("calendar", "fixed"), ("routine", "routine"), ("work", "work"))
+        for key, label in (("calendar", "calendar"), ("routine", "routine"), ("other", "other"))
     )
     return f'<div class="legend">{items}</div>'
 
