@@ -75,6 +75,11 @@ Top to bottom, one letter page (0.36in margins, 8.2pt):
      this on a vertical time axis by putting events side by side; with time running left to right
      here, "side by side" is vertical, so a double-booked hour grows the ribbon rather than hiding
      work under other work.
+   - Lanes are **per conflict cluster, and blocks expand into free lanes**. A day-wide lane count
+     would pin an uncontested 8-hour work block to a third of the ribbon just because two blocks
+     conflict at noon. Conflicts are transitive, so conflicting blocks form clusters; each cluster is
+     packed on its own, and inside a cluster a block grows into every adjacent lane free for its
+     whole span. A long block that merely brushes a conflict at one end keeps the rest of its height.
 5. **Do today** — full-width cards, two columns, with priority pill, remaining time, tags, due label,
    and the Markdown-flattened description clipped to ~220 chars. Which tasks appear here is a server
    decision: anything with a block today, anything pinned by weekday tag, anything in progress; then

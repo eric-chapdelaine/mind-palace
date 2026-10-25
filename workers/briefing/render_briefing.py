@@ -684,7 +684,7 @@ def section_today_schedule(payload: dict[str, Any], options: dict[str, Any], pap
     placed, lanes = _pack_lanes(blocks)
 
     spans: list[str] = []
-    for block, lane in placed:
+    for block, top, height in placed:
         # Clip to the window: a 12-6:30am sleep block becomes a stub at the left edge.
         visible_start = max(block["startMinutes"], start_min)
         visible_end = min(block["endMinutes"], end_min)
@@ -700,8 +700,8 @@ def section_today_schedule(payload: dict[str, Any], options: dict[str, Any], pap
         label = escape(truncate(block["title"], room)) if room >= 4 else ""
         tooltip = f'{escape(block["startLabel"])}–{escape(block["endLabel"])} {escape(block["title"])}'
         spans.append(
-            f'<div class="span" style="left:{left:.2f}%;width:{width:.2f}%;top:{lane / lanes * 100:.3f}%;'
-            f'height:{100 / lanes:.3f}%;background:{fill};color:{_block_ink(block)}" title="{tooltip}">'
+            f'<div class="span" style="left:{left:.2f}%;width:{width:.2f}%;top:{top * 100:.3f}%;'
+            f'height:{height * 100:.3f}%;background:{fill};color:{_block_ink(block)}" title="{tooltip}">'
             f'<span>{label}</span></div>'
         )
 
@@ -855,25 +855,74 @@ def section_week_ahead(payload: dict[str, Any], options: dict[str, Any], paper: 
     return section_shell("week-ahead", f'<div class="week">{"".join(columns)}</div>{att_html}', note=note)
 
 
-def _pack_lanes(blocks: list[dict[str, Any]]) -> tuple[list[tuple[dict[str, Any], int]], int]:
-    """First-fit lane assignment in start order.
+def _overlapping(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    return a["startMinutes"] < b["endMinutes"] and b["startMinutes"] < a["endMinutes"]
 
-    Only blocks that actually conflict share vertical space, so an ordinary day stays one lane tall
-    and a badly double-booked one grows instead of hiding work under other work. A day has at most
-    a few dozen blocks, so greedy is exactly as good as anything cleverer here.
+
+def _pack_lanes(blocks: list[dict[str, Any]]) -> tuple[list[tuple[dict[str, Any], float, float]], int]:
+    """Lay the day out in vertical lanes, and let every block claim the height it can actually reach.
+
+    Three rules, in order:
+
+    1. Only blocks that actually conflict share vertical space. Conflicts are transitive, so they
+       form clusters (a 9-11 meeting that touches a 10-12 call is one cluster); each cluster is
+       packed independently and they all share the full ribbon height, because clusters never
+       overlap each other in time.
+    2. Within a cluster, first-fit lane assignment in start order. A day has a few dozen blocks at
+       most, so greedy is exactly as good as anything cleverer here.
+    3. A block then expands into every adjacent lane that is free for its whole span. A long block
+       that merely brushes a conflict at one end no longer gives up the rest of its height: it takes
+       everything except the lanes genuinely occupied while it runs.
+
+    Returns (block, top fraction, height fraction) plus the lane count the ribbon needs.
     """
-    lane_ends: list[int] = []
-    placed: list[tuple[dict[str, Any], int]] = []
-    for block in sorted(blocks, key=lambda item: (item["startMinutes"], -item["endMinutes"])):
-        for index, end in enumerate(lane_ends):
-            if block["startMinutes"] >= end:
-                lane_ends[index] = block["endMinutes"]
-                placed.append((block, index))
-                break
+    ordered = sorted(blocks, key=lambda item: (item["startMinutes"], -item["endMinutes"]))
+
+    # 1. Connected clusters of conflicting blocks.
+    clusters: list[list[dict[str, Any]]] = []
+    cluster_end = -1
+    for block in ordered:
+        if clusters and block["startMinutes"] < cluster_end:
+            clusters[-1].append(block)
+            cluster_end = max(cluster_end, block["endMinutes"])
         else:
-            placed.append((block, len(lane_ends)))
-            lane_ends.append(block["endMinutes"])
-    return placed, max(1, len(lane_ends))
+            clusters.append([block])
+            cluster_end = block["endMinutes"]
+
+    placed: list[tuple[dict[str, Any], float, float]] = []
+    widest = 1
+    for cluster in clusters:
+        # 2. First-fit lanes inside the cluster.
+        lane_ends: list[int] = []
+        lane_of: dict[int, int] = {}
+        for block in cluster:
+            for index, end in enumerate(lane_ends):
+                if block["startMinutes"] >= end:
+                    lane_ends[index] = block["endMinutes"]
+                    lane_of[id(block)] = index
+                    break
+            else:
+                lane_of[id(block)] = len(lane_ends)
+                lane_ends.append(block["endMinutes"])
+        lanes = len(lane_ends)
+        widest = max(widest, lanes)
+
+        # 3. Expand each block across adjacent lanes that are free for its whole span.
+        for block in cluster:
+            own = lane_of[id(block)]
+            taken = {
+                lane_of[id(other)]
+                for other in cluster
+                if other is not block and _overlapping(block, other)
+            }
+            low = own
+            while low - 1 >= 0 and low - 1 not in taken:
+                low -= 1
+            high = own
+            while high + 1 < lanes and high + 1 not in taken:
+                high += 1
+            placed.append((block, low / lanes, (high - low + 1) / lanes))
+    return placed, max(1, widest)
 
 
 def _block_legend() -> str:
