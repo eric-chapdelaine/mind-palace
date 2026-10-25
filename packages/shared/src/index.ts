@@ -30,6 +30,10 @@ export type TimeBlockStatus = (typeof timeBlockStatuses)[number];
 export const timeBlockTypes = ["work", "calendar_event"] as const;
 export type TimeBlockType = (typeof timeBlockTypes)[number];
 
+/** Where a time block came from: a human, the solver, a calendar import, or recurrence materialization. */
+export const timeBlockSources = ["manual", "solver", "calendar", "recurrence"] as const;
+export type TimeBlockSource = (typeof timeBlockSources)[number];
+
 /**
  * Tag kinds, owned via the tags.type column (nullable; most tags have no type). A `goal` tag
  * is a container: tasks carrying it (directly or through a descendant tag) are its subtasks.
@@ -127,7 +131,7 @@ export interface TimeBlock {
   endAt: string;
   status: TimeBlockStatus;
   type: TimeBlockType;
-  source: "manual" | "solver" | "calendar" | "recurrence";
+  source: TimeBlockSource;
   notes: string | null;
 }
 
@@ -148,6 +152,8 @@ export interface WeatherForecast {
   precipitationProbability: number | null;
   windMph: number | null;
   isDaytime: boolean | null;
+  /** UV index for the hour. NWS does not publish one, so `WeatherService` fills it from Open-Meteo. */
+  uvIndex: number | null;
   shortForecast: string | null;
   expiresAt: string;
 }
@@ -453,9 +459,9 @@ export interface UpsertRecurrenceInput {
  */
 export type BriefingSection =
   | { kind: "weather-day-graph"; fromHour?: number; toHour?: number }
-  | { kind: "today-schedule"; agenda?: boolean }
-  | { kind: "today-tasks"; descriptionChars?: number }
-  | { kind: "week-ahead"; days?: number }
+  | { kind: "today-schedule"; agenda?: boolean; fromHour?: number; toHour?: number }
+  | { kind: "today-tasks"; descriptionChars?: number; descriptionLines?: number }
+  | { kind: "week-ahead"; days?: number; linesPerDay?: number }
   | { kind: "board-snapshot"; perColumn?: number; columns?: KanbanStatus[] };
 
 /** One hour of the day's forecast, already placed on the day's local clock by the server. */
@@ -468,7 +474,28 @@ export interface BriefingWeatherHour {
   precipitationProbability: number | null;
   windMph: number | null;
   isDaytime: boolean | null;
+  uvIndex: number | null;
   shortForecast: string | null;
+}
+
+/**
+ * The day's headline numbers for the summary strip: enough to answer "what kind of day is this"
+ * without reading the graph.
+ */
+export interface BriefingWeatherDay {
+  highF: number | null;
+  lowF: number | null;
+  /** Peak precipitation probability, 0-100. */
+  rainPercent: number | null;
+  /** Peak UV index for the day, and the local time it occurs. */
+  uvMax: number | null;
+  uvMaxLabel: string | null;
+  /** Daylight window as local clock labels, e.g. "7:07 AM" - "5:48 PM". */
+  sunriseLabel: string | null;
+  sunsetLabel: string | null;
+  /** The same window in minutes since local midnight, so the graph can shade the night band. */
+  sunriseMinutes: number | null;
+  sunsetMinutes: number | null;
 }
 
 /** A time block placed on a day: everything a printed block needs, nothing more. */
@@ -483,6 +510,10 @@ export interface BriefingBlock {
   endMinutes: number;
   status: TimeBlockStatus;
   type: TimeBlockType;
+  /** Where the block came from; the print shades manual work differently from solver output. */
+  source: TimeBlockSource;
+  /** True when the block belongs to a routine task (recurrence-born or routine-tagged). */
+  isRoutine: boolean;
 }
 
 /** A task as printed: the board's fields plus the detail the full-width page can afford. */
@@ -495,6 +526,8 @@ export interface BriefingTask {
   tags: string[];
   /** Local short due label ("due Wed"), or null when the task has no deadline. */
   deadlineLabel: string | null;
+  /** True when this task is routine work: hidden from the board, the week, and "do today". */
+  isRoutine: boolean;
   description: string | null;
 }
 
@@ -513,6 +546,12 @@ export interface BriefingDay {
    */
   blocks: BriefingBlock[];
   scheduledMinutes: number;
+  /**
+   * Non-routine tasks whose deadline falls on this day. The week column prints scheduled work and
+   * due work as two labelled groups, because "what is planned" and "what must ship" are different
+   * questions and a day can have either, both, or neither.
+   */
+  dueTasks: BriefingTask[];
 }
 
 export interface BriefingBoardColumn {
@@ -536,6 +575,7 @@ export interface BriefingPayload {
   timeZone: string;
   facts: {
     weatherHours: BriefingWeatherHour[];
+    weatherDay: BriefingWeatherDay;
     todayBlocks: BriefingBlock[];
     todayTasks: BriefingTask[];
     week: BriefingDay[];

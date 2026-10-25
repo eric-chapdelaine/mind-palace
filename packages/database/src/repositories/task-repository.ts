@@ -93,6 +93,7 @@ function mapWeatherForecast(value: Row): WeatherForecast {
     precipitationProbability: value.precipitation_probability === null ? null : integer(value.precipitation_probability),
     windMph: value.wind_mph === null ? null : Number(value.wind_mph),
     isDaytime: value.is_daytime === null ? null : boolean(value.is_daytime),
+    uvIndex: value.uv_index === null ? null : Number(value.uv_index),
     shortForecast: nullableText(value.short_forecast),
     expiresAt: text(value.expires_at),
   };
@@ -987,11 +988,11 @@ export class TaskRepository {
   upsertWeather(forecasts: Omit<WeatherForecast, "expiresAt">[], fetchedAt: string, expiresAt: string): void {
     const statement = this.database.connection.prepare(
       `INSERT INTO weather_forecasts
-        (location_key, forecast_at, temperature_f, precipitation_probability, wind_mph, is_daytime, short_forecast, fetched_at, expires_at)
-       VALUES ('boston-ma', ?, ?, ?, ?, ?, ?, ?, ?)
+        (location_key, forecast_at, temperature_f, precipitation_probability, wind_mph, is_daytime, uv_index, short_forecast, fetched_at, expires_at)
+       VALUES ('boston-ma', ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(location_key, forecast_at) DO UPDATE SET temperature_f = excluded.temperature_f,
          precipitation_probability = excluded.precipitation_probability, wind_mph = excluded.wind_mph,
-         is_daytime = excluded.is_daytime, short_forecast = excluded.short_forecast,
+         is_daytime = excluded.is_daytime, uv_index = excluded.uv_index, short_forecast = excluded.short_forecast,
          fetched_at = excluded.fetched_at, expires_at = excluded.expires_at`,
     );
     this.database.connection.exec("BEGIN IMMEDIATE");
@@ -999,7 +1000,7 @@ export class TaskRepository {
       for (const forecast of forecasts) statement.run(
         forecast.forecastAt, forecast.temperatureF, forecast.precipitationProbability,
         forecast.windMph, forecast.isDaytime === null ? null : forecast.isDaytime ? 1 : 0,
-        forecast.shortForecast, fetchedAt, expiresAt,
+        forecast.uvIndex, forecast.shortForecast, fetchedAt, expiresAt,
       );
       this.database.connection.exec("COMMIT");
     } catch (error) {

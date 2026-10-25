@@ -10,13 +10,19 @@ import {
   type BriefingPayload,
   type BriefingSection,
   type BriefingTask,
+  type BriefingWeatherDay,
   type BriefingWeatherHour,
   type KanbanStatus,
+  type TimeBlockSource,
   type TaskSummary,
   type TimeBlock,
   type WeatherForecast,
 } from "@mind-palace/shared";
 import { runPythonWorker } from "./worker.js";
+
+/** Boston. Sunrise/sunset are computed for this point; the weather cache is for the same place. */
+const HOME_LATITUDE = 42.3601;
+const HOME_LONGITUDE = -71.0589;
 
 /** Page sizes the renderer knows how to lay out (mirrors `PAPER` in workers/briefing). */
 export const briefingPapers = ["letter", "a4"] as const;
@@ -28,6 +34,17 @@ const TIME_ZONE = "America/New_York";
 const WEEK_DAYS = 7;
 
 /**
+ * Routine work is the household's scaffolding: sleep, meals, wind-down. It belongs on the day's
+ * timeline (so the page shows what the day actually looks like) but it is not "work to do", so it
+ * is excluded from the task lists, the week's due column, and the board snapshot.
+ */
+function isRoutineTask(task: TaskSummary, routineTagId: string | null): boolean {
+  if (task.origin === "recurrence") return true;
+  if (routineTagId === null) return false;
+  return [...task.tags, ...task.derivedTags].some((tag) => tag.publicId === routineTagId);
+}
+
+/**
  * The default page. This list *is* the design: reordering it reorders the print, and a different
  * medium (receipt, e-ink) is a second list rather than a second renderer. Sections are keyed by the
  * `BriefingSection` union, so an entry that does not typecheck cannot reach the worker.
@@ -35,7 +52,7 @@ const WEEK_DAYS = 7;
 const DEFAULT_LAYOUT: BriefingSection[] = [
   { kind: "weather-day-graph" },
   { kind: "today-schedule" },
-  { kind: "today-tasks", descriptionChars: 220 },
+  { kind: "today-tasks", descriptionChars: 220, descriptionLines: 4 },
   { kind: "week-ahead", days: WEEK_DAYS },
   { kind: "board-snapshot", perColumn: 6 },
 ];
@@ -117,6 +134,75 @@ function addDays(date: string, count: number): string {
   return base.toISOString().slice(0, 10);
 }
 
+/**
+ * Sunrise and sunset in minutes since local midnight, from the NOAA solar-position approximation.
+ * Accurate to a couple of minutes at this latitude, and it needs no network and no extra column:
+ * the point of printing daylight hours is the window, not the second.
+ */
+function daylightMinutes(date: string): { sunrise: number; sunset: number } {
+  const [year, month, day] = date.split("-").map(Number);
+  const dayOfYear = Math.floor(
+    (Date.UTC(year ?? 0, (month ?? 1) - 1, day ?? 1) - Date.UTC(year ?? 0, 0, 0)) / 86_400_000,
+  );
+  const gamma = ((2 * Math.PI) / 365) * (dayOfYear - 1);
+  const equationOfTime =
+    229.18 *
+    (0.000075 +
+      0.001868 * Math.cos(gamma) -
+      0.032077 * Math.sin(gamma) -
+      0.014615 * Math.cos(2 * gamma) -
+      0.040849 * Math.sin(2 * gamma));
+  const declination =
+    0.006918 -
+    0.399912 * Math.cos(gamma) +
+    0.070257 * Math.sin(gamma) -
+    0.006758 * Math.cos(2 * gamma) +
+    0.000907 * Math.sin(2 * gamma) -
+    0.002697 * Math.cos(3 * gamma) +
+    0.00148 * Math.sin(3 * gamma);
+  const latitude = HOME_LATITUDE * (Math.PI / 180);
+  // 90.833 deg: the sun's disc plus standard refraction, the same convention as the almanac.
+  const cosHourAngle =
+    Math.cos(90.833 * (Math.PI / 180)) / (Math.cos(latitude) * Math.cos(declination)) -
+    Math.tan(latitude) * Math.tan(declination);
+  const hourAngle = Math.acos(Math.min(1, Math.max(-1, cosHourAngle))) * (180 / Math.PI);
+  const solarNoon = 720 - 4 * HOME_LONGITUDE - equationOfTime;
+  // Both are UTC minutes; shift by the zone offset so they read as local wall-clock minutes.
+  const offset = zoneOffsetMs(startOfLocalDay(date)) / 60_000;
+  return { sunrise: solarNoon - 4 * hourAngle + offset, sunset: solarNoon + 4 * hourAngle + offset };
+}
+
+/** Peak UV for the day and the hour it lands: what a person needs to know is "when, and how bad". */
+function weatherSummary(hours: BriefingWeatherHour[], date: string): BriefingWeatherDay {
+  const temperatures = hours.map((hour) => hour.temperatureF).filter((value): value is number => value !== null);
+  const rains = hours.map((hour) => hour.precipitationProbability ?? 0);
+  const uvs = hours
+    .filter((hour) => hour.uvIndex !== null)
+    .sort((left, right) => (right.uvIndex ?? 0) - (left.uvIndex ?? 0));
+  const peakUv = uvs[0];
+  const { sunrise, sunset } = daylightMinutes(date);
+  return {
+    highF: temperatures.length > 0 ? Math.round(Math.max(...temperatures)) : null,
+    lowF: temperatures.length > 0 ? Math.round(Math.min(...temperatures)) : null,
+    rainPercent: rains.length > 0 ? Math.round(Math.max(...rains)) : null,
+    uvMax: peakUv?.uvIndex ?? null,
+    uvMaxLabel: peakUv ? formatMinutes(peakUv.minuteOfDay) : null,
+    sunriseLabel: formatMinutes(sunrise),
+    sunsetLabel: formatMinutes(sunset),
+    sunriseMinutes: Math.round(sunrise),
+    sunsetMinutes: Math.round(sunset),
+  };
+}
+
+/** Minutes since midnight -> "7:07 AM". Only for whole-minute labels, never for block times. */
+function formatMinutes(minutes: number): string {
+  const total = ((Math.round(minutes) % 1440) + 1440) % 1440;
+  const hour = Math.floor(total / 60);
+  const rest = total % 60;
+  const suffix = hour < 12 ? "AM" : "PM";
+  return `${hour % 12 || 12}:${String(rest).padStart(2, "0")} ${suffix}`;
+}
+
 /** Minutes since local midnight of an instant, as printed on a day axis. */
 function minuteOfDay(instant: Date): number {
   const parts = partsOf(instant);
@@ -196,6 +282,10 @@ export class BriefingService {
 
     const tasks = this.tasks.listTasks();
     const taskById = new Map(tasks.map((task) => [task.id, task]));
+    const routineTagId = reservedTagPublicIds.routine;
+    const routineTaskIds = new Set(
+      tasks.filter((task) => isRoutineTask(task, routineTagId)).map((task) => task.id),
+    );
     const blocks = this.tasks.listTimeBlocks(dayStart.toISOString(), weekEnd.toISOString())
       // Superseded rows are the solver's discarded proposals: never printed.
       .filter((block) => block.status !== "superseded");
@@ -203,20 +293,24 @@ export class BriefingService {
 
     const todayBlocks = blocks
       .filter((block) => new Date(block.startAt) < dayEnd && new Date(block.endAt) > dayStart)
-      .map((block) => this.blockFor(block, taskById, dayStart, dayEnd))
+      .map((block) => this.blockFor(block, taskById, routineTaskIds, dayStart, dayEnd))
       .sort((left, right) => left.startMinutes - right.startMinutes || left.endMinutes - right.endMinutes);
 
-    const week = weekDays.map((day) => this.weekDay(day, date, blocks, weather, taskById));
-    const todayTasks = this.todayTasks(tasks, todayBlocks, date);
-    const board = this.board(tasks);
-    const attention = this.attention(tasks, date, weekDays);
+    const weatherHours = this.weatherHours(weather, dayStart, dayEnd);
+    const week = weekDays.map((day) =>
+      this.weekDay(day, date, blocks, weather, taskById, tasks, routineTaskIds),
+    );
+    const todayTasks = this.todayTasks(tasks, todayBlocks, date, routineTaskIds);
+    const board = this.board(tasks, routineTaskIds);
+    const attention = this.attention(tasks, date, weekDays, routineTaskIds);
 
     return {
       printedAtLabel: clockLabel(now),
       dateLabel: `${weekdayOf(date)}, ${monthDayOf(date)}`,
       timeZone: TIME_ZONE.replace("_", " "),
       facts: {
-        weatherHours: this.weatherHours(weather, dayStart, dayEnd),
+        weatherHours,
+        weatherDay: weatherSummary(weatherHours, date),
         todayBlocks,
         todayTasks,
         week,
@@ -254,7 +348,13 @@ export class BriefingService {
 
   // ---- facts ---------------------------------------------------------------------------
 
-  private blockFor(block: TimeBlock, taskById: Map<number, TaskSummary>, dayStart: Date, dayEnd: Date): BriefingBlock {
+  private blockFor(
+    block: TimeBlock,
+    taskById: Map<number, TaskSummary>,
+    routineTaskIds: Set<number>,
+    dayStart: Date,
+    dayEnd: Date,
+  ): BriefingBlock {
     const start = new Date(block.startAt);
     const end = new Date(block.endAt);
     const clampedStart = Math.max(start.getTime(), dayStart.getTime());
@@ -273,6 +373,8 @@ export class BriefingService {
       endMinutes: Math.round((clampedEnd - dayStart.getTime()) / 60_000),
       status: block.status,
       type: block.type,
+      source: block.source,
+      isRoutine: routineTaskIds.has(block.taskId),
     };
   }
 
@@ -291,6 +393,7 @@ export class BriefingService {
           precipitationProbability: hour.precipitationProbability,
           windMph: hour.windMph,
           isDaytime: hour.isDaytime,
+          uvIndex: hour.uvIndex,
           shortForecast: hour.shortForecast,
         };
       });
@@ -302,11 +405,16 @@ export class BriefingService {
     blocks: TimeBlock[],
     weather: WeatherForecast[],
     taskById: Map<number, TaskSummary>,
+    tasks: TaskSummary[],
+    routineTaskIds: Set<number>,
   ): BriefingDay {
     const dayStart = startOfLocalDay(date);
     const dayEnd = startOfLocalDay(addDays(date, 1));
     const dayBlocks = blocks
       .filter((block) => new Date(block.startAt) < dayEnd && new Date(block.endAt) > dayStart)
+      // Routine work is the scaffolding of the day, not something to plan around: it stays out of
+      // the week columns so the real tasks have room.
+      .filter((block) => !routineTaskIds.has(block.taskId))
       .sort((left, right) => left.startAt.localeCompare(right.startAt));
     const dayWeather = weather.filter((hour) => {
       const at = new Date(hour.forecastAt);
@@ -323,7 +431,15 @@ export class BriefingService {
       highF: temperatures.length > 0 ? Math.round(Math.max(...temperatures)) : null,
       lowF: temperatures.length > 0 ? Math.round(Math.min(...temperatures)) : null,
       rainPercent: rains.length > 0 ? Math.round(Math.max(...rains)) : null,
-      blocks: dayBlocks.map((block) => this.blockFor(block, taskById, dayStart, dayEnd)),
+      blocks: dayBlocks.map((block) => this.blockFor(block, taskById, routineTaskIds, dayStart, dayEnd)),
+      dueTasks: tasks
+        .filter((task) => {
+          if (terminalStatuses.has(task.kanbanStatus) || routineTaskIds.has(task.id)) return false;
+          if (!task.deadlineAt) return false;
+          return partsOf(new Date(task.deadlineAt)).date === date;
+        })
+        .sort((left, right) => left.priority - right.priority || right.rank - left.rank)
+        .map((task) => this.printTask(task, routineTaskIds)),
       scheduledMinutes: dayBlocks.reduce(
         (total, block) => total + (new Date(block.endAt).getTime() - new Date(block.startAt).getTime()) / 60_000,
         0,
@@ -335,13 +451,21 @@ export class BriefingService {
    * The tasks that deserve the full-width treatment: everything with a block today, everything
    * pinned to today by a weekday tag, and anything already in progress. Priority first, then the
    * board's own rank order.
+   *
+   * Routine work is excluded: sleep, meals and wind-down are already on today's timeline above, and
+   * as full-width cards they crowd out the handful of tasks the page exists to surface.
    */
-  private todayTasks(tasks: TaskSummary[], todayBlocks: BriefingBlock[], date: string): BriefingTask[] {
+  private todayTasks(
+    tasks: TaskSummary[],
+    todayBlocks: BriefingBlock[],
+    date: string,
+    routineTaskIds: Set<number>,
+  ): BriefingTask[] {
     const blockedToday = new Set(todayBlocks.map((block) => block.taskId));
     const weekdayIndex = new Date(`${date}T12:00:00Z`).getUTCDay();
     const weekdayTag = weekdayTagPublicIds[weekdayIndex];
     const selected = tasks.filter((task) => {
-      if (terminalStatuses.has(task.kanbanStatus)) return false;
+      if (terminalStatuses.has(task.kanbanStatus) || routineTaskIds.has(task.id)) return false;
       if (blockedToday.has(task.id)) return true;
       if (task.kanbanStatus === "in_progress") return true;
       const tagIds = [...task.tags, ...task.derivedTags].map((tag) => tag.publicId);
@@ -358,19 +482,28 @@ export class BriefingService {
         seen.add(key);
         return true;
       })
-      .map((task) => this.printTask(task));
+      .map((task) => this.printTask(task, routineTaskIds));
   }
 
-  private board(tasks: TaskSummary[]): BriefingBoardColumn[] {
-    // Board order is the human's drag order (`rank` desc), same as the web kanban.
-    const active = tasks.filter((task) => !terminalStatuses.has(task.kanbanStatus));
+  private board(tasks: TaskSummary[], routineTaskIds: Set<number>): BriefingBoardColumn[] {
+    // Board order is the human's drag order (`rank` desc), same as the web kanban. Routine rows
+    // (recurrence scaffolding like "[LIFE] Wake up") are filtered out here and in the week view:
+    // they are already in today's agenda, and they crowd out real work.
+    const active = tasks.filter(
+      (task) => !terminalStatuses.has(task.kanbanStatus) && !routineTaskIds.has(task.id),
+    );
     return boardColumns.map((column) => {
       const items = active.filter((task) => task.kanbanStatus === column.status).sort((a, b) => b.rank - a.rank);
-      return { status: column.status, label: column.label, tasks: items.map((task) => this.printTask(task)), total: items.length };
+      return {
+        status: column.status,
+        label: column.label,
+        tasks: items.map((task) => this.printTask(task, routineTaskIds)),
+        total: items.length,
+      };
     });
   }
 
-  private printTask(task: TaskSummary): BriefingTask {
+  private printTask(task: TaskSummary, routineTaskIds: Set<number>): BriefingTask {
     return {
       id: task.id,
       title: task.title,
@@ -382,6 +515,7 @@ export class BriefingService {
         .filter((title, index, all) => all.indexOf(title) === index)
         .slice(0, 4),
       deadlineLabel: this.deadlineLabel(task),
+      isRoutine: routineTaskIds.has(task.id),
       description: task.description,
     };
   }
@@ -407,12 +541,12 @@ export class BriefingService {
    * Deadlines and releases landing in the window, plus this-week tasks that carry no duration —
    * both are things the print can flag that the day/week views cannot show at a glance.
    */
-  private attention(tasks: TaskSummary[], date: string, weekDays: string[]): string[] {
+  private attention(tasks: TaskSummary[], date: string, weekDays: string[], routineTaskIds: Set<number>): string[] {
     const window = new Set(weekDays);
     const lines: string[] = [];
     let overdue = 0;
     for (const task of tasks) {
-      if (terminalStatuses.has(task.kanbanStatus)) continue;
+      if (terminalStatuses.has(task.kanbanStatus) || routineTaskIds.has(task.id)) continue;
       if (!task.deadlineAt) continue;
       const deadlineDate = partsOf(new Date(task.deadlineAt)).date;
       // Past-due rows are noise one by one; the count is the signal.
@@ -426,7 +560,7 @@ export class BriefingService {
       lines.push(`${overdue} task${overdue === 1 ? "" : "s"} past due — clear or re-date them`);
     }
     const thisWeekTagged = tasks.filter((task) => {
-      if (terminalStatuses.has(task.kanbanStatus)) return false;
+      if (terminalStatuses.has(task.kanbanStatus) || routineTaskIds.has(task.id)) return false;
       const tagIds = [...task.tags, ...task.derivedTags].map((tag) => tag.publicId);
       return tagIds.includes(reservedTagPublicIds.thisWeek);
     });

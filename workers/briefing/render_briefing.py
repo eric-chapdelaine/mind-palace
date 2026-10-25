@@ -125,16 +125,46 @@ _MD_PATTERNS = [
     (re.compile(r"`([^`]*)`"), r"\1"),                      # inline code
     (re.compile(r"^\s*[-*+]\s+", re.MULTILINE), ""),        # bullets
     (re.compile(r"^\s*>\s?", re.MULTILINE), ""),            # quotes
-    (re.compile(r"\s+"), " "),
 ]
 
 
 def plain_text(markdown: str) -> str:
-    """Flatten a task description's Markdown to one printable line of prose."""
+    """Flatten a task description's Markdown to plain prose, keeping its line structure.
+
+    Line breaks are preserved on purpose: a grocery list or a workout plan is *only* useful as a
+    list. Whitespace inside a line collapses; blank lines collapse away.
+    """
     text = markdown
     for pattern, replacement in _MD_PATTERNS:
         text = pattern.sub(replacement, text)
-    return text.strip()
+    lines = [" ".join(line.split()) for line in text.splitlines()]
+    return "\n".join(line for line in lines if line)
+
+
+def clip(text: str, chars: int, lines: int) -> tuple[str, bool]:
+    """Clip to a line budget and a character budget, whichever runs out first.
+
+    Returns (text, clipped). Line-aware because a list clipped mid-item reads as an error, while a
+    paragraph clipped mid-sentence reads as "there is more".
+    """
+    kept = text.split("\n")[:lines]
+    clipped = len(kept) < len(text.split("\n"))
+    out: list[str] = []
+    budget = chars
+    for index, line in enumerate(kept):
+        if budget <= 0:
+            clipped = True
+            break
+        if len(line) > budget:
+            out.append(truncate(line, budget) if budget > 12 else line[:budget].rstrip() + "…")
+            clipped = True
+            break
+        out.append(line)
+        budget -= len(line) + 1
+        if index < len(kept) - 1 and budget <= 0:
+            clipped = True
+            break
+    return "\n".join(out), clipped
 
 
 def minutes_label(minutes: int | None) -> str:
@@ -232,6 +262,9 @@ section.sec {{ margin-top: 5.5pt; break-inside: auto; }}
 .ribbon .span {{ position: absolute; top: 0; bottom: 0; border-right: 0.4pt solid #fff; overflow: hidden; }}
 .ribbon .span span {{ font-size: {paper['tiny']}; padding-left: 1.5pt; white-space: nowrap; color: #fff; line-height: {paper['ribbon']}; }}
 .ribbon .tick {{ position: absolute; top: 0; bottom: 0; border-left: 0.3pt solid #e2e2e2; }}
+.legend {{ display: flex; gap: 10pt; font-size: {paper['tiny']}; color: {INK['muted']}; padding: 1.5pt 0 0; }}
+.legend .lg {{ display: flex; align-items: center; gap: 2.5pt; }}
+.legend .sw {{ width: 7pt; height: 4.5pt; display: inline-block; border: 0.3pt solid #b0b0b0; }}
 .ribbon .now {{ position: absolute; top: -2pt; bottom: -2pt; border-left: 1pt solid {INK['warn']}; }}
 .axis {{ position: relative; height: 9pt; }}
 .axis span {{ position: absolute; font-size: {paper['tiny']}; color: {INK['muted']}; transform: translateX(-50%); }}
@@ -255,8 +288,8 @@ section.sec {{ margin-top: 5.5pt; break-inside: auto; }}
 /* ---- today's tasks -------------------------------------------------------------------- */
 .tasks {{ display: table; width: 100%; table-layout: fixed; }}
 .tasks .tcol {{ display: table-cell; vertical-align: top; width: 50%; }}
-.tasks .tcol:first-child {{ padding-right: 11pt; border-right: 0.3pt solid {INK['hair']}; }}
-.tasks .tcol:last-child {{ padding-left: 11pt; }}
+.tasks.two .tcol:first-child {{ padding-right: 11pt; border-right: 0.3pt solid {INK['hair']}; }}
+.tasks.two .tcol:last-child {{ padding-left: 11pt; }}
 .task {{ display: flex; gap: 4.5pt; padding: 1.8pt 0; border-top: 0.3pt solid {INK['hair']};
          break-inside: avoid; }}
 .task:first-child {{ border-top: 0; }}
@@ -268,6 +301,10 @@ section.sec {{ margin-top: 5.5pt; break-inside: auto; }}
 .task .head b {{ font-weight: 600; }}
 .task .head .meta {{ margin-left: auto; white-space: nowrap; font-size: {paper['tiny']}; color: {INK['muted']}; }}
 .task .desc {{ font-size: {paper['small']}; color: #333; padding-top: 0.4pt; }}
+.task .dline {{ padding-left: 6pt; text-indent: -6pt; line-height: 1.25; }}
+.task .dline::before {{ content: "· "; color: {INK['faint']}; }}
+.task .dline.more {{ color: {INK['faint']}; }}
+.task .dline.more::before {{ content: ""; }}
 .task .tag {{ font-size: {paper['tiny']}; color: {INK['muted']}; }}
 .task .tag::before {{ content: "#"; }}
 .task .due {{ color: {INK['warn']}; }}
@@ -286,6 +323,10 @@ section.sec {{ margin-top: 5.5pt; break-inside: auto; }}
 .week .mini .span {{ position: absolute; top: 0; bottom: 0; }}
 .week .line {{ font-size: {paper['small']}; padding: 0.7pt 0; line-height: 1.15; }}
 .week .line .h {{ font-variant-numeric: tabular-nums; color: {INK['muted']}; }}
+.week .grp {{ font-size: {paper['tiny']}; text-transform: uppercase; letter-spacing: 0.08em;
+              color: {INK['faint']}; padding-top: 2pt; }}
+.week .grp.due {{ color: {INK['warn']}; }}
+.week .line.due {{ color: #333; }}
 .week .more {{ font-size: {paper['tiny']}; color: {INK['faint']}; padding-top: 1pt; }}
 .week .empty {{ font-size: {paper['tiny']}; color: #b0b0b0; }}
 
@@ -340,30 +381,63 @@ def masthead(payload: dict[str, Any]) -> str:
 
 
 def summary_strip(payload: dict[str, Any]) -> str:
-    """Four headline numbers: the answer to "what is today" in one glance."""
+    """Five headline numbers: the answer to "what kind of day is this" in one glance."""
     facts = payload["facts"]
+    day = facts.get("weatherDay") or {}
     week = facts.get("week") or []
-    today = next((day for day in week if day.get("isToday")), None)
+    today = next((day_row for day_row in week if day_row.get("isToday")), None)
     cells: list[tuple[str, str]] = []
-    if today:
-        hi, lo = today.get("highF"), today.get("lowF")
-        cells.append(("Weather", f"{hi}° / {lo}°" if hi is not None and lo is not None else "—"))
-        rain = today.get("rainPercent")
-        cells.append(("Rain", f"{rain}% peak" if rain else "none"))
-    blocks = facts.get("todayBlocks") or []
-    scheduled = sum(block["endMinutes"] - block["startMinutes"] for block in blocks)
-    cells.append(("Scheduled", f"{minutes_label(scheduled)} · {len(blocks)} block{'s' if len(blocks) != 1 else ''}"))
-    tasks = facts.get("todayTasks") or []
-    cells.append(("On deck", f"{len(tasks)} task{'s' if len(tasks) != 1 else ''}"))
-    board = facts.get("board") or []
-    ready = next((column for column in board if column["status"] == "ready"), None)
-    if ready is not None:
-        cells.append(("Ready", str(ready["total"])))
+    hi, lo = day.get("highF"), day.get("lowF")
+    cells.append(("Weather", f"{hi}° / {lo}°" if hi is not None and lo is not None else "—"))
+    rain = day.get("rainPercent")
+    cells.append(("Rain", f"{rain}% peak" if rain else "none"))
+    uv = day.get("uvMax")
+    if uv is None:
+        uv_text = "—"
+    else:
+        band = uv_band(uv)
+        when = day.get("uvMaxLabel")
+        uv_text = f"{band} · {_strip_clock(when)}" if when else band
+    cells.append(("UV", uv_text))
+    sunrise, sunset = day.get("sunriseLabel"), day.get("sunsetLabel")
+    span = daylight_span(day.get("sunriseMinutes"), day.get("sunsetMinutes"))
+    cells.append(("Daylight", f"{_strip_clock(sunrise)}–{_strip_clock(sunset)}{f' · {span}' if span else ''}" if sunrise and sunset else "—"))
+    if today is not None:
+        blocks = facts.get("todayBlocks") or []
+        scheduled = sum(block["endMinutes"] - block["startMinutes"] for block in blocks)
+        cells.append(("Scheduled", f"{minutes_label(scheduled)} · {len(blocks)} block{'s' if len(blocks) != 1 else ''}"))
     body = "".join(
         f'<div><div class="k">{escape(key)}</div><div class="v">{escape(value)}</div></div>'
         for key, value in cells
     )
     return f'<div class="strip">{body}</div>'
+
+
+def uv_band(uv: float) -> str:
+    """WHO's exposure bands. The number alone means nothing to most readers; the word does."""
+    if uv < 3:
+        return f"low ({round(uv)})"
+    if uv < 6:
+        return f"moderate ({round(uv)})"
+    if uv < 8:
+        return f"high ({round(uv)})"
+    if uv < 11:
+        return f"very high ({round(uv)})"
+    return f"extreme ({round(uv)})"
+
+
+def daylight_span(sunrise: float | None, sunset: float | None) -> str:
+    if sunrise is None or sunset is None:
+        return ""
+    minutes = int(sunset - sunrise)
+    return f"{minutes // 60}h{minutes % 60:02d}"
+
+
+def _strip_clock(label: str | None) -> str:
+    """Strip-cell times are already local labels ("7:07 AM"); tighten them for a narrow cell."""
+    if not label:
+        return ""
+    return label.replace(":00 ", "").replace(" AM", "a").replace(" PM", "p")
 
 
 # ---------------------------------------------------------------------------------------------
@@ -383,10 +457,13 @@ def section_weather_day_graph(payload: dict[str, Any], options: dict[str, Any], 
     end_min = to_hour * 60
     span = max(1, end_min - start_min)
 
-    width, height = 760, 150
-    temp_top, temp_bottom = 16, 92          # temperature plot band (svg y grows downward)
-    rain_top, rain_bottom = 116, 142        # precipitation bars grow up from rain_bottom
-    axis_y = 149
+    # A 760-unit viewBox stretched to ~7.5in of paper is roughly 1:1, so an svg font-size of 11 is
+    # about 11pt of ink. Small text was the main readability complaint on the first print.
+    width, height = 760, 158
+    temp_top, temp_bottom = 20, 96          # temperature plot band (svg y grows downward)
+    rain_top, rain_bottom = 122, 148        # precipitation bars grow up from rain_bottom
+    axis_y = 157
+    label_size, tick_size = 11.5, 10.5
 
     def x_of(minute: int) -> float:
         return (minute - start_min) / span * width
@@ -401,15 +478,18 @@ def section_weather_day_graph(payload: dict[str, Any], options: dict[str, Any], 
 
     parts: list[str] = [f'<svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg">']
 
-    # Night shading: a light band behind the whole plot wherever the hour is not daylight.
+    # Night shading: a light band behind the whole plot wherever the sun is down. Sunrise/sunset are
+    # computed for the household's coordinates (NWS `isDaytime` is a whole-hour flag that runs ~1h
+    # late and was the thing being misread as an unexplained grey box).
+    day = payload["facts"].get("weatherDay") or {}
+    sunrise = day.get("sunriseMinutes")
+    sunset = day.get("sunsetMinutes")
     runs: list[tuple[int, int]] = []
-    for hour in source:
-        if hour["isDaytime"] is False:
-            minute = hour["minuteOfDay"]
-            if runs and runs[-1][1] == minute:
-                runs[-1] = (runs[-1][0], minute + 60)
-            else:
-                runs.append((minute, minute + 60))
+    if sunrise is not None and sunset is not None:
+        if sunrise > start_min:
+            runs.append((start_min, int(sunrise)))
+        if sunset < end_min:
+            runs.append((int(sunset), end_min))
     for run_start, run_end in runs:
         x0 = x_of(max(start_min, run_start))
         x1 = x_of(min(run_end, end_min))
@@ -418,6 +498,12 @@ def section_weather_day_graph(payload: dict[str, Any], options: dict[str, Any], 
                 f'<rect x="{x0:.1f}" y="{temp_top}" width="{x1 - x0:.1f}" height="{rain_bottom - temp_top}" '
                 f'fill="{INK["night"]}"/>'
             )
+            # Say what the grey means. It is the only unexplained mark on the page.
+            if x1 - x0 > 26:
+                parts.append(
+                    f'<text x="{(x0 + x1) / 2:.1f}" y="{temp_top + 10}" font-size="{tick_size - 1}" '
+                    f'fill="{INK["muted"]}" text-anchor="middle" letter-spacing="0.5">night</text>'
+                )
 
     # Hour gridlines with labels every two hours on the shared axis.
     for minute in range(start_min, end_min + 1, 60):
@@ -426,7 +512,7 @@ def section_weather_day_graph(payload: dict[str, Any], options: dict[str, Any], 
         if minute % 120 == 0 or minute == start_min or minute == end_min:
             label = "12a" if minute == 0 else ("12p" if minute == 720 else f"{(minute // 60) % 12}{'a' if minute < 720 else 'p'}")
             parts.append(
-                f'<text x="{x:.1f}" y="{axis_y}" font-size="8" fill="{INK["muted"]}" text-anchor="middle">{label}</text>'
+                f'<text x="{x:.1f}" y="{axis_y}" font-size="{tick_size}" fill="{INK["muted"]}" text-anchor="middle">{label}</text>'
             )
 
     # Precipitation bars: height is the probability, so a rainy afternoon reads at a glance.
@@ -459,16 +545,16 @@ def section_weather_day_graph(payload: dict[str, Any], options: dict[str, Any], 
             x, y = x_of(hour["minuteOfDay"] + 30), y_of(hour["temperatureF"])
             parts.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="1.9" fill="{INK["line"]}"/>')
             parts.append(
-                f'<text x="{x:.1f}" y="{y - 4.5:.1f}" font-size="8.2" font-weight="600" fill="{INK["line"]}" '
+                f'<text x="{x:.1f}" y="{y - 5.5:.1f}" font-size="{label_size}" font-weight="600" fill="{INK["line"]}" '
                 f'text-anchor="middle">{round(hour["temperatureF"])}°</text>'
             )
 
     # Band captions sit in the left gutter of their own band, above the data rather than in it.
-    parts.append(f'<text x="0" y="7" font-size="6.6" fill="{INK["faint"]}" letter-spacing="0.6">TEMPERATURE °F</text>')
-    parts.append(f'<text x="0" y="{rain_top - 5}" font-size="6.6" fill="{INK["faint"]}" letter-spacing="0.6">PRECIPITATION %</text>')
+    parts.append(f'<text x="0" y="10" font-size="{tick_size}" fill="{INK["faint"]}" letter-spacing="0.4">TEMPERATURE °F</text>')
+    parts.append(f'<text x="0" y="{rain_top - 6}" font-size="{tick_size}" fill="{INK["faint"]}" letter-spacing="0.4">PRECIPITATION %</text>')
     wind = _wind_summary(source)
     if wind:
-        parts.append(f'<text x="{width}" y="{rain_top - 5}" font-size="6.6" fill="{INK["faint"]}" text-anchor="end">wind {escape(wind)}</text>')
+        parts.append(f'<text x="{width}" y="{rain_top - 6}" font-size="{tick_size}" fill="{INK["faint"]}" text-anchor="end">wind {escape(wind)}</text>')
     parts.append("</svg>")
 
     stats = _weather_stats(source)
@@ -514,9 +600,6 @@ def _weather_stats(hours: list[dict[str, Any]]) -> list[tuple[str, str]]:
     if rains:
         peak = max(rains, key=lambda item: item[1])
         rows.append(("Peak rain", f"{round(peak[1])}% @ {_clock(peak[0])}" if peak[1] > 0 else "none"))
-    daylight = [hour["minuteOfDay"] for hour in hours if hour["isDaytime"]]
-    if daylight:
-        rows.append(("Daylight", f"{_clock(min(daylight))}-{_clock(max(daylight) + 60)}"))
     speeds = [hour["windMph"] for hour in hours if hour["windMph"] is not None]
     if speeds:
         rows.append(("Wind", f"max {round(max(speeds))} mph"))
@@ -541,16 +624,39 @@ AGENDA_HEAD = (
     '<thead><tr><th>Time</th><th>Block</th><th style="text-align:right">Len</th><th>Kind</th></tr></thead>'
 )
 
-def _block_fill(block: dict[str, Any]) -> str:
-    """A block's ink. Calendar events are neutral; work is coloured by how settled it is."""
+# The household printer is black and white, so the timeline encodes category by *value* only:
+# a fixed commitment is dark, routine scaffolding is pale, and real work sits between them. That
+# survives a grayscale print, a photocopy, and a photograph of the page.
+BLOCK_GREY = {
+    "calendar": "#3d3d3d",     # fixed commitment: cannot move
+    "routine": "#d2d2d2",      # sleep, meals, wind-down: the shape of the day
+    "work": "#8d8d8d",         # actual work
+}
+BLOCK_STATUS_WORD = {
+    "accepted": "accepted",
+    "completed": "done",
+    "proposed": "planned",
+    "missed": "missed",
+}
+
+
+def block_category(block: dict[str, Any]) -> str:
     if block.get("type") == "calendar_event":
-        return INK["event"]
-    return {
-        "accepted": INK["accent"],
-        "completed": "#4b6b52",
-        "proposed": INK["proposal"],
-        "missed": "#b9a3a0",
-    }.get(block.get("status", ""), INK["event"])
+        return "calendar"
+    if block.get("isRoutine"):
+        return "routine"
+    return "work"
+
+
+def _block_fill(block: dict[str, Any]) -> str:
+    return BLOCK_GREY[block_category(block)]
+
+
+def block_kind_label(block: dict[str, Any]) -> str:
+    """The agenda's KIND column: what the block *is* (and, separately, how settled it is)."""
+    category = block_category(block)
+    status = BLOCK_STATUS_WORD.get(block.get("status", ""), block.get("status", ""))
+    return category if status == "planned" else f"{category} · {status}"
 
 
 def section_today_schedule(payload: dict[str, Any], options: dict[str, Any], paper: dict[str, str]) -> str:
@@ -558,15 +664,22 @@ def section_today_schedule(payload: dict[str, Any], options: dict[str, Any], pap
     if not blocks:
         return section_shell("today-schedule", '<p class="muted small">Nothing scheduled today.</p>')
 
-    # The ribbon spans the useful day only: a 24h strip wastes half its width on night.
-    start_min = max(0, min(block["startMinutes"] for block in blocks) // 60 * 60)
-    end_min = min(1440, -(-max(block["endMinutes"] for block in blocks) // 60 * 60))
+    # The ribbon spans the waking day only. Nobody needs to see 12-6am drawn to scale, so the strip
+    # starts at 6am by default and clips anything earlier; the agenda below still lists every block,
+    # so no scheduled time is lost.
+    start_min = options.get("fromHour", 6) * 60
+    end_min = options.get("toHour", 24) * 60
     span = max(60, end_min - start_min)
 
     spans: list[str] = []
     for block in blocks:
-        left = (block["startMinutes"] - start_min) / span * 100
-        width = max(0.55, (block["endMinutes"] - block["startMinutes"]) / span * 100)
+        # Clip to the window: a 12-6:30am sleep block becomes a stub at the left edge.
+        visible_start = max(block["startMinutes"], start_min)
+        visible_end = min(block["endMinutes"], end_min)
+        if visible_end <= visible_start:
+            continue
+        left = (visible_start - start_min) / span * 100
+        width = max(0.55, (visible_end - visible_start) / span * 100)
         fill = _block_fill(block)
         label = escape(truncate(block["title"], 16)) if width > 7 else ""
         spans.append(
@@ -586,13 +699,12 @@ def section_today_schedule(payload: dict[str, Any], options: dict[str, Any], pap
     rows: list[str] = []
     for block in blocks:
         swatch = _block_fill(block)
-        status = block["status"] if block["status"] != "proposed" else ("fixed" if block["type"] == "calendar_event" else "planned")
         rows.append(
             "<tr>"
             f'<td class="t">{escape(block["startLabel"])}–{escape(block["endLabel"])}</td>'
             f'<td><span class="swatch" style="background:{swatch}"></span>{escape(block["title"])}</td>'
             f'<td class="d">{dur(block["endMinutes"] - block["startMinutes"])}</td>'
-            f'<td class="s muted">{escape(status)}</td>'
+            f'<td class="s muted">{escape(block_kind_label(block))}</td>'
             "</tr>"
         )
 
@@ -610,6 +722,7 @@ def section_today_schedule(payload: dict[str, Any], options: dict[str, Any], pap
     body = (
         f'<div class="ribbon">{"".join(ticks)}{"".join(spans)}</div>'
         f'<div class="axis">{axis}</div>'
+        f"{_block_legend()}"
         f"{agenda}"
     )
     total = sum(block["endMinutes"] - block["startMinutes"] for block in blocks)
@@ -625,6 +738,7 @@ def section_today_tasks(payload: dict[str, Any], options: dict[str, Any], paper:
     if not tasks:
         return section_shell("today-tasks", '<p class="muted small">Nothing pinned to today.</p>')
     limit = options.get("descriptionChars", 220)
+    max_desc_lines = options.get("descriptionLines", 4)
     cards: list[str] = []
     for task in tasks:
         priority_class = "pri-low" if task["priority"] >= 3 else ""
@@ -636,7 +750,14 @@ def section_today_tasks(payload: dict[str, Any], options: dict[str, Any], paper:
         meta.append(escape(KANBAN_LABELS.get(task["kanbanStatus"], task["kanbanStatus"])))
         tags = "".join(f'<span class="tag">{escape(tag)}</span> ' for tag in task["tags"][:4])
         description = plain_text(task["description"] or "")
-        desc_html = f'<div class="desc">{escape(truncate(description, limit))}</div>' if description else ""
+        desc_html = ""
+        if description:
+            text, clipped = clip(description, limit, max_desc_lines)
+            body = "".join(
+                f'<div class="dline">{escape(line)}</div>' for line in text.split("\n")
+            )
+            more_line = '<div class="dline more">…</div>' if clipped else ""
+            desc_html = f'<div class="desc">{body}{more_line}</div>'
         cards.append(
             '<div class="task">'
             f'<div class="pri {priority_class}">P{task["priority"]}</div>'
@@ -650,7 +771,8 @@ def section_today_tasks(payload: dict[str, Any], options: dict[str, Any], paper:
     half = (len(cards) + 1) // 2
     columns = [cards[:half], cards[half:]] if len(cards) > 4 else [cards]
     cells = "".join(f'<div class="tcol">{"".join(column)}</div>' for column in columns if column)
-    return section_shell("today-tasks", f'<div class="tasks">{cells}</div>', note=f"{len(tasks)} tasks")
+    two = " two" if len(columns) == 2 else ""
+    return section_shell("today-tasks", f'<div class="tasks{two}">{cells}</div>', note=f"{len(tasks)} tasks")
 
 
 # ---------------------------------------------------------------------------------------------
@@ -672,13 +794,23 @@ def section_week_ahead(payload: dict[str, Any], options: dict[str, Any], paper: 
         if day.get("rainPercent"):
             weather_bits.append(f'{day["rainPercent"]}% rain')
         blocks = day.get("blocks") or []
-        lines = "".join(
-            f'<div class="line">{line_html(block)}</div>' for block in blocks[:max_lines]
-        )
-        if not blocks:
-            lines = '<div class="empty">no blocks</div>'
-        remaining = len(blocks) - min(len(blocks), max_lines)
-        overflow = f'<div class="more">+{remaining} more</div>' if remaining > 0 else ""
+        due = day.get("dueTasks") or []
+        # Two labelled groups per day, because "what is planned" and "what must ship" are different
+        # questions: a day can have scheduled work, due work, both, or neither. Each group only
+        # claims the lines it needs, so an empty day stays short.
+        groups: list[str] = []
+        if blocks:
+            lines = "".join(f'<div class="line">{line_html(block)}</div>' for block in blocks[:max_lines])
+            remaining = len(blocks) - min(len(blocks), max_lines)
+            overflow = f'<div class="more">+{remaining} more</div>' if remaining > 0 else ""
+            groups.append(f'<div class="grp">scheduled</div>{lines}{overflow}')
+        if due:
+            items = "".join(f'<div class="line due">{escape(truncate(task["title"], 46))}</div>' for task in due[:max_lines])
+            remaining = len(due) - min(len(due), max_lines)
+            overflow = f'<div class="more">+{remaining} more</div>' if remaining > 0 else ""
+            groups.append(f'<div class="grp due">due</div>{items}{overflow}')
+        if not groups:
+            groups.append('<div class="empty">nothing</div>')
         columns.append(
             f'<div class="day{" today" if day["isToday"] else ""}">'
             '<div class="dhead">'
@@ -687,7 +819,7 @@ def section_week_ahead(payload: dict[str, Any], options: dict[str, Any], paper: 
             f'<div class="wx">{escape(" · ".join(weather_bits))}</div>'
             "</div>"
             f"{mini_timeline(blocks)}"
-            f"{lines}{overflow}</div>"
+            f'{"".join(groups)}</div>'
         )
 
     attention = payload["facts"].get("attention") or []
@@ -698,11 +830,18 @@ def section_week_ahead(payload: dict[str, Any], options: dict[str, Any], paper: 
         else ""
     )
     planned = sum(1 for day in days if day.get("blocks"))
-    return section_shell(
-        "week-ahead",
-        f'<div class="week">{"".join(columns)}</div>{att_html}',
-        note=f"{planned} of {len(days)} days planned",
+    due_count = sum(len(day.get("dueTasks") or []) for day in days)
+    note = f"{planned} of {len(days)} days planned · {due_count} due"
+    return section_shell("week-ahead", f'<div class="week">{"".join(columns)}</div>{att_html}', note=note)
+
+
+def _block_legend() -> str:
+    """Three swatches and three words: without this the grey shades are guesswork."""
+    items = "".join(
+        f'<span class="lg"><span class="sw" style="background:{BLOCK_GREY[key]}"></span>{label}</span>'
+        for key, label in (("calendar", "fixed"), ("routine", "routine"), ("work", "work"))
     )
+    return f'<div class="legend">{items}</div>'
 
 
 def _short_clock(minute: int) -> str:
