@@ -88,8 +88,9 @@ Top to bottom, one letter page (0.36in margins, 8.2pt):
      one line gets `name · 12:30p-1:30p` inline, because an hour of an 18-hour day is about one line
      and a calendar where most blocks never say when they are is not a calendar. Under one line of
      room, no text: the shade and position carry it.
-   - The vertical window is `paper['day']` (2.70in on letter). That number is a real constraint: at
-     2.85in a busy day spills to a second page, so re-check page count after changing it.
+   - The vertical window is `paper['day']` (2.40in on letter). That number is a real constraint and
+     it is tight: measured over days with 6-8 blocks, 2.70in pushes the board section onto a second
+     page and 2.40in keeps the whole page to one sheet. Re-check page count after changing it.
 5. **Do today** — full-width cards, two columns, with priority pill, remaining time, tags, due label,
    and the Markdown-flattened description clipped to ~220 chars. Which tasks appear here is a server
    decision: anything with a block today, anything pinned by weekday tag, anything in progress; then
@@ -114,8 +115,12 @@ Sections are ~30 lines of Python each and named `section_<kind>()`.
   `RangeError: Invalid time value` out of `Intl.DateTimeFormat` and fail the whole page with an HTTP
   400 — no printout at all, from one bad deadline. A task with an unreadable deadline now simply has
   no deadline as far as the print is concerned.
-- A very heavy week (seven days of six blocks plus several deadlines) can still run to two pages,
-  and the overflow is the board rather than the calendar. Neither `perColumn` nor `linesPerDay`
-  changes that; measured, both settings produce the same page count, so the fuller defaults are kept.
+- A very heavy week (seven days of six blocks each, plus several deadlines) still runs to two pages,
+  and the overflow is the board, not the calendar. That is the one case where `perColumn` matters:
+  at that density `perColumn: 3` also fits on one page. The fuller default of 6 is kept because a
+  board that shows three of fifty-two ready tasks is less useful than one extra board-only page on a
+  day that dense.
+- A malformed date is rejected rather than rolled over. `\d{4}-\d{2}-\d{2}` accepts `2026-02-31`, and
+  `Date` silently turns that into March 3, so the shape check is backed by a round-trip through UTC.
 - `PAPER` has `letter` and `a4` today. They are identical except for the page size on purpose: adding
   a real medium is the work of adding one preset, not guessing now what a receipt needs.

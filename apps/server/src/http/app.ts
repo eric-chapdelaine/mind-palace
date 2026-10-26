@@ -18,7 +18,7 @@ import {
   type TimeBlockType,
 } from "@mind-palace/shared";
 import { Hono } from "hono";
-import { briefingPapers, type BriefingService } from "../services/briefing-service.js";
+import { assertBriefingDate, briefingPapers, type BriefingService } from "../services/briefing-service.js";
 import type { CalendarImportService } from "../services/calendar-import-service.js";
 import type { GarminService } from "../services/garmin-service.js";
 import type { ScheduleService } from "../services/schedule-service.js";
@@ -76,10 +76,8 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
   // browser's print dialog and `curl -o briefing.pdf` both work); `?format=html` returns the same
   // page as HTML for designing against. `date` is a local calendar date in the briefing's zone.
   app.get("/api/briefing", async (context) => {
-    const date = context.req.query("date");
-    if (date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      throw new Error("date must be YYYY-MM-DD");
-    }
+    const rawDate = context.req.query("date");
+    const date = rawDate === undefined ? undefined : assertBriefingDate(rawDate);
     const paper = context.req.query("paper");
     if (paper !== undefined && !(briefingPapers as readonly string[]).includes(paper)) {
       throw new Error(`paper must be one of ${briefingPapers.join(", ")}`);
@@ -101,10 +99,8 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
   // The payload behind the PDF, for debugging and for any future medium that wants the facts
   // without the page.
   app.get("/api/briefing/payload", (context) => {
-    const date = context.req.query("date");
-    if (date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      throw new Error("date must be YYYY-MM-DD");
-    }
+    const rawDate = context.req.query("date");
+    const date = rawDate === undefined ? undefined : assertBriefingDate(rawDate);
     return context.json(briefing.buildPayload(date === undefined ? {} : { date }));
   });
 

@@ -56,7 +56,7 @@ PAPER: dict[str, dict[str, str]] = {
         "small": "6.8pt",
         "tiny": "6.0pt",
         "graph": "1.0in",
-        "day": "2.70in",
+        "day": "2.40in",
     },
     "a4": {
         "size": "a4",
@@ -67,7 +67,7 @@ PAPER: dict[str, dict[str, str]] = {
         "small": "6.8pt",
         "tiny": "6.0pt",
         "graph": "1.0in",
-        "day": "2.70in",
+        "day": "2.40in",
     },
 }
 

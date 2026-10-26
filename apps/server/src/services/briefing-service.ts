@@ -27,6 +27,22 @@ const HOME_LONGITUDE = -71.0589;
 /** Page sizes the renderer knows how to lay out (mirrors `PAPER` in workers/briefing). */
 export const briefingPapers = ["letter", "a4"] as const;
 
+/**
+ * A `YYYY-MM-DD` date that actually exists. A shape check is not enough: `Date` rolls `2026-02-31`
+ * over to March 3 without complaining, so a typo'd date would silently print a different day's
+ * briefing rather than fail. Round-tripping through UTC is the cheap proof that the day is real.
+ */
+export function assertBriefingDate(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error("date must be YYYY-MM-DD");
+  }
+  const parsed = new Date(`${value}T12:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+    throw new Error(`date ${value} is not a real calendar date`);
+  }
+  return value;
+}
+
 /** The household's wall clock. The briefing is printed in this zone, never the server's UTC. */
 const TIME_ZONE = "America/New_York";
 
@@ -287,7 +303,7 @@ export class BriefingService {
    * same inputs always print the same page.
    */
   buildPayload(request: BriefingRequest = {}): BriefingPayload {
-    const date = request.date ?? this.today();
+    const date = request.date === undefined ? this.today() : assertBriefingDate(request.date);
     const now = new Date();
     const dayStart = startOfLocalDay(date);
     const dayEnd = startOfLocalDay(addDays(date, 1));
@@ -557,7 +573,7 @@ export class BriefingService {
    */
   private attention(tasks: TaskSummary[], date: string, weekDays: string[], routineTaskIds: Set<number>): string[] {
     const window = new Set(weekDays);
-    const lines: string[] = [];
+    const deadlines: Array<{ at: string; title: string }> = [];
     let overdue = 0;
     for (const task of tasks) {
       if (terminalStatuses.has(task.kanbanStatus) || routineTaskIds.has(task.id)) continue;
@@ -568,22 +584,42 @@ export class BriefingService {
       if (deadlineDate < date) {
         overdue += 1;
       } else if (window.has(deadlineDate)) {
-        lines.push(`${task.title} — due ${monthDayOf(deadlineDate)}`);
+        deadlines.push({ at: deadlineDate, title: task.title });
       }
     }
+
+    // Two kinds of line, and they are not equally important. A summary line says something the rest
+    // of the page does not; a per-task deadline line repeats a deadline that already prints on its
+    // day in The week ahead and on the task's own card. So summaries are kept first and the deadline
+    // lines fill whatever room is left - otherwise a busy week spends all six slots on deadlines and
+    // the warnings that appear nowhere else are silently cut.
+    const summaries: string[] = [];
     if (overdue > 0) {
-      lines.push(`${overdue} task${overdue === 1 ? "" : "s"} past due — clear or re-date them`);
+      summaries.push(`${overdue} task${overdue === 1 ? "" : "s"} past due — clear or re-date them`);
     }
     const thisWeekTagged = tasks.filter((task) => {
       if (terminalStatuses.has(task.kanbanStatus) || routineTaskIds.has(task.id)) return false;
       const tagIds = [...task.tags, ...task.derivedTags].map((tag) => tag.publicId);
       return tagIds.includes(reservedTagPublicIds.thisWeek);
     });
-    const unschedulable = thisWeekTagged.filter((task) => task.durationMinutesRemaining === null || task.durationMinutesRemaining <= 0);
+    const unschedulable = thisWeekTagged.filter(
+      (task) => task.durationMinutesRemaining === null || task.durationMinutesRemaining <= 0,
+    );
     if (unschedulable.length > 0) {
-      lines.push(`${unschedulable.length} this-week task${unschedulable.length === 1 ? "" : "s"} have no time estimate — the scheduler skips them`);
+      const count = unschedulable.length;
+      summaries.push(
+        `${count} this-week task${count === 1 ? " has" : "s have"} no time estimate — the scheduler skips them`,
+      );
     }
-    return lines.slice(0, 6);
+
+    // Soonest first, so the ones that survive the cap are the ones that matter rather than whatever
+    // order the repository happened to return.
+    const details = deadlines
+      .sort((left, right) => left.at.localeCompare(right.at) || left.title.localeCompare(right.title))
+      .map((deadline) => `${deadline.title} — due ${monthDayOf(deadline.at)}`);
+
+    const room = Math.max(0, 6 - summaries.length);
+    return [...summaries, ...details.slice(0, room)];
   }
 }
 
