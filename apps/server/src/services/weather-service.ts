@@ -72,7 +72,11 @@ export class WeatherService {
   private async fetchUvIndex(): Promise<Map<string, number | null>> {
     const byHour = new Map<string, number | null>();
     try {
-      const response = await fetch(OPEN_METEO_UV_URL);
+      // A timeout, because this one is on the critical path: it is awaited between the NWS fetch and
+      // the write, so an Open-Meteo socket that never answers would hang the whole weather sync -
+      // and `ensureFresh` is awaited by the calendar and the briefing route, so the hang would reach
+      // the user. The catch below cannot rescue an await that never settles.
+      const response = await fetch(OPEN_METEO_UV_URL, { signal: AbortSignal.timeout(5_000) });
       if (!response.ok) return byHour;
       const payload = await response.json() as OpenMeteoUvResponse;
       const times = payload.hourly?.time ?? [];
