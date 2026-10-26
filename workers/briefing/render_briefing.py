@@ -698,8 +698,16 @@ def section_today_schedule(payload: dict[str, Any], options: dict[str, Any], pap
         f'<div class="vtrack">{"".join(rules)}{"".join(boxes)}</div></div>'
         f"{_block_legend()}"
     )
-    total = sum(block["endMinutes"] - block["startMinutes"] for block in blocks)
-    note = f"{len(blocks)} blocks · {minutes_label(total)} scheduled"
+    # Count what the calendar actually draws, not what the payload holds. They are the same today,
+    # because the service derives the window from the blocks, but a caller that pins fromHour/toHour
+    # can push a block outside the window - and a note that counts an undrawn block makes the page
+    # quietly wrong rather than obviously empty.
+    drawn = [block for block, _, _, _ in placed]
+    total = sum(block["endMinutes"] - block["startMinutes"] for block in drawn)
+    note = f"{len(drawn)} block{'s' if len(drawn) != 1 else ''} · {minutes_label(total)} scheduled"
+    hidden = len(blocks) - len(drawn)
+    if hidden > 0:
+        note += f" · {hidden} outside {_clock(start_min)}–{_clock(end_min)}"
     if lanes > 1:
         note += f" · {lanes} wide"
     return section_shell("today-schedule", body, note=note)
