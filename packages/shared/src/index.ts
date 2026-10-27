@@ -585,3 +585,4 @@ export interface BriefingPayload {
   };
   layout: BriefingSection[];
 }
+

@@ -166,8 +166,14 @@ function addDays(date: string, count: number): string {
 
 /**
  * Sunrise and sunset in minutes since local midnight, from the NOAA solar-position approximation.
- * Accurate to a couple of minutes at this latitude, and it needs no network and no extra column:
- * the point of printing daylight hours is the window, not the second.
+ *
+ * The forecast we already store is not enough for this. NWS does send `is_daytime`, and we collect
+ * it, but it is a whole-hour boolean: for Oct 25 in Boston it flips to true at 10:00Z and false at
+ * 22:00Z, i.e. 06:00-18:00 local against a real 07:08-17:49. An hour of error is too much for a
+ * cell that reads "7:08a-5:49p", and it would move the graph's night band by the same hour. NWS
+ * publishes no sunrise/sunset field, so computing it is the only way to get the minute. The
+ * approximation is good to ~2 minutes at this latitude and needs no network and no extra column.
+ * (`is_daytime` is still collected and still read by the scheduler's `requireDaytime` rule.)
  */
 function daylightMinutes(date: string): { sunrise: number; sunset: number } {
   const [year, month, day] = date.split("-").map(Number);

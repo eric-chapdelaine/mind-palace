@@ -104,10 +104,31 @@ Top to bottom, one letter page (0.36in margins, 8.2pt):
 
 Sections are ~30 lines of Python each and named `section_<kind>()`.
 
+## Printing
+
+The server only ever returns the PDF; it does not talk to a printer. Download it on the computer
+that has the printer, and print it there:
+
+```sh
+curl -s http://rpi:4310/api/briefing -o today.pdf
+lp today.pdf                      # or open it and print from a viewer
+```
+
+`date=YYYY-MM-DD` picks the day, so printing tomorrow's page at the end of today is the same call
+with tomorrow's date; `paper=a4` switches page size. Nothing else is needed — no `lp` on the Pi, no
+CUPS queue there, no extra script.
+
+There is deliberately no print endpoint. Having the server call `lp` would mean the paper is next to
+the server, which is not the setup: the printer is next to the person asking for the page. If that
+ever changes (an unattended nightly print, say), the shape is a `curl` in a cron entry on the machine
+with the printer, or a third entry in `apps/server/src/jobs.ts` calling `lp` on a server that has a
+queue. Neither needs anything in this worker.
+
 ## Known limits
 
-- Two pages is the fallback when the layout is too dense for one. Every section is
-  `break-inside: avoid`, so a page break lands between sections rather than through a table.
+- Two pages is the fallback when the layout is too dense for one. Ordinary sections may break across
+  the fold (`break-inside: auto`, so a half-empty page 1 does not push everything down); the week and
+  the board are pinned, because splitting either one leaves unreadable half-columns.
 - Blocks that cross midnight are clamped (last night's sleep starts at 12:00 AM on today's page) so
   the printed times match what a person would read off the page.
 - A timestamp that will not parse is treated as missing, not as fatal. `tasks.deadline_at` is
