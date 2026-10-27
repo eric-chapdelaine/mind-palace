@@ -77,6 +77,11 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Done: the shell config (~/.profile/.bashrc) should now put node, pnpm and uv on PATH.
 
+# WeasyPrint (used by the printable briefing) renders text through pango, so it needs
+# the shared libraries as well as the Python package. Without these the render fails at
+# runtime with "cannot load library 'libpango-1.0-0'". Harmless if you never print.
+sudo apt install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libffi8
+
 # Install the repo's dependencies
 cd ~/mind-palace
 pnpm install
@@ -97,6 +102,15 @@ its directory. The server spawns them as
 which versions actually run — that is why the locks are committed. The
 `# /// script` header inside `render_briefing.py` is *not* what installs
 WeasyPrint here; `uv run --project` ignores it in favour of `pyproject.toml`.
+
+Prove the briefing worker imports before you rely on it. This is the check
+that catches a missing `uv sync` and a missing `apt` package in one line:
+
+```sh
+uv run --project workers/briefing python -c "import weasyprint; print(weasyprint.__version__)"
+# expect a version number. "ModuleNotFoundError" = uv sync skipped above;
+# "cannot load library" = the apt install above was skipped.
+```
 
 ## 3. Environment variables
 
@@ -132,6 +146,17 @@ The DB file is created and migrated automatically on first start (the
 server calls `database.migrate()` on boot; `pnpm db:migrate` exists to run
 it explicitly and fail loudly). If you hit `command not found` for
 pnpm/node/uv in an SSH shell, see [Troubleshooting](#troubleshooting).
+
+While it is running, check that the print path works end to end — this is the
+failure worth finding now rather than on the morning you want a briefing:
+
+```sh
+curl -s http://localhost:4310/api/briefing -o /tmp/briefing.pdf
+pdfinfo /tmp/briefing.pdf | head -3   # Pages: 1 / Page size: 612 x 792 pts (letter)
+```
+
+If that file is JSON, it is an error message rather than a page; see
+[§10](#10-printing-the-daily-briefing) for what each one means.
 
 ## 5. Run in the background with systemd (auto-start on boot)
 
@@ -386,112 +411,128 @@ switch**.
 
 ## 10. Printing the daily briefing
 
-The briefing is one page you print rather than read on a screen. It lives at
-`GET /api/briefing` — a PDF, rendered on demand from data already in the
-database. **No live API calls are made when you print**: the weather in the DB
-is what prints, so a page generated offline is still correct as of its last
-sync.
+The briefing is one page you print rather than read on a screen. It is a PDF at
+`GET /api/briefing`, rendered on demand from data already in the database.
+**No live API calls are made when you print** — the weather in the DB is what
+prints, so a page generated offline is still correct as of the last sync.
 
-### Where to run `lp`
+### The one thing to get right
 
-The renderer runs on the Pi (it is part of the server). Printing can happen in
-either place:
+There are two machines and two different jobs, and confusing them is the usual
+source of trouble:
 
-| You run `pnpm briefing` on… | Result |
-|---|---|
-| **the Pi** | Pi's `lp` sends the job to the network printer. Needs the printer installed in the Pi's CUPS. |
-| **your laptop** | Laptop's `lp` prints a PDF fetched from the Pi over HTTP. Needs no printer setup on the Pi at all. |
+| Job | Where it runs | Needs |
+|---|---|---|
+| **Rendering** (data → PDF) | **always the Pi**, inside the server | `uv sync --project workers/briefing` + the `apt` packages from §2 |
+| **Printing** (PDF → paper) | wherever the printer is set up | a CUPS queue for the printer |
 
-The second is simpler for manual testing and for the first week, and it is
-what the CLI defaults to. Use the first when you later want the Pi to print on
-a schedule with nobody at the keyboard.
+Rendering can only happen on the Pi, because that is where the database is.
+Printing can happen anywhere that can reach both the Pi and the printer.
 
-### Manual printing from your laptop (recommended for testing)
+Nothing about the printer belongs in this repo or in the Pi's configuration.
+The common setup is: the Pi renders, your own computer prints. The page below
+assumes that. If you would rather the Pi printed unattended later, see
+[Printing from the Pi](#printing-from-the-pi) — but it is not needed to use the
+feature, and for a manual trial week it is extra moving parts.
+
+### Manual printing from your own computer (use this for testing)
+
+If your computer can already print a PDF, this needs no printer setup on the Pi
+at all — the Pi only has to hand back the file:
 
 ```sh
-# in your dev checkout
 MIND_PALACE_URL=http://rpi:4310 pnpm briefing
 ```
 
-That fetches the PDF from the Pi and pipes it to your laptop's default
-printer. Useful variants:
+That fetches the PDF over HTTP and pipes it to your local default printer.
+Variants worth knowing:
 
 ```sh
-MIND_PALACE_URL=http://rpi:4310 pnpm briefing --printer Brother2460
-MIND_PALACE_URL=http://rpi:4310 pnpm briefing --out ~/today.pdf   # no printing, just the file
-MIND_PALACE_URL=http://rpi:4310 pnpm briefing --date 2026-10-26   # a different day
+MIND_PALACE_URL=http://rpi:4310 pnpm briefing --printer <queue-name>  # pick a queue
+MIND_PALACE_URL=http://rpi:4310 pnpm briefing --out ~/today.pdf      # save, don't print
+MIND_PALACE_URL=http://rpi:4310 pnpm briefing --date 2026-10-26      # another day
 ```
 
-`--out` is the one to reach for while iterating: it writes the PDF and never
-touches CUPS. Then `xdg-open ~/today.pdf` to eyeball it.
+`--out` is the one to reach for while the layout is still moving: it writes the
+file and never touches CUPS, so a bad page costs you nothing. Open it and look
+before printing.
 
-Set `MIND_PALACE_URL` in your shell profile if you'd rather not type it.
-Tailscale also works: `http://<pi-tailscale-name>:4310`.
+Set `MIND_PALACE_URL` in your shell profile to avoid retyping it. Tailscale
+works too: `http://<pi-tailscale-name>:4310`.
 
-### Verifying the Pi can render at all
+### Checking a page came out right
 
-Before worrying about printing, confirm the Pi produces a PDF:
+Print quality problems are almost always in the CUPS queue on whichever
+computer prints, not in the PDF. Check the PDF first, because it is the half
+you control:
 
 ```sh
-# on the Pi
-curl -s http://localhost:4310/api/briefing -o /tmp/b.pdf
-pdfinfo /tmp/b.pdf | head -3          # Pages: 1, Page size: 612 x 792 pts (letter)
+pdfinfo ~/today.pdf | head -3
+# Pages: 1
+# Page size: 612 x 792 pts (letter)
 ```
 
-If this returns JSON instead of a PDF, you are seeing an error — read it:
+If `Pages` is more than 1, the week was dense enough to spill — see
+[Known limits](#known-limits). If the size is not letter, the paper preset and
+the queue disagree.
 
-```sh
-curl -s http://localhost:4310/api/briefing | head -c 400
-```
+Then, if the *print* looks wrong while the PDF looks right:
 
-The two failures you are most likely to hit, both reported this way:
-
-- **`ModuleNotFoundError: No module named 'weasyprint'`** — `workers/briefing`
-  was never `uv sync`'d. Run `uv sync --project workers/briefing` on the Pi.
-- **`OSError: cannot load library 'libpango-1.0-0'`** (or `libgobject`) — the
-  system libraries are missing; install the `apt` packages from
-  [Prerequisites](#prerequisites).
-
-The renderer takes about a second on a Pi 4 and a few seconds on a Zero. The
-route has a 90-second timeout, so a slow first run (uv creating the venv) is
-fine.
+- **Shrunken or clipped output** — the queue is scaling the page. Print at
+  100% with "fit to page" off, and make sure the queue's paper size is letter.
+  `lpoptions -p <queue-name> -l` lists what the queue believes.
+- **Printer not found** — CUPS and avahi (Bonjour discovery) are the two
+  services to check: `systemctl status cups avahi-daemon`, and `lpstat -p` to
+  confirm the queue exists.
+- **A job that never finishes** — `lpstat -t` to see the queue, `cancel -a` to
+  clear a stuck job.
 
 ### Printing from the Pi
 
-Only needed for the unattended case. Set up CUPS on the Pi once:
+Only needed if you want the Pi to print with nobody at the keyboard, e.g. from
+cron. It requires giving the Pi its own CUPS queue for the printer:
 
 ```sh
 sudo apt install -y cups cups-client
-sudo usermod -aG lpadmin pi          # log out and back in for this to apply
-# Find the printer on the network, then add it. `lpinfo -v` lists IPP devices;
-# for a Brother/HP on Bonjour the address looks like ipp://BRW...local:631/ipp/print
-lpinfo -v | grep -i ipp
-lpadmin -p Brother2460 -E -v ipp://BRW4845E6754379.local:631/ipp/print -m everywhere
-lpstat -p                            # "printer Brother2460 is idle"
+sudo usermod -aG lpadmin "$USER"     # log out and back in for this to apply
+lpinfo -v | grep -i ipp              # find the printer's network address
+lpadmin -p <queue-name> -E -v <address> -m everywhere
+lpstat -p                            # "printer <queue-name> is idle"
 ```
 
-Then, from the Pi:
+Prefer a `-m everywhere` (driverless) queue: it asks the printer for its own
+capabilities, so the page is not silently rescaled. Then:
 
 ```sh
-curl -s http://localhost:4310/api/briefing | lp -d Brother2460
+curl -s http://localhost:4310/api/briefing | lp -d <queue-name>
 ```
 
-and to check a job went through, `lpq` / `lpstat -W completed -o`.
+Note this bypasses the CLI — on the Pi, `pnpm briefing` would print from the
+Pi's queue, which is exactly what the laptop path above avoids. Use the CLI
+when you want your computer's printer, and `curl | lp` when you want the Pi's.
 
-A `-m everywhere` driverless queue is worth preferring: it asks the printer for
-its own capabilities, so the page is not silently rescaled or sent in the wrong
-size. If pages come out shrunken or clipped, the queue has the wrong paper size
-— compare `lpoptions -p Brother2460 -l` against the PDF's `Page size` from
-`pdfinfo`.
+If you do set up a cron entry for the trial week, the two things that break it
+are the timezone (cron fires on the Pi's clock — confirm with `date`) and
+`PATH` (cron does not source your shell config, so `uv` and `pnpm` must be
+listed explicitly or nothing runs and nothing tells you).
 
-### What is *not* automatic yet
+### Known limits
 
-There is no scheduler entry for printing. `apps/server/src/jobs.ts` runs the
-weather refresh and the Garmin sync on a timer; auto-print would be a third
-entry there (`briefing.generate` → write temp file → `lp`). That was
-deliberately left out until the page had been printed by hand for a while —
-the layout is still moving, and a daily job printing a page you have not
-reviewed is a bad way to find that out.
+- **One page by design.** The layout is tuned to fit a single letter page. A
+  week that is unusually dense can spill onto a second page, which the footer
+  reports as "page 1 of 2". If that happens often, lower `perColumn` in
+  `DEFAULT_LAYOUT` (`apps/server/src/services/briefing-service.ts`), or accept
+  two pages.
+- **Stale data prints silently.** Nothing warns you that the weather is old.
+  The briefing reads whatever the last sync stored, which is what makes it work
+  offline; if a number looks wrong, check that the weather sync
+  (`apps/server/src/jobs.ts`) is still running rather than the briefing.
+- **No auto-print.** There is no scheduler entry for printing.
+  `apps/server/src/jobs.ts` runs the weather refresh and the Garmin sync on a
+  timer; printing would be a third entry there. That was left out deliberately
+  until the page had been printed by hand for a while — the layout is still
+  moving, and a daily job printing a page you have not reviewed is a bad way to
+  find that out.
 
 ## Troubleshooting
 
