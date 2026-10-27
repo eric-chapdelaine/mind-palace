@@ -18,6 +18,7 @@ import {
   type TimeBlockType,
 } from "@mind-palace/shared";
 import { Hono } from "hono";
+import { assertBriefingDate, briefingPapers, type BriefingService } from "../services/briefing-service.js";
 import type { CalendarImportService } from "../services/calendar-import-service.js";
 import type { GarminService } from "../services/garmin-service.js";
 import type { ScheduleService } from "../services/schedule-service.js";
@@ -36,6 +37,7 @@ interface Dependencies {
   integrationRegistry: IntegrationRegistration[];
   recurrence: RecurrenceService;
   scheduler: JobScheduler;
+  briefing: BriefingService;
 }
 
 /** One authenticated provider's place in `GET /api/integrations` — the composition root fills these in. */
@@ -45,7 +47,7 @@ export interface IntegrationRegistration {
   status: () => IntegrationConnection;
 }
 
-export function createHttpApp({ tasks, schedule, weather, calendar, garmin, integrationRegistry, recurrence, scheduler }: Dependencies): Hono {
+export function createHttpApp({ tasks, schedule, weather, calendar, garmin, integrationRegistry, recurrence, scheduler, briefing }: Dependencies): Hono {
   const app = new Hono();
 
   app.onError((error, context) => {
@@ -70,6 +72,38 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
     context.json(tasks.getSleepSession(numberParam(context.req.param("id"), "sleep session id"))));
   app.get("/api/health-activities/:id", (context) =>
     context.json(tasks.getHealthActivity(numberParam(context.req.param("id"), "activity id"))));
+  // The daily briefing: the printed, no-screen view of the app. `GET` returns the rendered PDF (the
+  // browser's print dialog and `curl -o briefing.pdf` both work); `?format=html` returns the same
+  // page as HTML for designing against. `date` is a local calendar date in the briefing's zone.
+  app.get("/api/briefing", async (context) => {
+    const rawDate = context.req.query("date");
+    const date = rawDate === undefined ? undefined : assertBriefingDate(rawDate);
+    const paper = context.req.query("paper");
+    if (paper !== undefined && !(briefingPapers as readonly string[]).includes(paper)) {
+      throw new Error(`paper must be one of ${briefingPapers.join(", ")}`);
+    }
+    const request = {
+      ...(date === undefined ? {} : { date }),
+      ...(paper === undefined ? {} : { paper }),
+    };
+    if (context.req.query("format") === "html") {
+      return context.html(await briefing.renderHtml(request));
+    }
+    const document = await briefing.renderPdf(request);
+    return context.body(Buffer.from(document.pdfBase64, "base64"), 200, {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `inline; filename="briefing-${document.date}.pdf"`,
+      "X-Briefing-Pages": String(document.pages),
+    });
+  });
+  // The payload behind the PDF, for debugging and for any future medium that wants the facts
+  // without the page.
+  app.get("/api/briefing/payload", (context) => {
+    const rawDate = context.req.query("date");
+    const date = rawDate === undefined ? undefined : assertBriefingDate(rawDate);
+    return context.json(briefing.buildPayload(date === undefined ? {} : { date }));
+  });
+
   app.get("/api/tasks/:id", (context) => context.json(tasks.getTask(numberParam(context.req.param("id"), "task id"))));
   app.get("/api/time-blocks/:id", (context) => context.json(tasks.getTimeBlock(numberParam(context.req.param("id"), "time block id"))));
 

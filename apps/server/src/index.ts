@@ -7,6 +7,7 @@ import { WeatherService } from "./services/weather-service.js";
 import { CalendarImportService } from "./services/calendar-import-service.js";
 import { GarminService } from "./services/garmin-service.js";
 import { RecurrenceService } from "./services/recurrence-service.js";
+import { BriefingService } from "./services/briefing-service.js";
 import { JobScheduler } from "./services/job-scheduler.js";
 import { scheduledJobs } from "./jobs.js";
 
@@ -19,6 +20,7 @@ const schedule = new ScheduleService(tasks, weather);
 const calendar = new CalendarImportService(tasks);
 const garmin = new GarminService(tasks);
 const recurrence = new RecurrenceService(tasks);
+const briefing = new BriefingService(tasks);
 const scheduler = new JobScheduler(scheduledJobs({ weather, garmin }));
 
 // Enabling an integration is authenticating it: a provider reports `connected` only once its
@@ -27,7 +29,7 @@ const integrationRegistry: IntegrationRegistration[] = [
   { key: "garmin", label: "Garmin Connect", status: () => garmin.status() },
 ];
 
-const app = createHttpApp({ tasks, schedule, weather, calendar, garmin, integrationRegistry, recurrence, scheduler });
+const app = createHttpApp({ tasks, schedule, weather, calendar, garmin, integrationRegistry, recurrence, scheduler, briefing });
 const server = serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (info) => {
   console.log(`Mind Palace API listening on http://${info.address}:${info.port}`);
 });

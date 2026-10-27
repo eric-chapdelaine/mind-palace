@@ -1,0 +1,16 @@
+[project]
+name = "mind-palace-briefing"
+version = "0.1.0"
+requires-python = ">=3.11"
+# Pinned exactly, like the other workers: the print layout depends on how this renders, so an
+# unpinned bump could silently move a block on the page.
+#
+# 68.1 is the floor as well as the pin. WeasyPrint pins pydyf loosely, and an old WeasyPrint resolves
+# against a new pydyf and dies at render time with `AttributeError: 'super' object has no attribute
+# 'transform'` - 62.3 does exactly that against pydyf 0.13. Pinning WeasyPrint alone is not enough to
+# describe a working install, which is why uv.lock is committed alongside this file.
+#
+# WeasyPrint needs the pango/harfbuzz shared libraries, not just the Python package. On Debian and
+# Raspberry Pi OS that is `libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libffi8` (see
+# docs/running-on-rpi.md).
+dependencies = ["weasyprint==68.1"]
