@@ -34,6 +34,14 @@ GitHub SSH key (`ssh-keygen -t ed25519`, then add the public key to your
 GitHub account — the repo is cloned over `git@github.com`), and Tailscale
 enabled if you want to reach it remotely without opening firewall ports.
 
+The print feature renders PDFs with WeasyPrint, which needs pango/harfbuzz
+shared libraries on top of the Python package. Install them once:
+
+```sh
+sudo apt update
+sudo apt install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libffi8
+```
+
 **Dev machine** (a Linux laptop in the example; macOS works too): Node 22+
 (the server needs `node:sqlite`, introduced in Node 22), pnpm 10
 (the repo pins `packageManager: pnpm@10.15.1` in the root `package.json`),
@@ -73,14 +81,22 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 cd ~/mind-palace
 pnpm install
 uv sync --project workers/cp-sat
+uv sync --project workers/briefing   # the printable daily briefing (see §10)
 uv sync --project workers/garmin     # only needed if you use the Garmin integration (see §9)
 ```
 
 Why these pieces: packages import each other as TypeScript source, so the
 backend needs **no build step**. `pnpm install` links the TS sources and
 `tsx` runs them directly. `uv sync` prepares the Python environment each
-worker runs in (`cp-sat` for the scheduler, `garmin` for the optional
-Garmin Connect sync).
+worker runs in (`cp-sat` for the scheduler, `briefing` for the printable
+daily briefing, `garmin` for the optional Garmin Connect sync).
+
+Each worker is a `uv` project with its own `pyproject.toml` and `uv.lock` in
+its directory. The server spawns them as
+`uv run --project workers/<name> python <script>`, so the lock file decides
+which versions actually run — that is why the locks are committed. The
+`# /// script` header inside `render_briefing.py` is *not* what installs
+WeasyPrint here; `uv run --project` ignores it in favour of `pyproject.toml`.
 
 ## 3. Environment variables
 
@@ -199,6 +215,8 @@ git pull --ff-only origin main
 #   pnpm install
 # Only if the pull changed workers/cp-sat/pyproject.toml or uv.lock:
 #   uv sync --project workers/cp-sat
+# Only if the pull changed workers/briefing/pyproject.toml or uv.lock:
+#   uv sync --project workers/briefing
 # If you use Garmin and the pull changed workers/garmin/pyproject.toml or uv.lock:
 #   uv sync --project workers/garmin
 DATABASE_PATH=$HOME/mind-palace/mind-palace.db pnpm db:migrate
@@ -366,6 +384,115 @@ it will show up in `GET /api/integrations` with its own control in the UI.
 There is no central enable/disable list to edit — **authentication is the
 switch**.
 
+## 10. Printing the daily briefing
+
+The briefing is one page you print rather than read on a screen. It lives at
+`GET /api/briefing` — a PDF, rendered on demand from data already in the
+database. **No live API calls are made when you print**: the weather in the DB
+is what prints, so a page generated offline is still correct as of its last
+sync.
+
+### Where to run `lp`
+
+The renderer runs on the Pi (it is part of the server). Printing can happen in
+either place:
+
+| You run `pnpm briefing` on… | Result |
+|---|---|
+| **the Pi** | Pi's `lp` sends the job to the network printer. Needs the printer installed in the Pi's CUPS. |
+| **your laptop** | Laptop's `lp` prints a PDF fetched from the Pi over HTTP. Needs no printer setup on the Pi at all. |
+
+The second is simpler for manual testing and for the first week, and it is
+what the CLI defaults to. Use the first when you later want the Pi to print on
+a schedule with nobody at the keyboard.
+
+### Manual printing from your laptop (recommended for testing)
+
+```sh
+# in your dev checkout
+MIND_PALACE_URL=http://rpi:4310 pnpm briefing
+```
+
+That fetches the PDF from the Pi and pipes it to your laptop's default
+printer. Useful variants:
+
+```sh
+MIND_PALACE_URL=http://rpi:4310 pnpm briefing --printer Brother2460
+MIND_PALACE_URL=http://rpi:4310 pnpm briefing --out ~/today.pdf   # no printing, just the file
+MIND_PALACE_URL=http://rpi:4310 pnpm briefing --date 2026-10-26   # a different day
+```
+
+`--out` is the one to reach for while iterating: it writes the PDF and never
+touches CUPS. Then `xdg-open ~/today.pdf` to eyeball it.
+
+Set `MIND_PALACE_URL` in your shell profile if you'd rather not type it.
+Tailscale also works: `http://<pi-tailscale-name>:4310`.
+
+### Verifying the Pi can render at all
+
+Before worrying about printing, confirm the Pi produces a PDF:
+
+```sh
+# on the Pi
+curl -s http://localhost:4310/api/briefing -o /tmp/b.pdf
+pdfinfo /tmp/b.pdf | head -3          # Pages: 1, Page size: 612 x 792 pts (letter)
+```
+
+If this returns JSON instead of a PDF, you are seeing an error — read it:
+
+```sh
+curl -s http://localhost:4310/api/briefing | head -c 400
+```
+
+The two failures you are most likely to hit, both reported this way:
+
+- **`ModuleNotFoundError: No module named 'weasyprint'`** — `workers/briefing`
+  was never `uv sync`'d. Run `uv sync --project workers/briefing` on the Pi.
+- **`OSError: cannot load library 'libpango-1.0-0'`** (or `libgobject`) — the
+  system libraries are missing; install the `apt` packages from
+  [Prerequisites](#prerequisites).
+
+The renderer takes about a second on a Pi 4 and a few seconds on a Zero. The
+route has a 90-second timeout, so a slow first run (uv creating the venv) is
+fine.
+
+### Printing from the Pi
+
+Only needed for the unattended case. Set up CUPS on the Pi once:
+
+```sh
+sudo apt install -y cups cups-client
+sudo usermod -aG lpadmin pi          # log out and back in for this to apply
+# Find the printer on the network, then add it. `lpinfo -v` lists IPP devices;
+# for a Brother/HP on Bonjour the address looks like ipp://BRW...local:631/ipp/print
+lpinfo -v | grep -i ipp
+lpadmin -p Brother2460 -E -v ipp://BRW4845E6754379.local:631/ipp/print -m everywhere
+lpstat -p                            # "printer Brother2460 is idle"
+```
+
+Then, from the Pi:
+
+```sh
+curl -s http://localhost:4310/api/briefing | lp -d Brother2460
+```
+
+and to check a job went through, `lpq` / `lpstat -W completed -o`.
+
+A `-m everywhere` driverless queue is worth preferring: it asks the printer for
+its own capabilities, so the page is not silently rescaled or sent in the wrong
+size. If pages come out shrunken or clipped, the queue has the wrong paper size
+— compare `lpoptions -p Brother2460 -l` against the PDF's `Page size` from
+`pdfinfo`.
+
+### What is *not* automatic yet
+
+There is no scheduler entry for printing. `apps/server/src/jobs.ts` runs the
+weather refresh and the Garmin sync on a timer; auto-print would be a third
+entry there (`briefing.generate` → write temp file → `lp`). That was
+deliberately left out until the page had been printed by hand for a while —
+the layout is still moving, and a daily job printing a page you have not
+reviewed is a bad way to find that out.
+
 ## Troubleshooting
 
 - **`command not found: pnpm/node/uv` over SSH.** Non-interactive SSH
@@ -382,6 +509,12 @@ switch**.
   `pi`), set `Environment=GARMINTOKENSTORE` to its absolute path, and
   restart. `curl -s http://localhost:4310/api/integrations` should report
   `connected:true`.
+- **The briefing prints as JSON, or `pnpm briefing` says `briefing failed: 500`.**
+  The route returns the worker's error text in the JSON body, so `curl -s
+  http://localhost:4310/api/briefing | head -c 400` names the cause. The two
+  usual ones are a missing `uv sync --project workers/briefing` (no WeasyPrint)
+  and missing pango system libraries — see
+  [§10](#10-printing-the-daily-briefing).
 - **Page shows old UI after an update.** The dev-machine build+rsync step
   (#6) was skipped, or the browser cached `index.html` — hard refresh.
 - **Git over SSH warns about a changed host key.** Your Pi's
