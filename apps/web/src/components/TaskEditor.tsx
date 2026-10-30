@@ -60,7 +60,7 @@ export function TaskEditor({ task, tags, onSave, onCancel }: {
           <option key={level} value={level}>P{level}</option>)}
       </select></label>
     </div>
-    <label>Time remaining (minutes)<input type="number" min="1" placeholder="Optional" value={remaining} onChange={(event) => setRemaining(event.target.value)} /></label>
+    <label>Time remaining (minutes)<input type="number" min="0" placeholder="Optional" value={remaining} onChange={(event) => setRemaining(event.target.value)} /></label>
     <label>Tags<TagPicker tags={tags} selectedIds={tagIds} onChange={setTagIds} /></label>
     <div className="form-pair">
       <label>Earliest start<input type="datetime-local" value={earliestStart} onChange={(event) => setEarliestStart(event.target.value)} /></label>
