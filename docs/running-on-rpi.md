@@ -74,13 +74,23 @@ cd ~/mind-palace
 pnpm install
 uv sync --project workers/cp-sat
 uv sync --project workers/garmin     # only needed if you use the Garmin integration (see §9)
+uv sync --project workers/briefing   # only needed if you print the daily briefing
+
+# The briefing worker renders PDFs with WeasyPrint, which needs pango/harfbuzz as *system*
+# libraries - the Python package alone is not enough. Without them /api/briefing answers 200 with a
+# JSON error body, or curl writes an error page and names it today.pdf.
+sudo apt install libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libffi8
 ```
 
 Why these pieces: packages import each other as TypeScript source, so the
 backend needs **no build step**. `pnpm install` links the TS sources and
 `tsx` runs them directly. `uv sync` prepares the Python environment each
 worker runs in (`cp-sat` for the scheduler, `garmin` for the optional
-Garmin Connect sync).
+Garmin Connect sync, `briefing` for the print).
+
+After a pull, re-run `uv sync --project workers/briefing` only if
+`workers/briefing/pyproject.toml` or `uv.lock` changed; the pango packages
+are installed once per machine.
 
 ## 3. Environment variables
 
@@ -201,6 +211,8 @@ git pull --ff-only origin main
 #   uv sync --project workers/cp-sat
 # If you use Garmin and the pull changed workers/garmin/pyproject.toml or uv.lock:
 #   uv sync --project workers/garmin
+# If you print the daily briefing and the pull changed workers/briefing/pyproject.toml or uv.lock:
+#   uv sync --project workers/briefing
 DATABASE_PATH=$HOME/mind-palace/mind-palace.db pnpm db:migrate
 sudo systemctl start mind-palace.service
 journalctl -u mind-palace.service -f

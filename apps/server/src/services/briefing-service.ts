@@ -61,16 +61,32 @@ function isRoutineTask(task: TaskSummary, routineTagId: string | null): boolean 
 }
 
 /**
+ * An imported calendar event is a commitment with a fixed time, not a card you pick up and move
+ * across the board. It already appears where it belongs - on the day's timeline and in the week
+ * ahead - so printing it again as an inbox card is a duplicate that reads as work to do.
+ */
+function isCalendarEvent(task: TaskSummary): boolean {
+  return [...task.tags, ...task.derivedTags].some(
+    (tag) => tag.publicId === reservedTagPublicIds.calendarEvent,
+  );
+}
+
+/**
  * The default page. This list *is* the design: reordering it reorders the print, and a different
  * medium (receipt, e-ink) is a second list rather than a second renderer. Sections are keyed by the
  * `BriefingSection` union, so an entry that does not typecheck cannot reach the worker.
+ *
+ * `board-snapshot` and the attention list exist and render, but are omitted here: on a full week they
+ * are what tip the page onto a second sheet, and a two-page briefing is no longer a glance. They stay
+ * in the union and in the renderer's `RENDERERS` dict, so re-enabling either is one line here - or a
+ * `layout` passed in the request - rather than a reimplementation. The attention list belongs to the
+ * week section, so it is switched off with `attention: false`.
  */
 const DEFAULT_LAYOUT: BriefingSection[] = [
   { kind: "weather-day-graph" },
   { kind: "today-schedule" },
   { kind: "today-tasks", descriptionChars: 220, descriptionLines: 4 },
-  { kind: "week-ahead", days: WEEK_DAYS },
-  { kind: "board-snapshot", perColumn: 6 },
+  { kind: "week-ahead", days: WEEK_DAYS, attention: false },
 ];
 
 const boardColumns: Array<{ status: KanbanStatus; label: string }> = [
@@ -502,6 +518,8 @@ export class BriefingService {
     const weekdayTag = weekdayTagPublicIds[weekdayIndex];
     const selected = tasks.filter((task) => {
       if (terminalStatuses.has(task.kanbanStatus) || routineTaskIds.has(task.id)) return false;
+      // Calendar events are on the timeline, not on the list of things to do today.
+      if (isCalendarEvent(task)) return false;
       if (blockedToday.has(task.id)) return true;
       if (task.kanbanStatus === "in_progress") return true;
       const tagIds = [...task.tags, ...task.derivedTags].map((tag) => tag.publicId);
@@ -526,7 +544,10 @@ export class BriefingService {
     // (recurrence scaffolding like "[LIFE] Wake up") are filtered out here and in the week view:
     // they are already in today's agenda, and they crowd out real work.
     const active = tasks.filter(
-      (task) => !terminalStatuses.has(task.kanbanStatus) && !routineTaskIds.has(task.id),
+      (task) =>
+        !terminalStatuses.has(task.kanbanStatus) &&
+        !routineTaskIds.has(task.id) &&
+        !isCalendarEvent(task),
     );
     return boardColumns.map((column) => {
       const items = active.filter((task) => task.kanbanStatus === column.status).sort((a, b) => b.rank - a.rank);

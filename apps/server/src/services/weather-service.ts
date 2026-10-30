@@ -23,9 +23,14 @@ const headers = { "User-Agent": "mind-palace/0.1 (local personal project)", Acce
 /**
  * NWS — the source of every other forecast column — publishes no UV index, so this one field is
  * supplemented from Open-Meteo. Epoch seconds keep the join exact: both APIs report on the hour.
+ *
+ * `forecast_days=16` is not decoration. Open-Meteo's day 0 is *its* today (UTC), and NWS returns
+ * ~156 hourly periods counted from now, so a 7-day request covers hours that NWS still reports but
+ * a day earlier: the join missed the last forecast day every time, and that day printed "—" for UV.
+ * 16 days is the free-tier maximum, which keeps this a single request while outlasting NWS.
  */
 const OPEN_METEO_UV_URL =
-  "https://api.open-meteo.com/v1/forecast?latitude=42.3601&longitude=-71.0589&hourly=uv_index&forecast_days=7&timeformat=unixtime&timezone=UTC";
+  "https://api.open-meteo.com/v1/forecast?latitude=42.3601&longitude=-71.0589&hourly=uv_index&forecast_days=16&timeformat=unixtime&timezone=UTC";
 
 interface OpenMeteoUvResponse {
   hourly?: { time?: number[]; uv_index?: (number | null)[] };

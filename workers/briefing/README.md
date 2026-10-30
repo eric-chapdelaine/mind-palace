@@ -1,8 +1,12 @@
 # Daily briefing (print)
 
 A one-page, print-first view of Mind Palace: today's weather graph, today's schedule, the tasks that
-deserve attention today, the week ahead, and the board. It is a **read-only medium** — the same facts
-the web app shows, laid out for paper instead of a screen.
+deserve attention today, and the week ahead. It is a **read-only medium** — the same facts the web
+app shows, laid out for paper instead of a screen.
+
+The board snapshot and the needs-attention list are built and renderable but **not printed by
+default** (see the layout note below): on a full week they are what tips the page onto a second
+sheet, and a two-page briefing is no longer a glance.
 
 Nothing here calls an external API. Every fact comes from the local database (the weather cache, the
 stored schedule, the task rows), so a print works offline and always describes the same day.
@@ -36,10 +40,17 @@ layout: [
   { kind: "weather-day-graph" },
   { kind: "today-schedule" },
   { kind: "today-tasks", descriptionChars: 220 },
-  { kind: "week-ahead", days: 7, linesPerDay: 5 },
-  { kind: "board-snapshot", perColumn: 6 },
+  { kind: "week-ahead", days: 7, linesPerDay: 5, attention: false },
 ]
 ```
+
+`board-snapshot` is a supported `kind` and has a working renderer; it is simply absent from the
+default list until the day the page can afford it. Re-enabling it, or the attention list
+(`attention: true` on `week-ahead`), is a one-line change to `DEFAULT_LAYOUT` — or a `layout` passed
+in a single request — rather than a reimplementation.
+
+The board also excludes calendar events (`mind-palace:calendar-event`). An imported event is a fixed
+commitment, already shown on the timeline and in the week ahead; as a card it reads as work to do.
 
 That split is the whole scalability story, and it costs nothing today:
 
@@ -74,6 +85,12 @@ Top to bottom, one letter page (0.36in margins, 8.2pt):
      empty hours: over 18 hours a 30-minute block is 5.4pt tall and one line of tiny text needs
      7.8pt, so a short block printed as an unlabelled sliver. Narrowing the window is what makes the
      resolution available for short blocks to say anything at all.
+   - Two numbers set the worst case, `paper['day']` (height) and `paper['calfont']` (block type size):
+     the drawable window is roughly `day * 72 / (calfont * callead)`, i.e. how many hours of axis fit
+     before a 30-minute block loses its title. At 3.30in and 5.0pt that is ~19 hours, so even a full
+     6am–midnight day labels a 30-minute block, and a 15-minute block labels itself in any window
+     narrower than ~9.5 hours. Measured: an 18-hour day packed with thirty-four consecutive 30-minute
+     blocks still prints all thirty-four titles on one page.
    - Consequence: the vertical scale differs from day to day. A 9am–7pm day gives every block ~20%
      more height than a 6am–midnight day would.
    - Boxes are shaded in three greys — **calendar** (fixed commitment, darkest), **routine** (the
@@ -88,19 +105,21 @@ Top to bottom, one letter page (0.36in margins, 8.2pt):
      one line gets `name · 12:30p-1:30p` inline, because an hour of an 18-hour day is about one line
      and a calendar where most blocks never say when they are is not a calendar. Under one line of
      room, no text: the shade and position carry it.
-   - The vertical window is `paper['day']` (2.40in on letter). That number is a real constraint and
-     it is tight: measured over days with 6-8 blocks, 2.70in pushes the board section onto a second
-     page and 2.40in keeps the whole page to one sheet. Re-check page count after changing it.
+   - The vertical window is `paper['day']` (3.30in on letter). That number is a real constraint and
+     it is tight: it trades directly against the sections below it. 2.40in was not enough to label a
+     30-minute block on a long day; the extra height is paid for by dropping the board and the
+     attention list from the default layout (see above). Re-check page count after changing it.
 5. **Do today** — full-width cards, two columns, with priority pill, remaining time, tags, due label,
    and the Markdown-flattened description clipped to ~220 chars. Which tasks appear here is a server
    decision: anything with a block today, anything pinned by weekday tag, anything in progress; then
    one row per distinct title (recurrence leaves `[LIFE] Sleep` x7, which reads as a stutter).
 6. **The week ahead** — 7 columns: weekday, date, high/low/rain, a 5pt day-density strip drawn from
    the same block data as the big ribbon, the first few blocks as lines, "+N more".
-7. **Needs attention** — deadlines landing in the window, plus one rolled-up line for past-due work
-   (per-task "overdue" labels would stamp half the page).
-8. **Board** — Inbox / Ready / In progress / Waiting, top N each, with the total in the header and
-   "+N more" in the footer.
+7. **Needs attention** — *not printed by default.* Deadlines landing in the window, plus one
+   rolled-up line for past-due work (per-task "overdue" labels would stamp half the page). Renders
+   inside the week section; turn it on with `{ kind: "week-ahead", attention: true }`.
+8. **Board** — *not printed by default.* Inbox / Ready / In progress / Waiting, top N each, with the
+   total in the header and "+N more" in the footer. Calendar events are excluded (see above).
 
 Sections are ~30 lines of Python each and named `section_<kind>()`.
 

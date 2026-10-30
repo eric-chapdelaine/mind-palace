@@ -461,7 +461,7 @@ export type BriefingSection =
   | { kind: "weather-day-graph"; fromHour?: number; toHour?: number }
   | { kind: "today-schedule"; agenda?: boolean; fromHour?: number; toHour?: number }
   | { kind: "today-tasks"; descriptionChars?: number; descriptionLines?: number }
-  | { kind: "week-ahead"; days?: number; linesPerDay?: number }
+  | { kind: "week-ahead"; days?: number; linesPerDay?: number; attention?: boolean }
   | { kind: "board-snapshot"; perColumn?: number; columns?: KanbanStatus[] };
 
 /** One hour of the day's forecast, already placed on the day's local clock by the server. */

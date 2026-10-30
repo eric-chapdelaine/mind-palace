@@ -56,7 +56,16 @@ PAPER: dict[str, dict[str, str]] = {
         "small": "6.8pt",
         "tiny": "6.0pt",
         "graph": "1.0in",
-        "day": "2.40in",
+        # The day calendar's height, and the numbers that decide whether a short block can say its
+        # name. A box needs one line of `calfont` plus `calpad` to print a title, so a line costs
+        # `calfont + 2*calpad + 0.5pt` of height. These values are the most legible ones that still
+        # fit the two cases that matter: a 30-minute block across the widest window the section
+        # allows (6am-midnight, 18h) and a 15-minute block in a normal working window (10h). Enlarge
+        # either and those blocks silently revert to unlabelled slivers.
+        "day": "3.30in",
+        "calfont": "5.2pt",
+        "callead": "1.0",
+        "calpad": "0.1pt",
     },
     "a4": {
         "size": "a4",
@@ -67,7 +76,10 @@ PAPER: dict[str, dict[str, str]] = {
         "small": "6.8pt",
         "tiny": "6.0pt",
         "graph": "1.0in",
-        "day": "2.40in",
+        "day": "3.30in",
+        "calfont": "5.2pt",
+        "callead": "1.0",
+        "calpad": "0.1pt",
     },
 }
 
@@ -265,10 +277,10 @@ section.sec {{ margin-top: 5.5pt; break-inside: auto; }}
 .vcal .vtrack {{ position: absolute; left: 26pt; right: 0; top: 0; bottom: 0;
                  border-left: 0.4pt solid {INK['hair']}; }}
 .vcal .hrule {{ position: absolute; left: 0; right: 0; border-top: 0.3pt solid #e6e6e6; }}
-.vcal .vb {{ position: absolute; overflow: hidden; padding: 0.4pt 2.5pt; border: 0.5pt solid #ffffff; }}
-.vcal .vn {{ font-size: {paper['tiny']}; font-weight: 700; line-height: 1.06; white-space: nowrap; overflow: hidden; }}
-.vcal .vm {{ font-size: {paper['tiny']}; line-height: 1.06; white-space: nowrap; overflow: hidden; opacity: 0.85; }}
-.vcal .vtg {{ font-size: {paper['tiny']}; line-height: 1.06; white-space: nowrap; overflow: hidden; opacity: 0.7; }}
+.vcal .vb {{ position: absolute; overflow: hidden; padding: {paper['calpad']} 2.2pt; border: 0.25pt solid #ffffff; }}
+.vcal .vn {{ font-size: {paper['calfont']}; font-weight: 700; line-height: {paper['callead']}; white-space: nowrap; overflow: hidden; }}
+.vcal .vm {{ font-size: {paper['calfont']}; line-height: {paper['callead']}; white-space: nowrap; overflow: hidden; opacity: 0.85; }}
+.vcal .vtg {{ font-size: {paper['calfont']}; line-height: {paper['callead']}; white-space: nowrap; overflow: hidden; opacity: 0.7; }}
 .legend {{ display: flex; gap: 10pt; font-size: {paper['tiny']}; color: {INK['muted']}; padding: 1.5pt 0 0; }}
 .legend .lg {{ display: flex; align-items: center; gap: 2.5pt; }}
 .legend .sw {{ width: 7pt; height: 4.5pt; display: inline-block; border: 0.3pt solid #b0b0b0; }}
@@ -643,9 +655,12 @@ def section_today_schedule(payload: dict[str, Any], options: dict[str, Any], pap
     visible = _visible(blocks, start_min, end_min)
     placed, lanes = _pack_lanes(visible)
 
-    # One line of tiny text, and the box's own padding.
-    line_pt = 6.0 * 1.06
-    pt_per_minute = float(paper["day"].replace("in", "")) * 72 / span
+    # One line of the calendar's own type, and the box's own padding. Both come from the paper
+    # preset so a smaller medium cannot silently disagree with the CSS above.
+    line_pt = float(paper["calfont"].replace("pt", "")) * float(paper["callead"])
+    pad_pt = float(paper["calpad"].replace("pt", "")) * 2 + 0.5  # box padding, plus its hairline border
+    height_pt = float(paper["day"].replace("in", "")) * 72
+    pt_per_minute = height_pt / span
 
     labels: list[str] = []
     rules: list[str] = []
@@ -667,7 +682,7 @@ def section_today_schedule(payload: dict[str, Any], options: dict[str, Any], pap
 
         # How many lines of text this box can hold decides how much of the block it reports: a 15
         # minute block is a name, a two hour block explains itself.
-        lines = int(((end - start) * pt_per_minute - 1.4) // line_pt)
+        lines = int(((end - start) * pt_per_minute - pad_pt) // line_pt)
         fill, ink = _block_fill(block), _block_ink(block)
         tooltip = f'{escape(block["startLabel"])}–{escape(block["endLabel"])} {escape(block["title"])}'
 
@@ -806,7 +821,9 @@ def section_week_ahead(payload: dict[str, Any], options: dict[str, Any], paper: 
             f'{"".join(groups)}</div>'
         )
 
-    attention = payload["facts"].get("attention") or []
+    # The attention list rides in this section rather than owning one, and is off unless asked for:
+    # it is what tips a dense week onto a second page.
+    attention = (payload["facts"].get("attention") or []) if options.get("attention", True) else []
     att_html = (
         '<div class="attention-wrap"><div class="attention-head">Needs attention</div>'
         '<ul class="attention">' + "".join(f"<li>{escape(line)}</li>" for line in attention) + "</ul></div>"

@@ -992,7 +992,11 @@ export class TaskRepository {
        VALUES ('boston-ma', ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(location_key, forecast_at) DO UPDATE SET temperature_f = excluded.temperature_f,
          precipitation_probability = excluded.precipitation_probability, wind_mph = excluded.wind_mph,
-         is_daytime = excluded.is_daytime, uv_index = excluded.uv_index, short_forecast = excluded.short_forecast,
+         is_daytime = excluded.is_daytime, short_forecast = excluded.short_forecast,
+         -- UV is a supplement fetched from a second provider, so a missing value means "this sync
+         -- learnt nothing", not "UV is now unknown". Keeping the old value makes one failed call a
+         -- gap for new hours instead of a hole punched through hours that already had data.
+         uv_index = COALESCE(excluded.uv_index, uv_index),
          fetched_at = excluded.fetched_at, expires_at = excluded.expires_at`,
     );
     this.database.connection.exec("BEGIN IMMEDIATE");
