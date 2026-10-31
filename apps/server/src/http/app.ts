@@ -319,7 +319,11 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
   app.post("/api/recurrence-templates", async (context) => {
     const body = (await context.req.json()) as Record<string, unknown>;
     const template = tasks.createRecurrenceTemplate(recurrenceTemplateInput(body));
-    const materialized = recurrence.materializeThrough(addDays(localDate(new Date()), RECURRENCE_LOOKAHEAD_DAYS));
+    const materialized = recurrence.materializeThrough(
+      addDays(localDate(new Date()), RECURRENCE_LOOKAHEAD_DAYS),
+      localDate(new Date()),
+      template.id,
+    );
     return context.json({ template, materialized }, 201);
   });
 
@@ -327,7 +331,11 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
     const templateId = numberParam(context.req.param("id"), "recurrence template id");
     const body = (await context.req.json()) as Record<string, unknown>;
     const template = tasks.updateRecurrenceTemplate(templateId, recurrenceTemplateInput(body));
-    const materialized = recurrence.materializeThrough(addDays(localDate(new Date()), RECURRENCE_LOOKAHEAD_DAYS));
+    const materialized = recurrence.materializeThrough(
+      addDays(localDate(new Date()), RECURRENCE_LOOKAHEAD_DAYS),
+      localDate(new Date()),
+      template.id,
+    );
     return context.json({ template, materialized });
   });
 

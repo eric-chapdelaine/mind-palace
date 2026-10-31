@@ -14,85 +14,116 @@ export class RecurrenceService {
    * Create the occurrence rows for every active template, up to and including `endDate`.
    *
    * Idempotent, but not a one-shot ledger: a date only counts as done while its child is alive, so
-   * deleting or completing yesterday's occurrence does not stop tomorrow's from appearing. A date
-   * whose child was archived or finished is regenerated when the window reaches it again.
+   * deleting or completing yesterday's occurrence does not stop tomorrow's from appearing.
    *
    * Deliberately does **not** backfill: the window starts at today, because a server that was off
    * for a week should not manufacture a week of "wake up" rows nobody can act on any more.
+   *
+   * `onlyTemplateId` scopes the pass to one routine, so authoring one reports that routine's
+   * result instead of counting every other routine's existing rows.
    */
-  materializeThrough(endDate: string, today: string = localDate(new Date())): MaterializeResult {
+  materializeThrough(
+    endDate: string,
+    today: string = localDate(new Date()),
+    onlyTemplateId?: number,
+  ): MaterializeResult {
     const created: number[] = [];
     const idleTemplates: string[] = [];
     let alreadyPresent = 0;
-    const routineTagId = this.tasks.tagId(reservedTagIds.routine);
     const weekdayTagIds = weekdayTagPublicIds.map((publicId) => this.tasks.tagId(publicId));
 
     for (const template of this.tasks.listRecurrenceTemplates()) {
-      // Every occurrence carries the tag that names its routine. The template owns that tag so the
-      // template page and /tags/:id both list a routine's whole history.
-      const routineTag = template.routineTagId === null
-        ? this.tasks.ensureTemplateTag(template.id, {
-            title: template.title,
-            description: `Recurring occurrences of the routine “${template.title}”.`,
-          })
-        : null;
-      const ownTagId = template.routineTagId ?? routineTag!.id;
-      // A weekday tag on the template would pin every occurrence to that day and fight the rule.
-      const inheritedTagIds = template.tagIds.filter((id) => !weekdayTagIds.includes(id));
-      const seriesStart = template.nextOccurrenceDate;
-      // Never backfill: a routine that was missed was missed. The rule's own anchor still bounds the
-      // window from below so a future-dated rule does not fire early.
-      let cursor = seriesStart > today ? seriesStart : today;
-      const interval = Math.max(1, template.intervalCount);
-      let fired = 0;
-
-      for (; cursor <= endDate; cursor = addDays(cursor, template.frequency === "daily" ? interval : 1)) {
-        const occurrenceDate = cursor;
-        // A weekly rule with an interval is "every N weeks, on these weekdays", so the count is
-        // taken from the rule's own anchor week rather than from whenever the job happened to run.
-        const weeksIn = Math.floor(daysBetween(seriesStart, occurrenceDate) / 7);
-        if (template.frequency === "weekly" && weeksIn % interval !== 0) continue;
-        const weekdayAllowed = template.frequency === "daily"
-          ? true
-          : template.weekdays.includes(weekdayIndex(occurrenceDate));
-        if (!weekdayAllowed) continue;
-        fired += 1;
-        if (this.tasks.recurrenceOccurrenceIsLive(template.id, occurrenceDate)) {
-          alreadyPresent += 1;
-          continue;
-        }
-        const occurrenceTagIds = [
-          ...new Set([...inheritedTagIds, routineTagId, weekdayTagIds[weekdayIndex(occurrenceDate)]!, ownTagId]),
-        ];
-        const child = this.tasks.createTask({
-          title: `${template.title} - ${occurrenceDate}`,
-          ...(template.description ? { description: template.description } : {}),
-          priority: template.priority,
-          durationMinutesRemaining: template.durationMinutes,
-          splittable: template.splittable,
-          minChunkMinutes: template.minChunkMinutes,
-          maxChunkMinutes: template.maxChunkMinutes,
-          earliestStart: startOfLocalDay(occurrenceDate).toISOString(),
-          // The occurrence must land on its own day, so the window closes at local end of day.
-          // `autoArchiveHour` can close it earlier — that is the template's expiry policy, and it is
-          // the difference between "wake up" (gone by 10am) and an ordinary task.
-          deadlineAt: localInstant(occurrenceDate, 23, 59).toISOString(),
-          autoArchiveAt: localInstant(
-            occurrenceDate,
-            template.autoArchiveHour ?? 23,
-            template.autoArchiveHour === null ? 59 : 0,
-          ).toISOString(),
-          kanbanStatus: "ready",
-          origin: "recurrence",
-        });
-        this.tasks.setTaskTags(child.id, occurrenceTagIds);
-        this.tasks.recordRecurrenceOccurrence(template.id, occurrenceDate, child.id);
-        created.push(child.id);
-      }
-      // A daily rule with an interval must not step by one: skipping the days in between is what
-      // "every 3 days" means.
-      if (fired === 0) idleTemplates.push(template.title);
+      if (onlyTemplateId !== undefined && template.id !== onlyTemplateId) continue;
+      const result = this.materializeTemplate(template, endDate, today, weekdayTagIds);
+      created.push(...result.created);
+      alreadyPresent += result.alreadyPresent;
+      if (!result.fired) idleTemplates.push(template.title);
     }
     return { created, alreadyPresent, idleTemplates };
+  }
+
+  /** The dates a rule selects inside `[today, endDate]`, oldest first. */
+  private dates(
+    template: { frequency: "daily" | "weekly"; intervalCount: number; weekdays: number[]; nextOccurrenceDate: string },
+    endDate: string,
+    today: string,
+  ): string[] {
+    const seriesStart = template.nextOccurrenceDate;
+    const interval = Math.max(1, template.intervalCount);
+    // The anchor bounds the window from below, so a future-dated rule does not fire early; `today`
+    // bounds it from above, so a missed routine is missed rather than manufactured late.
+    const from = seriesStart > today ? seriesStart : today;
+    const dates: string[] = [];
+    for (let cursor = from; cursor <= endDate; cursor = addDays(cursor, 1)) {
+      // Both intervals are counted from the rule's anchor, never from whenever the job happened to
+      // run — otherwise "every 3 days" would drift each time the window slid forward.
+      if (template.frequency === "daily") {
+        if (daysBetween(seriesStart, cursor) % interval === 0) dates.push(cursor);
+        continue;
+      }
+      const weeksIn = Math.floor(daysBetween(seriesStart, cursor) / 7);
+      if (weeksIn % interval !== 0) continue;
+      if (template.weekdays.includes(weekdayIndex(cursor))) dates.push(cursor);
+    }
+    return dates;
+  }
+
+  private materializeTemplate(
+    template: ReturnType<TaskRepository["listRecurrenceTemplates"]>[number],
+    endDate: string,
+    today: string,
+    weekdayTagIds: number[],
+  ): MaterializeResult & { fired: number } {
+    const created: number[] = [];
+    let alreadyPresent = 0;
+    const dates = this.dates(template, endDate, today);
+    if (dates.length === 0) return { created, alreadyPresent, idleTemplates: [], fired: 0 };
+
+    // Every occurrence carries a tag that names its routine, so /tags/:id lists its whole history.
+    const ownTagId = template.routineTagId ?? this.tasks.ensureTemplateTag(template.id, {
+      title: template.title,
+      description: `Recurring occurrences of the routine “${template.title}”.`,
+    }).id;
+    // A weekday tag on the template would pin every occurrence to that day and fight the rule.
+    const inheritedTagIds = template.tagIds.filter((id) => !weekdayTagIds.includes(id));
+    const routineTagId = this.tasks.tagId(reservedTagIds.routine);
+
+    for (const occurrenceDate of dates) {
+      if (this.tasks.recurrenceOccurrenceIsLive(template.id, occurrenceDate)) {
+        alreadyPresent += 1;
+        continue;
+      }
+      const autoArchiveAt = localInstant(
+        occurrenceDate,
+        template.autoArchiveHour ?? 23,
+        template.autoArchiveHour === null ? 59 : 0,
+      );
+      // Today's occurrence is only worth creating if there is still time to do it. Without this,
+      // authoring a routine in the afternoon drops a card that is already expired onto the board.
+      if (autoArchiveAt.getTime() <= Date.now()) continue;
+      const child = this.tasks.createTask({
+        title: `${template.title} - ${occurrenceDate}`,
+        ...(template.description ? { description: template.description } : {}),
+        priority: template.priority,
+        durationMinutesRemaining: template.durationMinutes,
+        splittable: template.splittable,
+        minChunkMinutes: template.minChunkMinutes,
+        maxChunkMinutes: template.maxChunkMinutes,
+        earliestStart: startOfLocalDay(occurrenceDate).toISOString(),
+        // The occurrence must land on its own day, so the window closes at local end of day.
+        deadlineAt: localInstant(occurrenceDate, 23, 59).toISOString(),
+        // `autoArchiveHour` is the template's expiry policy: the difference between "wake up" (gone
+        // by 10am) and an ordinary task (a month). NULL means the routine keeps its whole day.
+        autoArchiveAt: autoArchiveAt.toISOString(),
+        kanbanStatus: "ready",
+        origin: "recurrence",
+      });
+      this.tasks.setTaskTags(child.id, [
+        ...new Set([...inheritedTagIds, routineTagId, weekdayTagIds[weekdayIndex(occurrenceDate)]!, ownTagId]),
+      ]);
+      this.tasks.recordRecurrenceOccurrence(template.id, occurrenceDate, child.id);
+      created.push(child.id);
+    }
+    return { created, alreadyPresent, idleTemplates: [], fired: dates.length };
   }
 }
