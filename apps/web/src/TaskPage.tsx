@@ -1,4 +1,4 @@
-import type { RecurrenceRule, Tag, TaskDetail, TaskSummary, UpsertRecurrenceInput } from "@mind-palace/shared";
+import type { Tag, TaskDetail, TaskSummary } from "@mind-palace/shared";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
@@ -44,7 +44,31 @@ function MarkdownLinks({ children }: { children: string | null | undefined }) {
   );
 }
 
-function PlanningSection({ task }: { task: TaskDetail }) {
+/**
+ * The decay line is editable, because the default is a guess about how long an intention stays
+ * worth keeping: a task parked behind someone else should survive longer, and one you already know
+ * you will not do should go now.
+ */
+function DecayField({ task, onSave }: { task: TaskDetail; onSave: (value: string | null) => Promise<void> }) {
+  const toLocalInput = (instant: string | null): string => {
+    if (instant === null) return "";
+    const date = new Date(instant);
+    const pad = (value: number) => String(value).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
+  const [value, setValue] = useState(toLocalInput(task.autoArchiveAt));
+  useEffect(() => setValue(toLocalInput(task.autoArchiveAt)), [task.autoArchiveAt]);
+  const [busy, setBusy] = useState(false);
+
+  async function commit(next: string): Promise<void> {
+    setBusy(true);
+    try {
+      await onSave(next === "" ? null : new Date(next).toISOString());
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <section>
       <div className="section-label">Planning</div>
@@ -53,11 +77,35 @@ function PlanningSection({ task }: { task: TaskDetail }) {
         ? <span>{task.durationMinutesRemaining} minutes remaining{task.splittable ? ", splittable" : ""}</span>
         : <span>No time estimate</span>}
       {task.deadlineAt && <span>Due {formatDateTime(task.deadlineAt)}</span>}
-      {task.autoArchiveAt && (
-        <span>
-          {task.lifecycleStatus === "archived" ? "Archived" : "Archives"} {formatDateTime(task.autoArchiveAt)}
-        </span>
-      )}
+      <label className="decay-field">
+        <span>{task.lifecycleStatus === "archived" ? "Archived" : "Archives"} at</span>
+        <input
+          type="datetime-local"
+          value={value}
+          disabled={busy}
+          onChange={(event) => setValue(event.target.value)}
+          onBlur={(event) => {
+            // Only write when the value actually moved: blur fires on every tab-through.
+            if (event.target.value !== toLocalInput(task.autoArchiveAt)) void commit(event.target.value);
+          }}
+        />
+      </label>
+      <div className="button-row">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void commit(toLocalInput(new Date(Date.now() + 30 * 86_400_000).toISOString()))}
+        >
+          Keep another month
+        </button>
+        {task.autoArchiveAt !== null && (
+          <button type="button" disabled={busy} onClick={() => void commit("")}>Never decay</button>
+        )}
+      </div>
+      <p className="form-hint muted">
+        Leave it blank to keep this task forever. Untouched tasks decay a month after they were
+        created, so the board only holds work you are still going to do.
+      </p>
     </section>
   );
 }
@@ -110,101 +158,6 @@ function DependencySection({ task, onRemoveDependency }: {
         </div>
       )}
     </section>
-  );
-}
-
-const WEEKDAY_CHOICES = [
-  { value: 1, label: "Mon" },
-  { value: 2, label: "Tue" },
-  { value: 3, label: "Wed" },
-  { value: 4, label: "Thu" },
-  { value: 5, label: "Fri" },
-  { value: 6, label: "Sat" },
-  { value: 0, label: "Sun" },
-];
-
-/**
- * The routine editor. A recurrence rule turns this task into a template: the daily job creates one
- * child per scheduled day, copying this task's title, estimate, priority and tags. Editing the
- * template only affects occurrences created afterwards — existing children keep the values they
- * were born with, so re-tagging or re-estimating a template never rewrites history.
- */
-function RecurrenceSection({ task, onSave }: {
-  task: TaskDetail;
-  onSave: (input: UpsertRecurrenceInput) => Promise<void>;
-}) {
-  const rule = task.recurrence;
-  const [frequency, setFrequency] = useState<RecurrenceRule["frequency"]>(rule?.frequency ?? "daily");
-  const [intervalCount, setIntervalCount] = useState(String(rule?.intervalCount ?? 1));
-  const [weekdays, setWeekdays] = useState<number[]>(rule?.weekdays ?? []);
-  const [autoArchiveHour, setAutoArchiveHour] = useState(rule?.autoArchiveHour === null || rule === null ? "" : String(rule.autoArchiveHour));
-  const [nextOccurrenceDate, setNextOccurrenceDate] = useState(rule?.nextOccurrenceDate ?? new Date().toISOString().slice(0, 10));
-  const [busy, setBusy] = useState(false);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    try {
-      await onSave({
-        frequency,
-        intervalCount: Number(intervalCount) || 1,
-        weekdays,
-        autoArchiveHour: autoArchiveHour === "" ? null : Number(autoArchiveHour),
-        nextOccurrenceDate,
-      });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <form className="detail-section" onSubmit={submit}>
-      <div className="section-label">Routine</div>
-      {rule === null
-        ? <p className="muted">Not a routine. Set a schedule below and this task becomes the template for recurring occurrences.</p>
-        : <p className="muted">
-            Creates a child task {rule.frequency === "daily" ? `every ${rule.intervalCount === 1 ? "day" : `${rule.intervalCount} days`}` : `every ${rule.intervalCount === 1 ? "week" : `${rule.intervalCount} weeks`}`}.
-            Changing these values affects occurrences created from tomorrow on; the ones already on the board keep their own values.
-          </p>}
-      <div className="form-pair">
-        <label>Repeats<select value={frequency} onChange={(event) => setFrequency(event.target.value as typeof frequency)}>
-          <option value="daily">Daily</option>
-          <option value="weekly">Weekly</option>
-        </select></label>
-        <label>{frequency === "daily" ? "Every N days" : "Every N weeks"}
-          <input type="number" min="1" value={intervalCount} onChange={(event) => setIntervalCount(event.target.value)} />
-        </label>
-      </div>
-      {frequency === "weekly" && (
-        <label>On these days
-          <span className="weekday-choices">
-            {WEEKDAY_CHOICES.map((choice) => (
-              <label key={choice.value} className="checkbox-field">
-                <input
-                  type="checkbox"
-                  checked={weekdays.includes(choice.value)}
-                  onChange={(event) => setWeekdays((current) => event.target.checked
-                    ? [...current, choice.value]
-                    : current.filter((day) => day !== choice.value))}
-                />
-                <span>{choice.label}</span>
-              </label>
-            ))}
-          </span>
-        </label>
-      )}
-      <div className="form-pair">
-        <label>First occurrence<input type="date" value={nextOccurrenceDate} onChange={(event) => setNextOccurrenceDate(event.target.value)} /></label>
-        <label>Vanishes at (hour)
-          <input type="number" min="0" max="23" placeholder="End of day" value={autoArchiveHour} onChange={(event) => setAutoArchiveHour(event.target.value)} />
-        </label>
-      </div>
-      <p className="form-hint muted">
-        Occurrences that go unticked vanish on their own, so a missed routine does not pile up. Set
-        the hour to end a routine with its day (10 for “wake up”); leave it blank to keep the whole day.
-      </p>
-      <div className="button-row"><button className="primary-button" disabled={busy}>{busy ? "Saving..." : rule === null ? "Make this a routine" : "Save routine"}</button></div>
-    </form>
   );
 }
 
@@ -358,11 +311,15 @@ export function TaskPage() {
             </section>
           )}
           <TimeBlockSection task={task} onAcceptSchedule={() => void acceptSchedule()} onDeleteBlock={(blockId) => void deleteBlock(blockId)} />
-          <RecurrenceSection task={task} onSave={async (input) => { await action(() => api.upsertRecurrence(id, input).then(() => api.task(id))); }} />
           <DependencySection task={task} onRemoveDependency={(dependentId, prerequisiteId) => void removeDependency(dependentId, prerequisiteId)} />
         </div>
         <div className="detail-sidebar">
-          <PlanningSection task={task} />
+          <DecayField
+            task={task}
+            onSave={async (value) => {
+              await action(() => api.updateTask(id, { autoArchiveAt: value }));
+            }}
+          />
         </div>
       </div>
     </main>

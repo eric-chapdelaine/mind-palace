@@ -106,7 +106,6 @@ export interface TaskDetail extends TaskSummary {
   maxChunkMinutes: number;
   createdAt: string;
   timeBlocks: TimeBlock[];
-  recurrence: RecurrenceRule | null;
   /** Tasks this task depends on — they must be completed (and are scheduled) first. Empty unless linked. */
   dependsOn: TaskSummary[];
   /** Tasks that depend on this task — this task must come first for them. Not a hard gate on manual completion. */
@@ -140,17 +139,49 @@ export interface TimeBlock {
   notes: string | null;
 }
 
-export interface RecurrenceRule {
+/**
+ * A routine is configuration, not work: it says that an ordinary task should exist on certain days,
+ * and carries the values each occurrence is born with. It is deliberately not a task — a task is a
+ * thing to do on a particular day, and conflating the two made the template occupy a kanban column
+ * and need excluding from the scheduler, the decay sweep and the briefing.
+ */
+export interface RecurrenceTemplate {
   id: number;
-  taskId: number;
-  frequency: "daily" | "weekly";
+  publicId: string;
+  title: string;
+  description: string | null;
+  priority: number;
+  durationMinutes: number;
+  splittable: boolean;
+  minChunkMinutes: number;
+  maxChunkMinutes: number;
+  frequency: Frequency;
   intervalCount: number;
   weekdays: number[];
   localStartTime: string | null;
   nextOccurrenceDate: string;
   /** Local hour (`0`-`23`) of the occurrence's day at which its child task decays; null = end of day. */
   autoArchiveHour: number | null;
+  /** The tag grouping this routine with the occurrences it produced; null until it first runs. */
+  routineTagId: number | null;
   active: boolean;
+  tagIds: number[];
+  updatedAt: string;
+}
+
+export type Frequency = "daily" | "weekly";
+
+/**
+ * What one materialization pass did. Reported to the caller because "nothing was created" is a
+ * legitimate outcome — a weekly routine often has no firing date inside a seven-day window — and a
+ * silent 200 reads as a broken job.
+ */
+export interface MaterializeResult {
+  created: number[];
+  /** Dates a rule selected but that already had a live child, so nothing was created. */
+  alreadyPresent: number;
+  /** Routines that fired nowhere in the window (their weekdays all fall outside it). */
+  idleTemplates: string[];
 }
 
 export interface WeatherForecast {
@@ -419,6 +450,11 @@ export interface UpdateTaskInput {
   deadlineAt?: string | null;
   tagIds?: number[];
   /**
+   * When this task decays and leaves the board. `null` never; omitted leaves the current instant
+   * alone. Setting it is how you push a task's expiry out (or bring it in) by hand.
+   */
+  autoArchiveAt?: string | null;
+  /**
    * Replace the full set of tasks this task depends on (like `tagIds`, the editor sends the
    * whole list and the repository diffs it against the current links). Omit to leave deps alone.
    */
@@ -454,8 +490,17 @@ export interface UpdateTimeBlockInput {
   endAt?: string;
 }
 
+/** Everything a routine needs to define itself, including the values each occurrence is born with. */
 export interface UpsertRecurrenceInput {
-  frequency: RecurrenceRule["frequency"];
+  title: string;
+  description?: string | null;
+  priority?: number;
+  durationMinutes: number;
+  splittable?: boolean;
+  minChunkMinutes?: number;
+  maxChunkMinutes?: number;
+  tagIds?: number[];
+  frequency: Frequency;
   intervalCount?: number;
   weekdays?: number[];
   localStartTime?: string;
@@ -465,6 +510,7 @@ export interface UpsertRecurrenceInput {
    * routine can be gone by 10am. Null/omitted means end of that day.
    */
   autoArchiveHour?: number | null;
+  active?: boolean;
 }
 
 /**

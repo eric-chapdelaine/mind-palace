@@ -16,6 +16,7 @@ import {
   type TagType,
   type TimeBlockStatus,
   type TimeBlockType,
+  type UpsertRecurrenceInput,
 } from "@mind-palace/shared";
 import { Hono } from "hono";
 import { assertBriefingDate, briefingPapers, type BriefingService } from "../services/briefing-service.js";
@@ -47,6 +48,39 @@ export interface IntegrationRegistration {
   key: string;
   label: string;
   status: () => IntegrationConnection;
+}
+
+/** Validate and coerce a routine payload. Shared by create and update so both reject the same things. */
+function recurrenceTemplateInput(body: Record<string, unknown>): UpsertRecurrenceInput {
+  const frequency = body.frequency;
+  if (frequency !== "daily" && frequency !== "weekly") throw new Error("frequency must be daily or weekly");
+  const weekdays = Array.isArray(body.weekdays) ? body.weekdays.map(Number) : [];
+  if (frequency === "weekly" && weekdays.length === 0) throw new Error("A weekly routine needs at least one weekday");
+  const autoArchiveHour = body.autoArchiveHour === null || body.autoArchiveHour === undefined
+    ? null
+    : Number(body.autoArchiveHour);
+  if (autoArchiveHour !== null && !(Number.isInteger(autoArchiveHour) && autoArchiveHour >= 0 && autoArchiveHour <= 23)) {
+    throw new Error("autoArchiveHour must be an hour 0-23");
+  }
+  const durationMinutes = Number(body.durationMinutes ?? 30);
+  if (!Number.isInteger(durationMinutes) || durationMinutes < 0) throw new Error("durationMinutes must be a whole number of minutes");
+  return {
+    title: requiredString(body.title, "title"),
+    durationMinutes,
+    frequency,
+    weekdays,
+    autoArchiveHour,
+    intervalCount: typeof body.intervalCount === "number" ? body.intervalCount : 1,
+    nextOccurrenceDate: requiredString(body.nextOccurrenceDate, "nextOccurrenceDate"),
+    ...(typeof body.description === "string" || body.description === null ? { description: body.description } : {}),
+    ...(typeof body.priority === "number" ? { priority: body.priority } : {}),
+    ...(typeof body.splittable === "boolean" ? { splittable: body.splittable } : {}),
+    ...(typeof body.minChunkMinutes === "number" ? { minChunkMinutes: body.minChunkMinutes } : {}),
+    ...(typeof body.maxChunkMinutes === "number" ? { maxChunkMinutes: body.maxChunkMinutes } : {}),
+    ...(Array.isArray(body.tagIds) ? { tagIds: body.tagIds.map(Number) } : {}),
+    ...(typeof body.localStartTime === "string" ? { localStartTime: body.localStartTime } : {}),
+    ...(typeof body.active === "boolean" ? { active: body.active } : {}),
+  };
 }
 
 export function createHttpApp({ tasks, schedule, weather, calendar, garmin, integrationRegistry, recurrence, scheduler, briefing }: Dependencies): Hono {
@@ -166,6 +200,7 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
       ...(typeof body.maxChunkMinutes === "number" ? { maxChunkMinutes: body.maxChunkMinutes } : {}),
       ...(body.earliestStart === null || typeof body.earliestStart === "string" ? { earliestStart: body.earliestStart } : {}),
       ...(body.deadlineAt === null || typeof body.deadlineAt === "string" ? { deadlineAt: body.deadlineAt } : {}),
+      ...(body.autoArchiveAt === null || typeof body.autoArchiveAt === "string" ? { autoArchiveAt: body.autoArchiveAt } : {}),
       ...(Array.isArray(body.tagIds) ? { tagIds: body.tagIds.map(Number) } : {}),
       ...(Array.isArray(body.dependsOnTaskIds) ? { dependsOnTaskIds: body.dependsOnTaskIds.map(Number) } : {}),
     });
@@ -274,36 +309,44 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
     return context.json(tasks.getTask(taskId));
   });
 
-  app.post("/api/tasks/:id/recurrence", async (context) => {
-    const taskId = numberParam(context.req.param("id"), "task id");
+  /**
+   * Routines are their own resource, not a mode on a task: a template defines what to create, so it
+   * has its own fields and its own lifecycle. Creating or editing one materializes immediately —
+   * authoring a routine should visibly do something rather than wait for tomorrow's job.
+   */
+  app.get("/api/recurrence-templates", (context) => context.json(tasks.listRecurrenceTemplates()));
+
+  app.post("/api/recurrence-templates", async (context) => {
     const body = (await context.req.json()) as Record<string, unknown>;
-    if (body.frequency !== "daily" && body.frequency !== "weekly") throw new Error("frequency must be daily or weekly");
-    const weekdays = Array.isArray(body.weekdays) ? body.weekdays.map(Number) : [];
-    if (body.frequency === "weekly" && weekdays.length === 0) throw new Error("A weekly routine needs at least one weekday");
-    const autoArchiveHour = body.autoArchiveHour === null || body.autoArchiveHour === undefined
-      ? null
-      : Number(body.autoArchiveHour);
-    if (autoArchiveHour !== null && !(Number.isInteger(autoArchiveHour) && autoArchiveHour >= 0 && autoArchiveHour <= 23)) {
-      throw new Error("autoArchiveHour must be an hour 0-23");
-    }
-    const rule = tasks.upsertRecurrence(taskId, {
-      frequency: body.frequency,
-      intervalCount: typeof body.intervalCount === "number" ? body.intervalCount : 1,
-      weekdays,
-      autoArchiveHour,
-      ...(typeof body.localStartTime === "string" ? { localStartTime: body.localStartTime } : {}),
-      nextOccurrenceDate: requiredString(body.nextOccurrenceDate, "nextOccurrenceDate"),
-    });
-    // Fill in the occurrences immediately so the board reflects the routine without waiting for
-    // tomorrow's job — authoring a rule should visibly do something.
-    recurrence.materializeThrough(addDays(localDate(new Date()), RECURRENCE_LOOKAHEAD_DAYS));
-    return context.json(rule);
+    const template = tasks.createRecurrenceTemplate(recurrenceTemplateInput(body));
+    const materialized = recurrence.materializeThrough(addDays(localDate(new Date()), RECURRENCE_LOOKAHEAD_DAYS));
+    return context.json({ template, materialized }, 201);
+  });
+
+  app.patch("/api/recurrence-templates/:id", async (context) => {
+    const templateId = numberParam(context.req.param("id"), "recurrence template id");
+    const body = (await context.req.json()) as Record<string, unknown>;
+    const template = tasks.updateRecurrenceTemplate(templateId, recurrenceTemplateInput(body));
+    const materialized = recurrence.materializeThrough(addDays(localDate(new Date()), RECURRENCE_LOOKAHEAD_DAYS));
+    return context.json({ template, materialized });
+  });
+
+  app.delete("/api/recurrence-templates/:id", (context) => {
+    // Deleting a routine stops it; the occurrences it already produced stay on the board, because
+    // they are ordinary tasks that happen to have been created this way.
+    tasks.deleteRecurrenceTemplate(numberParam(context.req.param("id"), "recurrence template id"));
+    return context.json({ ok: true });
   });
 
   app.post("/api/schedule/generate", async (context) => context.json(await schedule.generate()));
+  // Materialize the routine window on demand. Reports what it did — a routine whose weekdays all
+  // fall outside the window legitimately creates nothing, and saying so beats a silent 200.
   app.post("/api/recurrences/materialize", async (context) => {
     const body = (await context.req.json()) as Record<string, unknown>;
-    return context.json({ taskIds: recurrence.materializeThrough(requiredString(body.endDate, "endDate")) });
+    const endDate = typeof body.endDate === "string"
+      ? body.endDate
+      : addDays(localDate(new Date()), RECURRENCE_LOOKAHEAD_DAYS);
+    return context.json(recurrence.materializeThrough(endDate));
   });
   app.post("/api/weather/refresh", async (context) => context.json(await weather.getWeather(true)));
 

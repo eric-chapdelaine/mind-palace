@@ -12,7 +12,7 @@ Keep provider calls and child processes out of repositories. Services normalize 
 
 - `tasks`: unified work item plus kanban, optional-estimate state, schedule, hierarchy, completion time, and `auto_archive_at` (the instant it decays off the board).
 - `tags`, `tag_parents`, `task_tags`: multi-parent acyclic classification graph and direct task assignments.
-- `recurrence_rules`, `recurrence_occurrences`: template configuration (including the per-template `auto_archive_hour` decay policy) and generated-child identity.
+- `recurrence_templates`, `recurrence_template_tags`, `recurrence_occurrences`: a routine is a rule, not a task, so it has its own table (including the per-template `auto_archive_hour` decay policy). The occurrence ledger keys on `(template_id, occurrence_date)` and keeps a nullable `child_task_id`, so deleting a generated task lets that date be generated again.
 - `time_blocks`, `schedule_runs`: proposed and accepted schedules plus immutable solver input/output.
 - `integration_accounts`, `external_task_mappings`: provider synchronization identity without raw payload storage.
 - `health_observations`: durable normalized Garmin activity and sleep facts.

@@ -13,6 +13,7 @@ import { schedulerRulesDropTierMigration } from "./012-scheduler-rules-drop-tier
 import { weatherDetailMigration } from "./013-weather-detail.js";
 import { weatherUvMigration } from "./015-weather-uv.js";
 import { taskAutoArchiveMigration } from "./016-task-auto-archive.js";
+import { recurrenceTemplatesMigration } from "./017-recurrence-templates.js";
 
 export interface Migration {
   version: number;
@@ -38,4 +39,5 @@ export const migrations: Migration[] = [
   weatherDetailMigration,
   weatherUvMigration,
   taskAutoArchiveMigration,
+  recurrenceTemplatesMigration,
 ];
