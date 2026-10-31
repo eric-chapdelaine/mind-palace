@@ -14,6 +14,16 @@ const WEEKDAY_CHOICES = [
   { value: 0, label: "Sun" },
 ];
 
+/** Hours are stored 0-23; they are always *spoken* in 12-hour time, on the hour. */
+function formatHour(hour: number): string {
+  const suffix = hour < 12 ? "AM" : "PM";
+  const clock = hour % 12 === 0 ? 12 : hour % 12;
+  return `${clock}:00 ${suffix}`;
+}
+
+/** 0-23 in the order a day is read, labelled the way it is said. */
+const HOUR_CHOICES = Array.from({ length: 24 }, (_, hour) => ({ value: hour, label: formatHour(hour) }));
+
 function todayLocal(): string {
   const date = new Date();
   const pad = (value: number) => String(value).padStart(2, "0");
@@ -71,11 +81,11 @@ function draftFrom(template: RecurrenceTemplate): Draft {
 }
 
 /**
- * Routines live here rather than on a task page: a routine is not a task, it is the rule that says
- * tasks should exist. Keeping it beside the tasks it produces made the task page carry a second,
- * unrelated subject.
+ * Recurrence rules live here rather than on a task page: a recurrence is not a task, it is the rule
+ * that says tasks should exist. Keeping it beside the tasks it produces made the task page carry a
+ * second, unrelated subject.
  */
-function RoutineEditor({ draft, tags, onCancel, onSave }: {
+function RecurrenceEditor({ draft, tags, onCancel, onSave }: {
   draft: Draft;
   tags: Tag[];
   onCancel: () => void;
@@ -108,8 +118,8 @@ function RoutineEditor({ draft, tags, onCancel, onSave }: {
   }
 
   return (
-    <form className="detail-section routine-editor" onSubmit={submit}>
-      <div className="section-label">{form.id === null ? "New routine" : "Edit routine"}</div>
+    <form className="detail-section recurrence-editor" onSubmit={submit}>
+      <div className="section-label">{form.id === null ? "New recurrence" : "Edit recurrence"}</div>
       {error && <div className="error-banner">{error}</div>}
       <div className="form-pair">
         <label>Title
@@ -172,15 +182,16 @@ function RoutineEditor({ draft, tags, onCancel, onSave }: {
             onChange={(event) => setForm({ ...form, nextOccurrenceDate: event.target.value })}
           />
         </label>
-        <label>Vanishes at (hour)
-          <input
-            type="number"
-            min="0"
-            max="23"
-            placeholder="End of day"
+        <label>Vanishes at
+          <select
             value={form.autoArchiveHour}
             onChange={(event) => setForm({ ...form, autoArchiveHour: event.target.value })}
-          />
+          >
+            <option value="">End of day</option>
+            {HOUR_CHOICES.map((choice) => (
+              <option key={choice.value} value={String(choice.value)}>{choice.label}</option>
+            ))}
+          </select>
         </label>
       </div>
       <div className="field-label">Tags each occurrence carries</div>
@@ -190,13 +201,13 @@ function RoutineEditor({ draft, tags, onCancel, onSave }: {
         onChange={(tagIds) => setForm({ ...form, tagIds })}
       />
       <p className="form-hint muted">
-        Occurrences that go unticked vanish on their own, so a missed routine does not pile up. Set the
-        hour to end a routine with its day (10 for “wake up”); leave it blank to keep the whole day.
-        Editing a routine only affects the occurrences it creates from now on.
+        Occurrences that go unticked vanish on their own, so a missed recurrence does not pile up. Set
+        the time to end a recurrence with its day (10:00 AM for “wake up”); leave it blank to keep the
+        whole day. Editing a recurrence only affects the tasks it creates from now on.
       </p>
       <div className="button-row">
         <button className="primary-button" disabled={busy}>
-          {busy ? "Saving..." : form.id === null ? "Create routine" : "Save routine"}
+          {busy ? "Saving..." : form.id === null ? "Create recurrence" : "Save recurrence"}
         </button>
         <button type="button" onClick={onCancel}>Cancel</button>
       </div>
@@ -204,7 +215,7 @@ function RoutineEditor({ draft, tags, onCancel, onSave }: {
   );
 }
 
-export function RoutinesPage() {
+export function RecurrencePage() {
   const [templates, setTemplates] = useState<RecurrenceTemplate[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -252,7 +263,7 @@ export function RoutinesPage() {
   }
 
   async function remove(template: RecurrenceTemplate): Promise<void> {
-    if (!window.confirm(`Delete the “${template.title}” routine? Tasks it already created stay on the board.`)) return;
+    if (!window.confirm(`Delete the “${template.title}” recurrence? Tasks it already created stay on the board.`)) return;
     try {
       await api.deleteRecurrenceTemplate(template.id);
       await load();
@@ -262,18 +273,18 @@ export function RoutinesPage() {
   }
 
   return (
-    <main>
+    <main className="detail-shell">
       <header className="page-header">
         <div>
-          <h1>Routines</h1>
+          <h1>Recurrence</h1>
           <p className="muted">
-            A routine is a rule, not a task: it creates an ordinary task on each of its days, and
+            A recurrence is a rule, not a task: it creates an ordinary task on each of its days, and
             that task decays on its own if it goes unticked.
           </p>
         </div>
         <div className="detail-actions">
-          <button onClick={() => void materialize()}>Top up this week</button>
-          <button className="primary-button" onClick={() => setDraft(emptyDraft())}>New routine</button>
+          <button onClick={() => void materialize()}>Populate Tasks</button>
+          <button className="primary-button" onClick={() => setDraft(emptyDraft())}>New recurrence</button>
         </div>
       </header>
 
@@ -281,7 +292,7 @@ export function RoutinesPage() {
       {status && <p className="muted">{status}</p>}
 
       {draft && (
-        <RoutineEditor
+        <RecurrenceEditor
           key={draft.id ?? "new"}
           draft={draft}
           tags={tags}
@@ -291,16 +302,16 @@ export function RoutinesPage() {
       )}
 
       {templates.length === 0
-        ? <p className="muted">No routines yet.</p>
+        ? <p className="muted">No recurrences yet.</p>
         : (
-          <ul className="routine-list">
+          <ul className="recurrence-list">
             {templates.map((template) => (
-              <li key={template.id} className="routine-row">
+              <li key={template.id} className="recurrence-row">
                 <div>
                   <strong>{template.title}</strong>
                   <span className="muted">
                     {" "}{summarize(template)} · {template.durationMinutes} min ·{" "}
-                    {template.autoArchiveHour === null ? "keeps the whole day" : `gone at ${template.autoArchiveHour}:00`}
+                    {template.autoArchiveHour === null ? "keeps the whole day" : `gone at ${formatHour(template.autoArchiveHour)}`}
                   </span>
                   {template.routineTagId !== null && (
                     <span className="muted">

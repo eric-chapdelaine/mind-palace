@@ -50,12 +50,12 @@ export interface IntegrationRegistration {
   status: () => IntegrationConnection;
 }
 
-/** Validate and coerce a routine payload. Shared by create and update so both reject the same things. */
+/** Validate and coerce a recurrence payload. Shared by create and update so both reject the same things. */
 function recurrenceTemplateInput(body: Record<string, unknown>): UpsertRecurrenceInput {
   const frequency = body.frequency;
   if (frequency !== "daily" && frequency !== "weekly") throw new Error("frequency must be daily or weekly");
   const weekdays = Array.isArray(body.weekdays) ? body.weekdays.map(Number) : [];
-  if (frequency === "weekly" && weekdays.length === 0) throw new Error("A weekly routine needs at least one weekday");
+  if (frequency === "weekly" && weekdays.length === 0) throw new Error("A weekly recurrence needs at least one weekday");
   const autoArchiveHour = body.autoArchiveHour === null || body.autoArchiveHour === undefined
     ? null
     : Number(body.autoArchiveHour);
@@ -95,7 +95,7 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
   app.get("/api/health", (context) => context.json({ ok: true }));
   app.get("/api/jobs", (context) => context.json(scheduler.status()));
   // Run a job on demand. Every job is idempotent, so this is safe to poke: it is how you force a
-  // sweep (decay, routine materialization) instead of waiting for its pinned time.
+  // sweep (decay, recurrence materialization) instead of waiting for its pinned time.
   app.post("/api/jobs/:name/run", async (context) => {
     const name = context.req.param("name");
     if (!await scheduler.runNow(name)) throw new Error(`No job named ${name}`);
@@ -310,9 +310,9 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
   });
 
   /**
-   * Routines are their own resource, not a mode on a task: a template defines what to create, so it
+   * Recurrences are their own resource, not a mode on a task: a template defines what to create, so it
    * has its own fields and its own lifecycle. Creating or editing one materializes immediately —
-   * authoring a routine should visibly do something rather than wait for tomorrow's job.
+   * authoring a recurrence should visibly do something rather than wait for tomorrow's job.
    */
   app.get("/api/recurrence-templates", (context) => context.json(tasks.listRecurrenceTemplates()));
 
@@ -340,14 +340,14 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
   });
 
   app.delete("/api/recurrence-templates/:id", (context) => {
-    // Deleting a routine stops it; the occurrences it already produced stay on the board, because
+    // Deleting a recurrence stops it; the occurrences it already produced stay on the board, because
     // they are ordinary tasks that happen to have been created this way.
     tasks.deleteRecurrenceTemplate(numberParam(context.req.param("id"), "recurrence template id"));
     return context.json({ ok: true });
   });
 
   app.post("/api/schedule/generate", async (context) => context.json(await schedule.generate()));
-  // Materialize the routine window on demand. Reports what it did — a routine whose weekdays all
+  // Materialize the recurrence window on demand. Reports what it did — a recurrence whose weekdays all
   // fall outside the window legitimately creates nothing, and saying so beats a silent 200.
   app.post("/api/recurrences/materialize", async (context) => {
     const body = (await context.req.json()) as Record<string, unknown>;

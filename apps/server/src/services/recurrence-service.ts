@@ -3,7 +3,7 @@ import { reservedTagIds } from "@mind-palace/database";
 import { weekdayTagPublicIds, type MaterializeResult } from "@mind-palace/shared";
 import { localInstant, startOfLocalDay, weekdayIndex, addDays, daysBetween, localDate } from "./clock.js";
 
-/** Days of occurrences to keep on the board. Equal to `ScheduleService`'s horizon: a routine
+/** Days of occurrences to keep on the board. Equal to `ScheduleService`'s horizon: a
  *  occurrence further out is a row nothing can schedule. */
 export const RECURRENCE_LOOKAHEAD_DAYS = 7;
 
@@ -19,8 +19,8 @@ export class RecurrenceService {
    * Deliberately does **not** backfill: the window starts at today, because a server that was off
    * for a week should not manufacture a week of "wake up" rows nobody can act on any more.
    *
-   * `onlyTemplateId` scopes the pass to one routine, so authoring one reports that routine's
-   * result instead of counting every other routine's existing rows.
+   * `onlyTemplateId` scopes the pass to one recurrence, so authoring one reports its own result
+   * instead of counting every other recurrence's existing rows.
    */
   materializeThrough(
     endDate: string,
@@ -51,7 +51,7 @@ export class RecurrenceService {
     const seriesStart = template.nextOccurrenceDate;
     const interval = Math.max(1, template.intervalCount);
     // The anchor bounds the window from below, so a future-dated rule does not fire early; `today`
-    // bounds it from above, so a missed routine is missed rather than manufactured late.
+    // bounds it from above, so a missed day is missed rather than manufactured late.
     const from = seriesStart > today ? seriesStart : today;
     const dates: string[] = [];
     for (let cursor = from; cursor <= endDate; cursor = addDays(cursor, 1)) {
@@ -79,10 +79,10 @@ export class RecurrenceService {
     const dates = this.dates(template, endDate, today);
     if (dates.length === 0) return { created, alreadyPresent, idleTemplates: [], fired: 0 };
 
-    // Every occurrence carries a tag that names its routine, so /tags/:id lists its whole history.
+    // Every occurrence carries a tag that names its recurrence, so /tags/:id lists its whole history.
     const ownTagId = template.routineTagId ?? this.tasks.ensureTemplateTag(template.id, {
       title: template.title,
-      description: `Recurring occurrences of the routine “${template.title}”.`,
+      description: `Recurring occurrences of “${template.title}”.`,
     }).id;
     // A weekday tag on the template would pin every occurrence to that day and fight the rule.
     const inheritedTagIds = template.tagIds.filter((id) => !weekdayTagIds.includes(id));
@@ -99,7 +99,7 @@ export class RecurrenceService {
         template.autoArchiveHour === null ? 59 : 0,
       );
       // Today's occurrence is only worth creating if there is still time to do it. Without this,
-      // authoring a routine in the afternoon drops a card that is already expired onto the board.
+      // authoring a recurrence in the afternoon drops a card that is already expired onto the board.
       if (autoArchiveAt.getTime() <= Date.now()) continue;
       const child = this.tasks.createTask({
         title: `${template.title} - ${occurrenceDate}`,
@@ -113,7 +113,7 @@ export class RecurrenceService {
         // The occurrence must land on its own day, so the window closes at local end of day.
         deadlineAt: localInstant(occurrenceDate, 23, 59).toISOString(),
         // `autoArchiveHour` is the template's expiry policy: the difference between "wake up" (gone
-        // by 10am) and an ordinary task (a month). NULL means the routine keeps its whole day.
+        // by 10am) and an ordinary task (a month). NULL means it keeps its whole day.
         autoArchiveAt: autoArchiveAt.toISOString(),
         kanbanStatus: "ready",
         origin: "recurrence",
