@@ -952,6 +952,9 @@ export class TaskRepository {
            -- An archived task is out of the plan: it is still readable, but nothing should place it
            -- in the week. This is the only gate — what belongs this week is the scheduler's answer.
            AND task.lifecycle_status NOT IN ('archived', 'completed', 'cancelled')
+           -- A routine template is configuration, not work: scheduling it would place the template
+           -- itself alongside the occurrences it generates.
+           AND NOT EXISTS (SELECT 1 FROM recurrence_rules rule WHERE rule.task_id = task.id)
          ORDER BY task.priority ASC, task.rank DESC`,
       )
       .all()
