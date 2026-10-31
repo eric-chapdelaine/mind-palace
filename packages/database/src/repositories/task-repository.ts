@@ -596,6 +596,11 @@ export class TaskRepository {
   }
 
   updateTask(taskId: number, input: UpdateTaskInput): void {
+    // Read the current column before deciding the decay clock: reopening a finished task restarts
+    // it, but an ordinary move must not touch a date that is deliberately NULL.
+    const current = this.database.connection
+      .prepare("SELECT kanban_status FROM tasks WHERE id = ?")
+      .get(taskId);
     const assignments: string[] = [];
     const values: Array<string | number | null> = [];
     const add = (column: string, value: string | number | null) => {
@@ -614,15 +619,16 @@ export class TaskRepository {
         add("completed_at", null);
       }
       // A finished task is its own record; it does not need a decay date. Reopening one puts it
-      // back under the default clock, so a re-opened task cannot linger forever unnoticed. An
-      // instant that already exists is kept: a routine occurrence's expiry comes from its template,
-      // and dragging the card must not quietly extend it by a month.
+      // back under the default clock, so a re-opened task cannot linger forever unnoticed.
+      const currentStatus = current === undefined ? null : text(row(current, "task").kanban_status);
+    const wasTerminal = currentStatus === "completed" || currentStatus === "cancelled";
       if (input.kanbanStatus === "completed" || input.kanbanStatus === "cancelled") {
         add("auto_archive_at", null);
-      } else {
-        assignments.push("auto_archive_at = COALESCE(auto_archive_at, ?)");
-        values.push(new Date(Date.now() + DEFAULT_AUTO_ARCHIVE_DAYS * 86_400_000).toISOString());
+      } else if (wasTerminal) {
+        add("auto_archive_at", new Date(Date.now() + DEFAULT_AUTO_ARCHIVE_DAYS * 86_400_000).toISOString());
       }
+      // Any other move leaves the instant alone. NULL there means "never decay", which is a choice
+      // someone made; filling it in because a card was dragged would silently undo that choice.
     }
     if (input.priority !== undefined) add("priority", input.priority);
     if (input.rank !== undefined) add("rank", input.rank);

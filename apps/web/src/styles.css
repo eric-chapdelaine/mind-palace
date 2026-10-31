@@ -427,3 +427,12 @@ body.dragging .task-card:hover .task-card-expand > div { opacity: 0; }
 .unscheduled-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .35rem; }
 .unscheduled-list li { display: flex; flex-wrap: wrap; gap: .5rem; align-items: baseline; }
 .unscheduled-list .muted { font-size: .8rem; }
+
+/* ---- Routines: the editor sits above the list, so the page reads as one subject ---- */
+.routine-editor { display: grid; gap: .75rem; max-width: 720px; }
+.routine-editor .field-label, .routine-editor label { font-size: .85rem; color: #444; }
+.routine-list { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: .5rem; }
+.routine-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: .6rem .8rem; }
+/* The decay field sits in the sidebar's stacked section, so give it the same rhythm. */
+.decay-field { display: grid; gap: .2rem; font-size: .85rem; color: #444; }
+.decay-field input { min-width: 0; }
