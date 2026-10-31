@@ -60,6 +60,13 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
 
   app.get("/api/health", (context) => context.json({ ok: true }));
   app.get("/api/jobs", (context) => context.json(scheduler.status()));
+  // Run a job on demand. Every job is idempotent, so this is safe to poke: it is how you force a
+  // sweep (decay, routine materialization) instead of waiting for its pinned time.
+  app.post("/api/jobs/:name/run", async (context) => {
+    const name = context.req.param("name");
+    if (!await scheduler.runNow(name)) throw new Error(`No job named ${name}`);
+    return context.json(scheduler.status());
+  });
   app.get("/api/tasks", (context) => context.json(tasks.listTasks()));
   app.get("/api/tags", (context) => context.json(tasks.listTags()));
   app.get("/api/scheduler-rules", (context) => context.json(tasks.listSchedulerRules()));

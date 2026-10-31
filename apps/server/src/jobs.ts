@@ -58,8 +58,10 @@ export function scheduledJobs({ weather, garmin, tasks, recurrence, lookaheadDay
     {
       name: "task-auto-archive",
       // Runs once the day's routine rows have been created, so an occurrence due today is archived
-      // by tonight's run rather than tomorrow's. Cheap when nothing is due (one indexed SELECT).
+      // by tonight's run rather than tomorrow's. Cheap when nothing is due (one indexed SELECT), and
+      // `runOnStart` catches up on the sweeps a restart skipped.
       schedule: { kind: "times", at: ["23:30"], timeZone: TIME_ZONE },
+      runOnStart: true,
       run: () => {
         tasks.archiveDueTasks();
       },
