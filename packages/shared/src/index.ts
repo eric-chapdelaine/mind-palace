@@ -55,13 +55,12 @@ export type Priority = (typeof priorities)[number];
 export const reservedTagPublicIds = {
   calendarEvent: "mind-palace:calendar-event",
   routine: "mind-palace:routine",
-  thisWeek: "mind-palace:this-week",
 } as const;
 
 /**
  * Weekday tags in JavaScript `Date#getDay()` order: index 0 = Sunday .. index 6 = Saturday.
- * Each one's parent is `mind-palace:this-week` (see migration 004), so a task tagged with a
- * weekday is eligible this week and must be scheduled on that day.
+ * They are the selectors for the seeded day-pin rules (`assignDays`), so a task carrying one must
+ * be scheduled on that day. They used to be children of `mind-palace:this-week`; that tag is gone.
  */
 export const weekdayTagPublicIds = [
   "mind-palace:sunday",
@@ -90,6 +89,12 @@ export interface TaskSummary {
   earliestStart: string | null;
   deadlineAt: string | null;
   completedAt: string | null;
+  /**
+   * Instant at which this task stops appearing on the board, or null for never. Set when the task is
+   * created — a month out, or the routine's own decay point for a recurrence occurrence — and
+   * pushed forward when an archived task is unarchived.
+   */
+  autoArchiveAt: string | null;
   origin: string;
   tags: Tag[];
   derivedTags: Tag[];
@@ -143,6 +148,8 @@ export interface RecurrenceRule {
   weekdays: number[];
   localStartTime: string | null;
   nextOccurrenceDate: string;
+  /** Local hour (`0`-`23`) of the occurrence's day at which its child task decays; null = end of day. */
+  autoArchiveHour: number | null;
   active: boolean;
 }
 
@@ -379,6 +386,11 @@ export interface CreateTaskInput {
   tagIds?: number[];
   origin?: string;
   /**
+   * When this task decays; `null` never, omitted the default month. Recurrence occurrences pass
+   * their own instant so a "wake up" row is gone by the time the morning is over.
+   */
+  autoArchiveAt?: string | null;
+  /**
    * Create the task together with its first time block — the Quick-capture surface for
    * tag-driven commitment kinds (currently only calendar events). The block's minutes are
    * subtracted from `durationMinutesRemaining` exactly like any other created block.
@@ -448,6 +460,11 @@ export interface UpsertRecurrenceInput {
   weekdays?: number[];
   localStartTime?: string;
   nextOccurrenceDate: string;
+  /**
+   * Local hour (`0`-`23`) of the occurrence's day at which its child task decays, so a "wake up"
+   * routine can be gone by 10am. Null/omitted means end of that day.
+   */
+  autoArchiveHour?: number | null;
 }
 
 /**

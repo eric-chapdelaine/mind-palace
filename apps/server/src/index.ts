@@ -6,7 +6,7 @@ import { ScheduleService } from "./services/schedule-service.js";
 import { WeatherService } from "./services/weather-service.js";
 import { CalendarImportService } from "./services/calendar-import-service.js";
 import { GarminService } from "./services/garmin-service.js";
-import { RecurrenceService } from "./services/recurrence-service.js";
+import { RecurrenceService, RECURRENCE_LOOKAHEAD_DAYS } from "./services/recurrence-service.js";
 import { BriefingService } from "./services/briefing-service.js";
 import { JobScheduler } from "./services/job-scheduler.js";
 import { scheduledJobs } from "./jobs.js";
@@ -21,7 +21,9 @@ const calendar = new CalendarImportService(tasks);
 const garmin = new GarminService(tasks);
 const recurrence = new RecurrenceService(tasks);
 const briefing = new BriefingService(tasks);
-const scheduler = new JobScheduler(scheduledJobs({ weather, garmin }));
+const scheduler = new JobScheduler(
+  scheduledJobs({ weather, garmin, tasks, recurrence, lookaheadDays: RECURRENCE_LOOKAHEAD_DAYS }),
+);
 
 // Enabling an integration is authenticating it: a provider reports `connected` only once its
 // credential store exists, so this list is inert (and the UI stays clean) until then.

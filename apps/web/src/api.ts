@@ -5,6 +5,7 @@ import type {
   HealthActivity,
   IntegrationSummary,
   LifecycleStatus,
+  RecurrenceRule,
   Schedule,
   SchedulerRule,
   SchedulerRuleInput,
@@ -18,6 +19,7 @@ import type {
   UpdateSleepSessionInput,
   UpdateTaskInput,
   UpdateTimeBlockInput,
+  UpsertRecurrenceInput,
   WeatherForecast,
 } from "@mind-palace/shared";
 
@@ -59,6 +61,8 @@ export const api = {
   garminSync: () => request<GarminSyncResult>("/api/integrations/garmin/sync", { method: "POST" }),
   integrations: () => request<IntegrationSummary[]>("/api/integrations"),
   task: (id: number) => request<TaskDetail>(`/api/tasks/${id}`),
+  upsertRecurrence: (id: number, input: UpsertRecurrenceInput) =>
+    request<RecurrenceRule>(`/api/tasks/${id}/recurrence`, { method: "POST", body: JSON.stringify(input) }),
   timeBlock: (id: number) => request<TimeBlock>(`/api/time-blocks/${id}`),
   createTimeBlock: (input: CreateTimeBlockInput) =>
     request<TimeBlock>("/api/time-blocks", { method: "POST", body: JSON.stringify(input) }),
@@ -86,5 +90,6 @@ export const api = {
   refreshWeather: () => request<WeatherForecast[]>("/api/weather/refresh", { method: "POST" }),
   setLifecycle: (id: number, status: LifecycleStatus) =>
     request<TaskDetail>(`/api/tasks/${id}/lifecycle`, { method: "POST", body: JSON.stringify({ status }) }),
+  unarchiveTask: (id: number) => request<TaskDetail>(`/api/tasks/${id}/unarchive`, { method: "POST" }),
   convertTaskToTag: (id: number) => request<Tag>(`/api/tasks/${id}/convert-to-tag`, { method: "POST" }),
 };

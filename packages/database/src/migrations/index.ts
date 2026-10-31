@@ -12,6 +12,7 @@ import { schedulerRulesMigration } from "./011-scheduler-rules.js";
 import { schedulerRulesDropTierMigration } from "./012-scheduler-rules-drop-tier.js";
 import { weatherDetailMigration } from "./013-weather-detail.js";
 import { weatherUvMigration } from "./015-weather-uv.js";
+import { taskAutoArchiveMigration } from "./016-task-auto-archive.js";
 
 export interface Migration {
   version: number;
@@ -36,4 +37,5 @@ export const migrations: Migration[] = [
   schedulerRulesDropTierMigration,
   weatherDetailMigration,
   weatherUvMigration,
+  taskAutoArchiveMigration,
 ];

@@ -35,7 +35,6 @@ NICE = {
 }
 
 T = {
-    "thisWeek": "mind-palace:this-week",
     "sleep": "mind-palace:sleep",
     "wake": "mind-palace:wake",
     "outside": "mind-palace:outside",
@@ -131,7 +130,7 @@ def _task(tid, title, priority, rank, minutes, tags, *, splittable=False, deps=N
         "maxChunkMinutes": 240,
         "earliestStart": earliest,
         "deadlineAt": deadline,
-        "tagIds": [T["thisWeek"], *tags],
+        "tagIds": list(tags),
         "dependsOnTaskIds": list(deps or []),
     }
 

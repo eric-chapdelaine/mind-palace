@@ -1,5 +1,4 @@
 import {
-  reservedTagPublicIds,
   weekdayTagPublicIds,
   type HealthActivity,
   type IntegrationSummary,
@@ -45,9 +44,15 @@ function effectiveTagIds(task: TaskSummary): string[] {
   return [...task.tags, ...task.derivedTags].map((tag) => tag.publicId);
 }
 
-/** A task is committed to the week when this-week (a direct or ancestor tag) is present. */
-function hasThisWeek(task: TaskSummary): boolean {
-  return effectiveTagIds(task).includes(reservedTagPublicIds.thisWeek);
+/**
+ * The tasks this page proposes for the week: open, not archived, and actually schedulable. This used
+ * to be gated on the `this-week` tag, which meant the list was a second, hand-maintained to-do list
+ * that disagreed with the scheduler's own eligibility rule. It is now exactly that rule.
+ */
+function isProposed(task: TaskSummary): boolean {
+  return !terminalStatuses.has(task.kanbanStatus)
+    && task.lifecycleStatus !== "archived"
+    && schedulabilityReason(task) === null;
 }
 
 /**
@@ -397,7 +402,6 @@ export function SchedulePage() {
 
   const taskById = new Map(tasks.map((task) => [task.id, task]));
   const tagIdByPublicId = new Map(tags.map((tag) => [tag.publicId, tag.id]));
-  const thisWeekTagId = tagIdByPublicId.get(reservedTagPublicIds.thisWeek);
   const dayTagIdSet = new Set(
     weekdayTagPublicIds
       .map((publicId) => tagIdByPublicId.get(publicId))
@@ -406,10 +410,9 @@ export function SchedulePage() {
 
   // ---- Tag mutations behind the lists ----
 
-  /** Tag ids that put a task in a list: strips other day tags, keeps this-week, adds the day if given. */
+  /** Tag ids that put a task in a list: strips other day tags, adds the day if given. */
   function listTags(task: TaskSummary, dayPublicId: string | null): number[] {
     const ids = new Set(directTagIds(task).filter((id) => !dayTagIdSet.has(id)));
-    if (thisWeekTagId !== undefined) ids.add(thisWeekTagId);
     const dayId = dayPublicId === null ? undefined : tagIdByPublicId.get(dayPublicId);
     if (dayId !== undefined) ids.add(dayId);
     return [...ids];
@@ -427,7 +430,7 @@ export function SchedulePage() {
   async function assignDay(taskId: number, dayPublicId: string) {
     const task = taskById.get(taskId);
     const dayId = tagIdByPublicId.get(dayPublicId);
-    if (!task || dayId === undefined || thisWeekTagId === undefined) return;
+    if (!task || dayId === undefined) return;
     const next = listTags(task, dayPublicId);
     if (sameIds(directTagIds(task), next)) return;
     await applyTags(taskId, next);
@@ -435,18 +438,20 @@ export function SchedulePage() {
 
   async function clearDay(taskId: number) {
     const task = taskById.get(taskId);
-    if (!task || thisWeekTagId === undefined) return;
+    if (!task) return;
     const next = listTags(task, null);
     if (sameIds(directTagIds(task), next)) return;
     await applyTags(taskId, next);
   }
 
-  async function removeFromThisWeek(taskId: number) {
-    const task = taskById.get(taskId);
-    if (!task) return;
-    const next = directTagIds(task).filter((id) => id !== thisWeekTagId && !dayTagIdSet.has(id));
-    if (sameIds(directTagIds(task), next)) return;
-    await applyTags(taskId, next);
+  /** "Remove" from the proposal list: no tag to remove any more, so this archives the task instead. */
+  async function removeFromProposal(taskId: number) {
+    try {
+      await api.setLifecycle(taskId, "archived");
+      await load();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : String(actionError));
+    }
   }
 
   /**
@@ -582,10 +587,8 @@ export function SchedulePage() {
   const now = new Date();
   const days = Array.from({ length: 7 }, (_, index) => addDays(rangeStart, index));
   const rangeEnd = addDays(rangeStart, 7);
-  const committed = tasks.filter((task) => hasThisWeek(task) && !terminalStatuses.has(task.kanbanStatus));
+  const committed = tasks.filter(isProposed);
   const thisWeekTasks = committed.filter((task) => dayTagIndex(task) === -1).sort((a, b) => b.rank - a.rank);
-  // Tasks shown as proposed but that the scheduler will skip (see `schedulabilityReason`).
-  const unSchedulableCount = committed.filter((task) => schedulabilityReason(task) !== null).length;
 
   // Minutes of non-superseded, non-missed blocks per task; calendar events are real blocks too,
   // so a task is fully scheduled when its blocks cover its remaining estimate (creating and
@@ -864,14 +867,14 @@ export function SchedulePage() {
           <button
             className="panel-toggle panel-toggle-expand"
             onClick={() => setSidebarCollapsed(false)}
-            title="Show proposed this week"
+            title="Show the tasks waiting to be scheduled"
           >
-            Proposed {thisWeekTasks.length}
+            To schedule {thisWeekTasks.length}
           </button>
         ) : (
           <>
             <div className="week-panel-head">
-              <span className="eyebrow">Proposed for this week</span>
+              <span className="eyebrow">Ready to schedule</span>
               <span className="week-picks-count">{committed.length}</span>
               <button
                 className="panel-toggle"
@@ -881,15 +884,11 @@ export function SchedulePage() {
               >−</button>
             </div>
             <p className="muted">
-              Tasks you picked with “Add to this week” on the board. Drag one onto a day header to pin it there, or
-              into the calendar to schedule it at that time; drag one onto another task to reorder it — ✓ marks
-              tasks already fully scheduled. Drag a placed block to a new time to move it; accepted blocks stay put
-              when you regenerate.
+              Every open task with time remaining, which is what the scheduler will place. Drag one onto a day header
+              to pin it there, or into the calendar to schedule it at that time; drag one onto another task to reorder
+              it — ✓ marks tasks already fully scheduled. Drag a placed block to a new time to move it; accepted blocks
+              stay put when you regenerate.
             </p>
-            {unSchedulableCount > 0 && <p className="muted week-tasks-warning">
-              {unSchedulableCount} of {committed.length} proposed task{unSchedulableCount === 1 ? "" : "s"} can’t be scheduled yet —
-              hover the “not ready” / “no estimate” badges for details.
-            </p>}
             <div
               className={`week-picks${dragOverColumn === "this-week" ? " drag-over" : ""}`}
               onDragOver={(event) => event.preventDefault()}
@@ -903,7 +902,7 @@ export function SchedulePage() {
                   task={task}
                   scheduled={isFullyScheduled(task)}
                   removeLabel="Remove from this week"
-                  onRemove={(taskId) => void removeFromThisWeek(taskId)}
+                  onRemove={(taskId) => void removeFromProposal(taskId)}
                   onDragStart={startDrag}
                   onDragEnd={endDrag}
                   onCardDrop={(event) => void reorderInList(event, thisWeekTasks, task.id, null)}
@@ -912,7 +911,7 @@ export function SchedulePage() {
                   onDragLeave={() => setDragOverRow(null)}
                 />
               ))}
-              {thisWeekTasks.length === 0 && <p className="week-task-empty">Nothing proposed yet — use “Add to this week” on the board.</p>}
+              {thisWeekTasks.length === 0 && <p className="week-task-empty">Nothing to schedule — every open task is either finished, archived, or has no time estimate.</p>}
             </div>
           </>
         )}

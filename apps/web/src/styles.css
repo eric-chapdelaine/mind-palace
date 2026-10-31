@@ -103,6 +103,9 @@ body.dragging .task-card:hover .task-card-expand > div { opacity: 0; }
 .completed-tasks { grid-column: 1; background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: 1rem; }
 .completed-tasks summary { cursor: pointer; font-weight: 700; }
 .completed-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: .6rem; margin-top: 1rem; }
+.archived-row { display: flex; flex-direction: column; gap: .3rem; }
+.archived-row-actions { display: flex; align-items: center; justify-content: space-between; gap: .5rem; font-size: .8rem; padding: 0 .2rem; }
+.archived-row-actions button { font-size: .8rem; padding: .15rem .5rem; }
 .create-panel, .tag-hierarchy { background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: 1rem; }
 .create-panel h2 { margin-bottom: 1rem; }
 .create-panel .primary-button { width: 100%; margin-top: .5rem; }
@@ -114,6 +117,8 @@ body.dragging .task-card:hover .task-card-expand > div { opacity: 0; }
 .form-error { border: 1px solid #c66; color: #a33; background: #fdf; padding: .5rem; font-size: .85rem; margin: .5rem 0; }
 .checkbox-field { grid-template-columns: auto 1fr; align-items: center; }
 .checkbox-field input { width: auto; }
+.weekday-choices { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .3rem; }
+.weekday-choices label { display: grid; gap: .1rem; font-size: .85rem; }
 .tag-picker { position: relative; }
 .selected-tags { display: flex; flex-wrap: wrap; gap: .3rem; margin-bottom: .4rem; }
 .selected-tags button { border: 1px solid #aaa; border-radius: 999px; background: #eee; padding: .2rem .5rem; }

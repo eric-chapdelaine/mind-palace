@@ -624,18 +624,21 @@ export class BriefingService {
     if (overdue > 0) {
       summaries.push(`${overdue} task${overdue === 1 ? "" : "s"} past due — clear or re-date them`);
     }
-    const thisWeekTagged = tasks.filter((task) => {
-      if (terminalStatuses.has(task.kanbanStatus) || routineTaskIds.has(task.id)) return false;
-      const tagIds = [...task.tags, ...task.derivedTags].map((tag) => tag.publicId);
-      return tagIds.includes(reservedTagPublicIds.thisWeek);
-    });
-    const unschedulable = thisWeekTagged.filter(
+    // The scheduler's own eligibility rule, stated as a warning: a task with no estimate is
+    // invisible to `generate()` and will silently never appear in a week.
+    const schedulable = tasks.filter(
+      (task) =>
+        !terminalStatuses.has(task.kanbanStatus) &&
+        !routineTaskIds.has(task.id) &&
+        (task.kanbanStatus === "ready" || task.kanbanStatus === "in_progress"),
+    );
+    const unschedulable = schedulable.filter(
       (task) => task.durationMinutesRemaining === null || task.durationMinutesRemaining <= 0,
     );
     if (unschedulable.length > 0) {
       const count = unschedulable.length;
       summaries.push(
-        `${count} this-week task${count === 1 ? " has" : "s have"} no time estimate — the scheduler skips them`,
+        `${count} ready task${count === 1 ? " has" : "s have"} no time estimate — the scheduler skips ${count === 1 ? "it" : "them"}`,
       );
     }
 

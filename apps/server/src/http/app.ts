@@ -23,7 +23,9 @@ import type { CalendarImportService } from "../services/calendar-import-service.
 import type { GarminService } from "../services/garmin-service.js";
 import type { ScheduleService } from "../services/schedule-service.js";
 import type { WeatherService } from "../services/weather-service.js";
+import { RECURRENCE_LOOKAHEAD_DAYS } from "../services/recurrence-service.js";
 import type { RecurrenceService } from "../services/recurrence-service.js";
+import { addDays, localDate } from "../services/clock.js";
 import type { JobScheduler } from "../services/job-scheduler.js";
 import { parseRuleInput, parseRulePatch } from "./rules.js";
 import { isTimeBlockBody, numberParam, optionalText, requiredString } from "./validation.js";
@@ -269,13 +271,26 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
     const taskId = numberParam(context.req.param("id"), "task id");
     const body = (await context.req.json()) as Record<string, unknown>;
     if (body.frequency !== "daily" && body.frequency !== "weekly") throw new Error("frequency must be daily or weekly");
-    return context.json(tasks.upsertRecurrence(taskId, {
+    const weekdays = Array.isArray(body.weekdays) ? body.weekdays.map(Number) : [];
+    if (body.frequency === "weekly" && weekdays.length === 0) throw new Error("A weekly routine needs at least one weekday");
+    const autoArchiveHour = body.autoArchiveHour === null || body.autoArchiveHour === undefined
+      ? null
+      : Number(body.autoArchiveHour);
+    if (autoArchiveHour !== null && !(Number.isInteger(autoArchiveHour) && autoArchiveHour >= 0 && autoArchiveHour <= 23)) {
+      throw new Error("autoArchiveHour must be an hour 0-23");
+    }
+    const rule = tasks.upsertRecurrence(taskId, {
       frequency: body.frequency,
       intervalCount: typeof body.intervalCount === "number" ? body.intervalCount : 1,
-      weekdays: Array.isArray(body.weekdays) ? body.weekdays.map(Number) : [],
+      weekdays,
+      autoArchiveHour,
       ...(typeof body.localStartTime === "string" ? { localStartTime: body.localStartTime } : {}),
       nextOccurrenceDate: requiredString(body.nextOccurrenceDate, "nextOccurrenceDate"),
-    }));
+    });
+    // Fill in the occurrences immediately so the board reflects the routine without waiting for
+    // tomorrow's job — authoring a rule should visibly do something.
+    recurrence.materializeThrough(addDays(localDate(new Date()), RECURRENCE_LOOKAHEAD_DAYS));
+    return context.json(rule);
   });
 
   app.post("/api/schedule/generate", async (context) => context.json(await schedule.generate()));
@@ -321,6 +336,13 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
     if (!lifecycleStatuses.includes(body.status as LifecycleStatus)) throw new Error("Invalid lifecycle status");
     tasks.setTaskLifecycle(taskId, body.status as LifecycleStatus);
     return context.json(tasks.getTask(taskId));
+  });
+
+  // Unarchiving is its own route rather than a `lifecycle` call because it also moves the decay
+  // clock forward; letting the generic route do it would leave unarchived tasks to be re-archived
+  // on the next sweep.
+  app.post("/api/tasks/:id/unarchive", (context) => {
+    return context.json(tasks.unarchiveTask(numberParam(context.req.param("id"), "task id")));
   });
 
   app.post("/api/tasks/:id/convert-to-tag", (context) => {

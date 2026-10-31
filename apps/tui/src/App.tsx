@@ -118,18 +118,26 @@ export function App() {
   const { rows, interactiveCount } = useMemo(() => {
     const out: Row[] = [];
     if (!visibleTasks || !rankedTags) return { rows: out, interactiveCount: 0 };
+    // Archived tasks decay out of the board on their own (see `auto_archive_at`), so they get their
+    // own section instead of cluttering the columns.
+    const open = visibleTasks.filter((task) => task.lifecycleStatus !== "archived");
     for (const column of COLUMNS) {
-      const items = visibleTasks
+      const items = open
         .filter((task) => task.kanbanStatus === column.status)
         .sort((a, b) => b.rank - a.rank);
       out.push({ kind: "header", key: `h:${column.status}`, label: column.label, count: items.length });
       for (const task of items) out.push({ kind: "task", key: `t:${task.id}`, task });
     }
-    const completed = visibleTasks
+    const completed = open
       .filter((task) => task.kanbanStatus === "completed")
       .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
     out.push({ kind: "header", key: "h:completed", label: "Completed", count: completed.length });
     for (const task of completed) out.push({ kind: "task", key: `t:${task.id}`, task });
+    const archived = visibleTasks
+      .filter((task) => task.lifecycleStatus === "archived")
+      .sort((a, b) => (b.autoArchiveAt ?? "").localeCompare(a.autoArchiveAt ?? ""));
+    out.push({ kind: "header", key: "h:archived", label: "Archived", count: archived.length });
+    for (const task of archived) out.push({ kind: "task", key: `t:${task.id}`, task });
     out.push({
       kind: "header",
       key: "h:tags",

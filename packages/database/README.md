@@ -10,9 +10,9 @@ Keep provider calls and child processes out of repositories. Services normalize 
 
 ## Mind Palace Tables
 
-- `tasks`: unified work item plus kanban, optional-estimate state, schedule, hierarchy, and completion time.
+- `tasks`: unified work item plus kanban, optional-estimate state, schedule, hierarchy, completion time, and `auto_archive_at` (the instant it decays off the board).
 - `tags`, `tag_parents`, `task_tags`: multi-parent acyclic classification graph and direct task assignments.
-- `recurrence_rules`, `recurrence_occurrences`: template configuration and generated-child identity.
+- `recurrence_rules`, `recurrence_occurrences`: template configuration (including the per-template `auto_archive_hour` decay policy) and generated-child identity.
 - `time_blocks`, `schedule_runs`: proposed and accepted schedules plus immutable solver input/output.
 - `integration_accounts`, `external_task_mappings`: provider synchronization identity without raw payload storage.
 - `health_observations`: durable normalized Garmin activity and sleep facts.
