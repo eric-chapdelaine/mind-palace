@@ -6,7 +6,8 @@ Services own process and provider boundaries; repositories own SQLite writes.
 - `weather-service.ts` caches Boston hourly National Weather Service forecasts for eight hours.
 - `calendar-import-service.ts` normalizes Google Calendar events into `calendar_event` tasks.
 - `garmin-service.ts` syncs Garmin Connect sleep and activities through the `workers/garmin` Python worker; a token store on disk is what marks it `connected`.
-- `recurrence-service.ts` materializes routine templates as independently completable child tasks through a requested date.
+- `recurrence-service.ts` materializes recurrence templates as independently completable tasks through a requested date. A date counts as done only while its child task is alive, so a deleted or finished occurrence comes back when the window reaches it again; it never backfills, and it stamps each child with its own weekday tag, its recurrence's tag and its decay instant. Returns `MaterializeResult` (`created`, `alreadyPresent`, `idleTemplates`) so a pass that creates nothing can say why.
+- `clock.ts` is the single place household-local wall clock meets UTC (`localDate`, `localInstant`, `startOfLocalDay`, `addDays`, `daysBetween`, `weekdayIndex`); it exists so DST handling is not reimplemented per service.
 - `worker.ts` is the shared runner for the Python workers (spawn, timeout, JSON-in/JSON-out, `{"error"}` handling).
 - `job-scheduler.ts` runs the recurring jobs declared in `src/jobs.ts` on in-process intervals; `GET /api/jobs` reports their status.
 

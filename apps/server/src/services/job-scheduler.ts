@@ -146,6 +146,14 @@ export class JobScheduler {
     }));
   }
 
+  /** Run one job immediately, by name. Returns false when no job has that name. */
+  async runNow(name: string): Promise<boolean> {
+    const runtime = this.runtimes.find((candidate) => candidate.job.name === name);
+    if (!runtime) return false;
+    await this.execute(runtime);
+    return true;
+  }
+
   private scheduleNext(runtime: JobRuntime): void {
     const now = new Date();
     runtime.nextRunAt = computeNextRun(runtime.job.schedule, now);

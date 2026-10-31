@@ -15,6 +15,23 @@ const columns: Array<{ status: KanbanStatus; label: string }> = [
   { status: "waiting", label: "Waiting" },
 ];
 
+/** One archived task: the card plus the one action that matters here — rescue it. */
+function ArchivedTaskRow({ task, allTags, onUnarchive }: { task: TaskSummary; allTags: Tag[]; onUnarchive: () => void }) {
+  return (
+    <div className="archived-row">
+      <TaskCard task={task} allTags={allTags} />
+      <div className="archived-row-actions">
+        {task.autoArchiveAt && <span className="muted">decayed {shortDate(task.autoArchiveAt)}</span>}
+        <button onClick={onUnarchive}>Unarchive</button>
+      </div>
+    </div>
+  );
+}
+
+function shortDate(instant: string): string {
+  return new Date(instant).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 export function DashboardPage() {
   // "Set blocking tasks" on a task page lands here in multi-select mode: router state carries
   // the target task id, its card is highlighted, and its current blockers start pre-selected
@@ -28,7 +45,8 @@ export function DashboardPage() {
   const [tags, setTags] = useState<Tag[]>([]);
   const [includedTagIds, setIncludedTagIds] = useState<number[]>(() => readTagFilterPreferences().includedTagIds);
   const [excludedTagIds, setExcludedTagIds] = useState<number[]>(() => readTagFilterPreferences().excludedTagIds);
-  const [selecting, setSelecting] = useState(dependencyTargetId !== undefined);
+  // Card clicks select instead of navigating only while picking the blockers for another task.
+  const selecting = dependencyTargetId !== undefined;
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [dependencyTarget, setDependencyTarget] = useState<TaskDetail | null>(null);
@@ -138,10 +156,19 @@ export function DashboardPage() {
     if (includedTagIds.length > 0 && !includedTagIds.some((id) => taskTagIds.has(id))) return false;
     return !excludedTagIds.some((id) => taskTagIds.has(id));
   });
-  const active = visible.filter((task) => !["completed", "cancelled"].includes(task.kanbanStatus));
+  const active = visible.filter(
+    (task) => !["completed", "cancelled"].includes(task.kanbanStatus) && task.lifecycleStatus !== "archived",
+  );
+  // The two drawers below the board are disjoint: a task lives in exactly one of them, so archiving
+  // a completed task moves it rather than showing it twice.
   const completed = visible
-    .filter((task) => task.kanbanStatus === "completed")
+    .filter((task) => task.kanbanStatus === "completed" && task.lifecycleStatus !== "archived")
     .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
+  // Decayed tasks: still open in the kanban sense, but out of the way. Sorted by the instant they
+  // decayed, so the newest arrivals — the ones most likely to be rescued — come first.
+  const archived = visible
+    .filter((task) => task.lifecycleStatus === "archived")
+    .sort((a, b) => (b.autoArchiveAt ?? "").localeCompare(a.autoArchiveAt ?? ""));
   // Calendar-event tasks are fixed commitments: their whole window lives in an accepted block.
   const scheduled = tasks.filter((task) =>
     [...task.tags, ...task.derivedTags].some((tag) => tag.publicId === reservedTagPublicIds.calendarEvent),
@@ -293,9 +320,7 @@ export function DashboardPage() {
     return null;
   }
 
-  // ---- "Add to this week" multi-select (commits picked tasks to the this-week tag) ----
-
-  const thisWeekTagId = tags.find((tag) => tag.publicId === reservedTagPublicIds.thisWeek)?.id;
+  // ---- Multi-select (used to pick the tasks that block another task) ----
 
   function toggleSelection(taskId: number) {
     // Selecting the task itself would close a dependency cycle, so its card is inert here.
@@ -307,7 +332,6 @@ export function DashboardPage() {
 
   function cancelSelection() {
     setSelectedIds([]);
-    setSelecting(false);
     if (dependencyTargetId !== undefined) navigate(`/tasks/${dependencyTargetId}`);
   }
 
@@ -323,17 +347,9 @@ export function DashboardPage() {
     }
   }
 
-  async function addSelectedToThisWeek() {
-    if (thisWeekTagId === undefined) return;
+  async function unarchive(task: TaskSummary) {
     try {
-      await Promise.all(selectedIds.map(async (taskId) => {
-        const task = tasks.find((item) => item.id === taskId);
-        if (!task) return;
-        const tagIds = task.tags.map((tag) => tag.id);
-        if (tagIds.includes(thisWeekTagId)) return;
-        await api.updateTask(taskId, { tagIds: [...tagIds, thisWeekTagId] });
-      }));
-      cancelSelection();
+      await api.unarchiveTask(task.id);
       await load();
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : String(nextError));
@@ -352,38 +368,21 @@ export function DashboardPage() {
             <span><strong>{active.length}</strong> open tasks</span>
             <span><strong>{scheduled}</strong> fixed events</span>
           </div>
-          {selecting ? (
+          {selecting && (
             <div className="button-row">
-              {dependencyTargetId !== undefined ? (
-                <>
-                  <button className="primary-button" onClick={() => void saveBlockingTasks()}>
-                    Save {selectedIds.length === 0 ? "blocking tasks" : `${selectedIds.length} blocking task${selectedIds.length === 1 ? "" : "s"}`}
-                  </button>
-                  <button onClick={cancelSelection}>Cancel</button>
-                </>
-              ) : (
-                <>
-                  <button
-                    className="primary-button"
-                    disabled={selectedIds.length === 0}
-                    onClick={() => void addSelectedToThisWeek()}
-                  >
-                    Add {selectedIds.length === 0 ? "tasks" : `${selectedIds.length} task${selectedIds.length === 1 ? "" : "s"}`} to this week
-                  </button>
-                  <button onClick={cancelSelection}>Cancel</button>
-                </>
-              )}
+              <button className="primary-button" onClick={() => void saveBlockingTasks()}>
+                Save {selectedIds.length === 0 ? "blocking tasks" : `${selectedIds.length} blocking task${selectedIds.length === 1 ? "" : "s"}`}
+              </button>
+              <button onClick={cancelSelection}>Cancel</button>
             </div>
-          ) : <button className="primary-button" onClick={() => setSelecting(true)}>Add to this week</button>}
+          )}
         </div>
       </header>
       {selecting && (
         <p className="selection-hint muted">
-          {dependencyTargetId !== undefined
-            ? dependencyTarget
-              ? `Selecting tasks that block “${dependencyTarget.title}” — click task cards to toggle them, then Save.`
-              : "Selecting tasks that block this task — click task cards to toggle them, then Save."
-            : "Selecting tasks to schedule this week — click task cards to toggle them."}
+          {dependencyTarget
+            ? `Selecting tasks that block “${dependencyTarget.title}” — click task cards to toggle them, then Save.`
+            : "Selecting tasks that block this task — click task cards to toggle them, then Save."}
         </p>
       )}
       {error && <div className="error-banner">{error}</div>}
@@ -423,6 +422,7 @@ export function DashboardPage() {
           })}
         </section>
         <details className="completed-tasks"><summary>Completed ({completed.length})</summary>{completed.length === 0 ? <p className="muted">No completed tasks.</p> : <div className="completed-list">{completed.map((task) => <TaskCard key={task.id} task={task} allTags={tags} checked onToggleComplete={() => void toggleComplete(task)} />)}</div>}</details>
+        <details className="completed-tasks"><summary>Archived ({archived.length})</summary>{archived.length === 0 ? <p className="muted">Nothing archived. Tasks decay out of the board a month after they were created.</p> : <div className="completed-list">{archived.map((task) => <ArchivedTaskRow key={task.id} task={task} allTags={tags} onUnarchive={() => void unarchive(task)} />)}</div>}</details>
         <aside className="dashboard-sidebar"><CreateTaskPanel tags={tags} onCreateTask={createTask} onCreateTag={createTag} /><TagHierarchyPanel tags={tags} /></aside>
       </div>
     </main>

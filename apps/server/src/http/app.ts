@@ -16,6 +16,7 @@ import {
   type TagType,
   type TimeBlockStatus,
   type TimeBlockType,
+  type UpsertRecurrenceInput,
 } from "@mind-palace/shared";
 import { Hono } from "hono";
 import { assertBriefingDate, briefingPapers, type BriefingService } from "../services/briefing-service.js";
@@ -23,7 +24,9 @@ import type { CalendarImportService } from "../services/calendar-import-service.
 import type { GarminService } from "../services/garmin-service.js";
 import type { ScheduleService } from "../services/schedule-service.js";
 import type { WeatherService } from "../services/weather-service.js";
+import { RECURRENCE_LOOKAHEAD_DAYS } from "../services/recurrence-service.js";
 import type { RecurrenceService } from "../services/recurrence-service.js";
+import { addDays, localDate } from "../services/clock.js";
 import type { JobScheduler } from "../services/job-scheduler.js";
 import { parseRuleInput, parseRulePatch } from "./rules.js";
 import { isTimeBlockBody, numberParam, optionalText, requiredString } from "./validation.js";
@@ -47,6 +50,39 @@ export interface IntegrationRegistration {
   status: () => IntegrationConnection;
 }
 
+/** Validate and coerce a recurrence payload. Shared by create and update so both reject the same things. */
+function recurrenceTemplateInput(body: Record<string, unknown>): UpsertRecurrenceInput {
+  const frequency = body.frequency;
+  if (frequency !== "daily" && frequency !== "weekly") throw new Error("frequency must be daily or weekly");
+  const weekdays = Array.isArray(body.weekdays) ? body.weekdays.map(Number) : [];
+  if (frequency === "weekly" && weekdays.length === 0) throw new Error("A weekly recurrence needs at least one weekday");
+  const autoArchiveHour = body.autoArchiveHour === null || body.autoArchiveHour === undefined
+    ? null
+    : Number(body.autoArchiveHour);
+  if (autoArchiveHour !== null && !(Number.isInteger(autoArchiveHour) && autoArchiveHour >= 0 && autoArchiveHour <= 23)) {
+    throw new Error("autoArchiveHour must be an hour 0-23");
+  }
+  const durationMinutes = Number(body.durationMinutes ?? 30);
+  if (!Number.isInteger(durationMinutes) || durationMinutes < 0) throw new Error("durationMinutes must be a whole number of minutes");
+  return {
+    title: requiredString(body.title, "title"),
+    durationMinutes,
+    frequency,
+    weekdays,
+    autoArchiveHour,
+    intervalCount: typeof body.intervalCount === "number" ? body.intervalCount : 1,
+    nextOccurrenceDate: requiredString(body.nextOccurrenceDate, "nextOccurrenceDate"),
+    ...(typeof body.description === "string" || body.description === null ? { description: body.description } : {}),
+    ...(typeof body.priority === "number" ? { priority: body.priority } : {}),
+    ...(typeof body.splittable === "boolean" ? { splittable: body.splittable } : {}),
+    ...(typeof body.minChunkMinutes === "number" ? { minChunkMinutes: body.minChunkMinutes } : {}),
+    ...(typeof body.maxChunkMinutes === "number" ? { maxChunkMinutes: body.maxChunkMinutes } : {}),
+    ...(Array.isArray(body.tagIds) ? { tagIds: body.tagIds.map(Number) } : {}),
+    ...(typeof body.localStartTime === "string" ? { localStartTime: body.localStartTime } : {}),
+    ...(typeof body.active === "boolean" ? { active: body.active } : {}),
+  };
+}
+
 export function createHttpApp({ tasks, schedule, weather, calendar, garmin, integrationRegistry, recurrence, scheduler, briefing }: Dependencies): Hono {
   const app = new Hono();
 
@@ -58,6 +94,13 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
 
   app.get("/api/health", (context) => context.json({ ok: true }));
   app.get("/api/jobs", (context) => context.json(scheduler.status()));
+  // Run a job on demand. Every job is idempotent, so this is safe to poke: it is how you force a
+  // sweep (decay, recurrence materialization) instead of waiting for its pinned time.
+  app.post("/api/jobs/:name/run", async (context) => {
+    const name = context.req.param("name");
+    if (!await scheduler.runNow(name)) throw new Error(`No job named ${name}`);
+    return context.json(scheduler.status());
+  });
   app.get("/api/tasks", (context) => context.json(tasks.listTasks()));
   app.get("/api/tags", (context) => context.json(tasks.listTags()));
   app.get("/api/scheduler-rules", (context) => context.json(tasks.listSchedulerRules()));
@@ -157,6 +200,7 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
       ...(typeof body.maxChunkMinutes === "number" ? { maxChunkMinutes: body.maxChunkMinutes } : {}),
       ...(body.earliestStart === null || typeof body.earliestStart === "string" ? { earliestStart: body.earliestStart } : {}),
       ...(body.deadlineAt === null || typeof body.deadlineAt === "string" ? { deadlineAt: body.deadlineAt } : {}),
+      ...(body.autoArchiveAt === null || typeof body.autoArchiveAt === "string" ? { autoArchiveAt: body.autoArchiveAt } : {}),
       ...(Array.isArray(body.tagIds) ? { tagIds: body.tagIds.map(Number) } : {}),
       ...(Array.isArray(body.dependsOnTaskIds) ? { dependsOnTaskIds: body.dependsOnTaskIds.map(Number) } : {}),
     });
@@ -265,23 +309,52 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
     return context.json(tasks.getTask(taskId));
   });
 
-  app.post("/api/tasks/:id/recurrence", async (context) => {
-    const taskId = numberParam(context.req.param("id"), "task id");
+  /**
+   * Recurrences are their own resource, not a mode on a task: a template defines what to create, so it
+   * has its own fields and its own lifecycle. Creating or editing one materializes immediately —
+   * authoring a recurrence should visibly do something rather than wait for tomorrow's job.
+   */
+  app.get("/api/recurrence-templates", (context) => context.json(tasks.listRecurrenceTemplates()));
+
+  app.post("/api/recurrence-templates", async (context) => {
     const body = (await context.req.json()) as Record<string, unknown>;
-    if (body.frequency !== "daily" && body.frequency !== "weekly") throw new Error("frequency must be daily or weekly");
-    return context.json(tasks.upsertRecurrence(taskId, {
-      frequency: body.frequency,
-      intervalCount: typeof body.intervalCount === "number" ? body.intervalCount : 1,
-      weekdays: Array.isArray(body.weekdays) ? body.weekdays.map(Number) : [],
-      ...(typeof body.localStartTime === "string" ? { localStartTime: body.localStartTime } : {}),
-      nextOccurrenceDate: requiredString(body.nextOccurrenceDate, "nextOccurrenceDate"),
-    }));
+    const template = tasks.createRecurrenceTemplate(recurrenceTemplateInput(body));
+    const materialized = recurrence.materializeThrough(
+      addDays(localDate(new Date()), RECURRENCE_LOOKAHEAD_DAYS),
+      localDate(new Date()),
+      template.id,
+    );
+    return context.json({ template, materialized }, 201);
+  });
+
+  app.patch("/api/recurrence-templates/:id", async (context) => {
+    const templateId = numberParam(context.req.param("id"), "recurrence template id");
+    const body = (await context.req.json()) as Record<string, unknown>;
+    const template = tasks.updateRecurrenceTemplate(templateId, recurrenceTemplateInput(body));
+    const materialized = recurrence.materializeThrough(
+      addDays(localDate(new Date()), RECURRENCE_LOOKAHEAD_DAYS),
+      localDate(new Date()),
+      template.id,
+    );
+    return context.json({ template, materialized });
+  });
+
+  app.delete("/api/recurrence-templates/:id", (context) => {
+    // Deleting a recurrence stops it; the occurrences it already produced stay on the board, because
+    // they are ordinary tasks that happen to have been created this way.
+    tasks.deleteRecurrenceTemplate(numberParam(context.req.param("id"), "recurrence template id"));
+    return context.json({ ok: true });
   });
 
   app.post("/api/schedule/generate", async (context) => context.json(await schedule.generate()));
+  // Materialize the recurrence window on demand. Reports what it did — a recurrence whose weekdays all
+  // fall outside the window legitimately creates nothing, and saying so beats a silent 200.
   app.post("/api/recurrences/materialize", async (context) => {
     const body = (await context.req.json()) as Record<string, unknown>;
-    return context.json({ taskIds: recurrence.materializeThrough(requiredString(body.endDate, "endDate")) });
+    const endDate = typeof body.endDate === "string"
+      ? body.endDate
+      : addDays(localDate(new Date()), RECURRENCE_LOOKAHEAD_DAYS);
+    return context.json(recurrence.materializeThrough(endDate));
   });
   app.post("/api/weather/refresh", async (context) => context.json(await weather.getWeather(true)));
 
@@ -321,6 +394,13 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
     if (!lifecycleStatuses.includes(body.status as LifecycleStatus)) throw new Error("Invalid lifecycle status");
     tasks.setTaskLifecycle(taskId, body.status as LifecycleStatus);
     return context.json(tasks.getTask(taskId));
+  });
+
+  // Unarchiving is its own route rather than a `lifecycle` call because it also moves the decay
+  // clock forward; letting the generic route do it would leave unarchived tasks to be re-archived
+  // on the next sweep.
+  app.post("/api/tasks/:id/unarchive", (context) => {
+    return context.json(tasks.unarchiveTask(numberParam(context.req.param("id"), "task id")));
   });
 
   app.post("/api/tasks/:id/convert-to-tag", (context) => {
