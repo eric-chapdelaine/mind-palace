@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { priorities, reservedTagPublicIds, type CreateTaskInput, type Tag, type TimeBlockType } from "@mind-palace/shared";
 import { TagPicker } from "./TagPicker";
+import { toIsoInstant, toLocalDateTimeInput } from "../lib/datetime";
 
 // ---- Tag-driven Quick-capture modes (the expandable registry) ----
 //
@@ -19,15 +20,6 @@ const QUICK_CAPTURE_MODES: QuickCaptureMode[] = [
   { tagPublicId: reservedTagPublicIds.calendarEvent, kind: "time-range", timeBlockType: "calendar_event" },
 ];
 
-/** datetime-local input value for a Date. */
-function toInputValue(date: Date): string {
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-}
-
-function toIso(value: string): string {
-  return new Date(value).toISOString();
-}
-
 function minutesBetween(start: string, end: string): number {
   return Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60_000);
 }
@@ -35,7 +27,7 @@ function minutesBetween(start: string, end: string): number {
 function addMinutes(value: string, minutes: number): string {
   const date = new Date(value);
   date.setMinutes(date.getMinutes() + minutes);
-  return toInputValue(date);
+  return toLocalDateTimeInput(date.toISOString());
 }
 
 interface Props {
@@ -106,7 +98,7 @@ export function CreateTaskPanel({ tags, onCreateTask, onCreateTag }: Props) {
         durationMinutesRemaining: activeMode ? 0 : durationMinutes ? Number(durationMinutes) : null,
         splittable,
         tagIds,
-        ...(activeMode ? { timeBlock: { startAt: toIso(timeStart), endAt: toIso(timeEnd), type: activeMode.timeBlockType } } : {}),
+        ...(activeMode ? { timeBlock: { startAt: toIsoInstant(timeStart)!, endAt: toIsoInstant(timeEnd)!, type: activeMode.timeBlockType } } : {}),
       });
       setTitle("");
       setDescription("");

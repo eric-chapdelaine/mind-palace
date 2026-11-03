@@ -1,6 +1,7 @@
 import { defaultAutoArchiveDays, type Tag, type TaskDetail, type TaskSummary } from "@mind-palace/shared";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { toIsoInstant, toLocalDateTimeInput } from "./lib/datetime";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "./api";
@@ -44,29 +45,20 @@ function MarkdownLinks({ children }: { children: string | null | undefined }) {
   );
 }
 
-/** `datetime-local` wants local wall time without a zone; the API stores an instant. */
-function toLocalInput(instant: string | null): string {
-  if (instant === null) return "";
-  const date = new Date(instant);
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 /**
  * The decay line is editable, because the default is a guess about how long an intention stays
  * worth keeping: a task parked behind someone else should survive longer, and one you already know
  * you will not do should go now.
  */
 function DecayControl({ task, onSave }: { task: TaskDetail; onSave: (value: string | null) => Promise<void> }) {
-  const [value, setValue] = useState(toLocalInput(task.autoArchiveAt));
-  useEffect(() => setValue(toLocalInput(task.autoArchiveAt)), [task.autoArchiveAt]);
+  const [value, setValue] = useState(toLocalDateTimeInput(task.autoArchiveAt));
+  useEffect(() => setValue(toLocalDateTimeInput(task.autoArchiveAt)), [task.autoArchiveAt]);
   const [busy, setBusy] = useState(false);
 
   async function commit(next: string): Promise<void> {
     setBusy(true);
     try {
-      // `<input type="datetime-local">` already gives local wall time, so Date parses it as local.
-      await onSave(next === "" ? null : new Date(next).toISOString());
+      await onSave(toIsoInstant(next));
     } finally {
       setBusy(false);
     }
@@ -83,7 +75,7 @@ function DecayControl({ task, onSave }: { task: TaskDetail; onSave: (value: stri
           onChange={(event) => setValue(event.target.value)}
           onBlur={(event) => {
             // Only write when the value actually moved: blur fires on every tab-through.
-            if (event.target.value !== toLocalInput(task.autoArchiveAt)) void commit(event.target.value);
+            if (event.target.value !== toLocalDateTimeInput(task.autoArchiveAt)) void commit(event.target.value);
           }}
         />
       </label>

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { weekdayLabels, type MaterializeResult, type RecurrenceTemplate, type Tag, type UpsertRecurrenceInput } from "@mind-palace/shared";
 import { api } from "./api";
+import { todayLocalDate } from "./lib/datetime";
 import { TagPicker } from "./components/TagPicker";
 
 /** Monday first, because that is how a week is read on this page. */
@@ -16,12 +17,6 @@ function formatHour(hour: number): string {
 
 /** 0-23 in the order a day is read, labelled the way it is said. */
 const HOUR_CHOICES = Array.from({ length: 24 }, (_, hour) => ({ value: hour, label: formatHour(hour) }));
-
-function todayLocal(): string {
-  const date = new Date();
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
 
 /** "every day", "every 3 days", "every Monday, Wednesday", "every 2 weeks on Sunday". */
 function summarize(template: RecurrenceTemplate): string {
@@ -53,7 +48,7 @@ function emptyDraft(): Draft {
     frequency: "daily",
     intervalCount: "1",
     weekdays: [],
-    nextOccurrenceDate: todayLocal(),
+    nextOccurrenceDate: todayLocalDate(),
     autoArchiveHour: "",
     tagIds: [],
   };

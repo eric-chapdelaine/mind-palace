@@ -1,16 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { kanbanStatuses, priorities, type Priority, type Tag, type TaskDetail, type UpdateTaskInput } from "@mind-palace/shared";
 import { TagPicker } from "./TagPicker";
-
-function toLocalDateTime(value: string | null): string {
-  if (!value) return "";
-  const date = new Date(value);
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-}
-
-function toIso(value: string): string | null {
-  return value ? new Date(value).toISOString() : null;
-}
+import { toIsoInstant, toLocalDateTimeInput } from "../lib/datetime";
 
 export function TaskEditor({ task, tags, onSave, onCancel }: {
   task: TaskDetail;
@@ -24,8 +15,8 @@ export function TaskEditor({ task, tags, onSave, onCancel }: {
   const [priority, setPriority] = useState(String(task.priority));
   const [remaining, setRemaining] = useState(task.durationMinutesRemaining === null ? "" : String(task.durationMinutesRemaining));
   const [splittable, setSplittable] = useState(task.splittable);
-  const [earliestStart, setEarliestStart] = useState(toLocalDateTime(task.earliestStart));
-  const [deadlineAt, setDeadlineAt] = useState(toLocalDateTime(task.deadlineAt));
+  const [earliestStart, setEarliestStart] = useState(toLocalDateTimeInput(task.earliestStart));
+  const [deadlineAt, setDeadlineAt] = useState(toLocalDateTimeInput(task.deadlineAt));
   const [tagIds, setTagIds] = useState(task.tags.map((tag) => tag.id));
   const [busy, setBusy] = useState(false);
 
@@ -40,8 +31,8 @@ export function TaskEditor({ task, tags, onSave, onCancel }: {
         priority: Number(priority),
         durationMinutesRemaining: remaining ? Number(remaining) : null,
         splittable,
-        earliestStart: toIso(earliestStart),
-        deadlineAt: toIso(deadlineAt),
+        earliestStart: toIsoInstant(earliestStart),
+        deadlineAt: toIsoInstant(deadlineAt),
         tagIds,
       });
     } finally {
