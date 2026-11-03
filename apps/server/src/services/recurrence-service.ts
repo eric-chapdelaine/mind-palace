@@ -1,10 +1,34 @@
 import type { TaskRepository } from "@mind-palace/database";
 import { reservedTagIds } from "@mind-palace/database";
-import { weekdayTagPublicIds, type MaterializeResult, type RecurrenceTemplate } from "@mind-palace/shared";
+import {
+  scheduleHorizonDays,
+  weekdayTagPublicIds,
+  type MaterializeResult,
+  type RecurrenceTemplate,
+  type SavedRecurrence,
+  type UpsertRecurrenceInput,
+} from "@mind-palace/shared";
 import { localInstant, startOfLocalDay, weekdayIndex, addDays, daysBetween, localDate } from "./clock.js";
 
 export class RecurrenceService {
   constructor(private readonly tasks: TaskRepository) {}
+
+  /** Save a template and fill the window straight away, so authoring one visibly does something. */
+  save(input: UpsertRecurrenceInput, templateId?: number): SavedRecurrence {
+    const template = templateId === undefined
+      ? this.tasks.createRecurrenceTemplate(input)
+      : this.tasks.updateRecurrenceTemplate(templateId, input);
+    return { template, materialized: this.materialize(template.id) };
+  }
+
+  /** Materialize the scheduler's window: every active recurrence, or just `onlyTemplateId`. */
+  materialize(onlyTemplateId?: number): MaterializeResult {
+    return this.materializeThrough(
+      addDays(localDate(new Date()), scheduleHorizonDays),
+      undefined,
+      onlyTemplateId,
+    );
+  }
 
   /**
    * Create the occurrence rows for every active template, up to and including `endDate`.

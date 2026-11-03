@@ -1,18 +1,11 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import type { RecurrenceTemplate, Tag, UpsertRecurrenceInput } from "@mind-palace/shared";
+import { weekdayLabels, type MaterializeResult, type RecurrenceTemplate, type Tag, type UpsertRecurrenceInput } from "@mind-palace/shared";
 import { api } from "./api";
 import { TagPicker } from "./components/TagPicker";
 
-const WEEKDAY_CHOICES = [
-  { value: 1, label: "Mon" },
-  { value: 2, label: "Tue" },
-  { value: 3, label: "Wed" },
-  { value: 4, label: "Thu" },
-  { value: 5, label: "Fri" },
-  { value: 6, label: "Sat" },
-  { value: 0, label: "Sun" },
-];
+/** Monday first, because that is how a week is read on this page. */
+const WEEKDAY_CHOICES = [1, 2, 3, 4, 5, 6, 0].map((value) => ({ value, label: weekdayLabels[value]! }));
 
 /** Hours are stored 0-23; they are always *spoken* in 12-hour time, on the hour. */
 function formatHour(hour: number): string {
@@ -237,7 +230,7 @@ export function RecurrencePage() {
     void load();
   }, []);
 
-  function reportMaterialization(result: { created: number[]; alreadyPresent: number; idleTemplates: string[] }): void {
+  function reportMaterialization(result: MaterializeResult): void {
     const parts = [`created ${result.created.length}`];
     if (result.alreadyPresent > 0) parts.push(`${result.alreadyPresent} already on the board`);
     if (result.idleTemplates.length > 0) parts.push(`no firing date this week for ${result.idleTemplates.join(", ")}`);

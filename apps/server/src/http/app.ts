@@ -6,7 +6,6 @@ import type { TaskRepository } from "@mind-palace/database";
 import {
   kanbanStatuses,
   lifecycleStatuses,
-  scheduleHorizonDays,
   tagTypes,
   timeBlockStatuses,
   timeBlockTypes,
@@ -26,7 +25,6 @@ import type { GarminService } from "../services/garmin-service.js";
 import type { ScheduleService } from "../services/schedule-service.js";
 import type { WeatherService } from "../services/weather-service.js";
 import type { RecurrenceService } from "../services/recurrence-service.js";
-import { addDays, localDate } from "../services/clock.js";
 import type { JobScheduler } from "../services/job-scheduler.js";
 import { parseRuleInput, parseRulePatch } from "./rules.js";
 import { isTimeBlockBody, numberParam, optionalText, requiredString } from "./validation.js";
@@ -311,32 +309,20 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
 
   /**
    * Recurrences are their own resource, not a mode on a task: a template defines what to create, so it
-   * has its own fields and its own lifecycle. Creating or editing one materializes immediately —
-   * authoring a recurrence should visibly do something rather than wait for tomorrow's job.
+   * has its own fields and its own lifecycle. Saving one materializes immediately, in the service,
+   * so authoring a recurrence visibly does something rather than wait for tomorrow's job.
    */
   app.get("/api/recurrence-templates", (context) => context.json(tasks.listRecurrenceTemplates()));
 
   app.post("/api/recurrence-templates", async (context) => {
     const body = (await context.req.json()) as Record<string, unknown>;
-    const template = tasks.createRecurrenceTemplate(recurrenceTemplateInput(body));
-    const materialized = recurrence.materializeThrough(
-      addDays(localDate(new Date()), scheduleHorizonDays),
-      localDate(new Date()),
-      template.id,
-    );
-    return context.json({ template, materialized }, 201);
+    return context.json(recurrence.save(recurrenceTemplateInput(body)), 201);
   });
 
   app.patch("/api/recurrence-templates/:id", async (context) => {
     const templateId = numberParam(context.req.param("id"), "recurrence template id");
     const body = (await context.req.json()) as Record<string, unknown>;
-    const template = tasks.updateRecurrenceTemplate(templateId, recurrenceTemplateInput(body));
-    const materialized = recurrence.materializeThrough(
-      addDays(localDate(new Date()), scheduleHorizonDays),
-      localDate(new Date()),
-      template.id,
-    );
-    return context.json({ template, materialized });
+    return context.json(recurrence.save(recurrenceTemplateInput(body), templateId));
   });
 
   app.delete("/api/recurrence-templates/:id", (context) => {
@@ -351,10 +337,9 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
   // fall outside the window legitimately creates nothing, and saying so beats a silent 200.
   app.post("/api/recurrences/materialize", async (context) => {
     const body = (await context.req.json()) as Record<string, unknown>;
-    const endDate = typeof body.endDate === "string"
-      ? body.endDate
-      : addDays(localDate(new Date()), scheduleHorizonDays);
-    return context.json(recurrence.materializeThrough(endDate));
+    return context.json(
+      typeof body.endDate === "string" ? recurrence.materializeThrough(body.endDate) : recurrence.materialize(),
+    );
   });
   app.post("/api/weather/refresh", async (context) => context.json(await weather.getWeather(true)));
 

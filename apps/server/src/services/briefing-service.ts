@@ -18,6 +18,7 @@ import {
   type TimeBlock,
   type WeatherForecast,
 } from "@mind-palace/shared";
+import { HOME_TIME_ZONE, addDays, daysBetween, startOfLocalDay, weekdayIndex, zoneOffsetMs } from "./clock.js";
 import { runPythonWorker } from "./worker.js";
 
 /** Boston. Sunrise/sunset are computed for this point; the weather cache is for the same place. */
@@ -44,7 +45,7 @@ export function assertBriefingDate(value: string): string {
 }
 
 /** The household's wall clock. The briefing is printed in this zone, never the server's UTC. */
-const TIME_ZONE = "America/New_York";
+const TIME_ZONE = HOME_TIME_ZONE;
 
 /** Days of blocks/forecast the print covers. */
 const WEEK_DAYS = 7;
@@ -155,31 +156,6 @@ function partsOf(instant: Date): LocalParts {
   };
 }
 
-/** Signed offset of `TIME_ZONE` at an instant, in milliseconds (local wall clock − UTC). */
-function zoneOffsetMs(instant: Date): number {
-  const fields = new Map(localParts.formatToParts(instant).map((part) => [part.type, part.value]));
-  const asUtc = Date.UTC(
-    Number(fields.get("year")),
-    Number(fields.get("month")) - 1,
-    Number(fields.get("day")),
-    Number(fields.get("hour")) % 24,
-    Number(fields.get("minute")),
-  );
-  return asUtc - Math.floor(instant.getTime() / 60_000) * 60_000;
-}
-
-/** The UTC instant of local midnight for a `YYYY-MM-DD` date. */
-function startOfLocalDay(date: string): Date {
-  const wall = new Date(`${date}T00:00:00Z`);
-  return new Date(wall.getTime() - zoneOffsetMs(wall));
-}
-
-function addDays(date: string, count: number): string {
-  const base = new Date(`${date}T12:00:00Z`);
-  base.setUTCDate(base.getUTCDate() + count);
-  return base.toISOString().slice(0, 10);
-}
-
 /**
  * Sunrise and sunset in minutes since local midnight, from the NOAA solar-position approximation.
  *
@@ -220,7 +196,7 @@ function daylightMinutes(date: string): { sunrise: number; sunset: number } {
   const hourAngle = Math.acos(Math.min(1, Math.max(-1, cosHourAngle))) * (180 / Math.PI);
   const solarNoon = 720 - 4 * HOME_LONGITUDE - equationOfTime;
   // Both are UTC minutes; shift by the zone offset so they read as local wall-clock minutes.
-  const offset = zoneOffsetMs(startOfLocalDay(date)) / 60_000;
+  const offset = zoneOffsetMs(startOfLocalDay(date), TIME_ZONE) / 60_000;
   return { sunrise: solarNoon - 4 * hourAngle + offset, sunset: solarNoon + 4 * hourAngle + offset };
 }
 
@@ -514,8 +490,8 @@ export class BriefingService {
     routineTaskIds: Set<number>,
   ): BriefingTask[] {
     const blockedToday = new Set(todayBlocks.map((block) => block.taskId));
-    const weekdayIndex = new Date(`${date}T12:00:00Z`).getUTCDay();
-    const weekdayTag = weekdayTagPublicIds[weekdayIndex];
+    const weekday = weekdayIndex(date);
+    const weekdayTag = weekdayTagPublicIds[weekday];
     const selected = tasks.filter((task) => {
       if (terminalStatuses.has(task.kanbanStatus) || routineTaskIds.has(task.id)) return false;
       // Calendar events are on the timeline, not on the list of things to do today.
@@ -589,14 +565,14 @@ export class BriefingService {
     const deadlineDate = partsOf(deadline).date;
     if (deadlineDate < today) return null;
     if (deadlineDate === today) return "due today";
-    const days = Math.round((startOfLocalDay(deadlineDate).getTime() - startOfLocalDay(today).getTime()) / 86_400_000);
+    const days = daysBetween(today, deadlineDate);
     if (days > 14) return null;
     return `due ${weekdayOf(deadlineDate)}`;
   }
 
   /**
-   * Deadlines and releases landing in the window, plus this-week tasks that carry no duration —
-   * both are things the print can flag that the day/week views cannot show at a glance.
+   * Deadlines and releases landing in the window, plus ready tasks with no time estimate — both are
+   * things the print can flag that the day/week views cannot show at a glance.
    */
   private attention(tasks: TaskSummary[], date: string, weekDays: string[], routineTaskIds: Set<number>): string[] {
     const window = new Set(weekDays);

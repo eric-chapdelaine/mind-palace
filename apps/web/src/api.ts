@@ -7,6 +7,7 @@ import type {
   LifecycleStatus,
   MaterializeResult,
   RecurrenceTemplate,
+  SavedRecurrence,
   Schedule,
   SchedulerRule,
   SchedulerRuleInput,
@@ -64,12 +65,12 @@ export const api = {
   task: (id: number) => request<TaskDetail>(`/api/tasks/${id}`),
   recurrenceTemplates: () => request<RecurrenceTemplate[]>("/api/recurrence-templates"),
   createRecurrenceTemplate: (input: UpsertRecurrenceInput) =>
-    request<{ template: RecurrenceTemplate; materialized: MaterializeResult }>("/api/recurrence-templates", {
+    request<SavedRecurrence>("/api/recurrence-templates", {
       method: "POST",
       body: JSON.stringify(input),
     }),
   updateRecurrenceTemplate: (id: number, input: UpsertRecurrenceInput) =>
-    request<{ template: RecurrenceTemplate; materialized: MaterializeResult }>(`/api/recurrence-templates/${id}`, {
+    request<SavedRecurrence>(`/api/recurrence-templates/${id}`, {
       method: "PATCH",
       body: JSON.stringify(input),
     }),

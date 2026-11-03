@@ -1,15 +1,11 @@
 /**
  * Wall-clock conversions for the household's time zone. Everything stored is UTC; every rule about
- * "which day" or "what time of day" is local. These three functions are the only place that
- * conversion happens, so a DST boundary is handled once instead of once per caller.
- *
- * This replaced three copies (`briefing-service.ts`, `job-scheduler.ts`, and a hardcoded `-04:00`
- * in `recurrence-service.ts`). The hardcoded one was a real bug: it silently shifted every routine's
- * day window by an hour for the five months of the year that are EST.
+ * "which day" or "what time of day" is local, and DST makes that arithmetic easy to get wrong once
+ * per caller. One module, so it is solved once.
  */
 export const HOME_TIME_ZONE = "America/New_York";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+export const DAY_MS = 24 * 60 * 60 * 1000;
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
 
@@ -81,4 +77,3 @@ export function weekdayIndex(date: string): number {
   return new Date(`${date}T12:00:00Z`).getUTCDay();
 }
 
-export { DAY_MS };

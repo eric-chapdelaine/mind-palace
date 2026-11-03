@@ -79,6 +79,9 @@ export const weekdayTagPublicIds = [
   "mind-palace:saturday",
 ] as const;
 
+/** Short weekday names in `Date#getDay()` order, so 0 = Sunday. */
+export const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
 export type JsonObject = Record<string, unknown>;
 
 export interface TaskSummary {
@@ -183,6 +186,12 @@ export type Frequency = "daily" | "weekly";
  * legitimate outcome — a weekly routine often has no firing date inside a seven-day window — and a
  * silent 200 reads as a broken job.
  */
+/** What saving a recurrence returns: the template plus what its first materialization did. */
+export interface SavedRecurrence {
+  template: RecurrenceTemplate;
+  materialized: MaterializeResult;
+}
+
 export interface MaterializeResult {
   created: number[];
   /** Dates a rule selected but that already had a live child, so nothing was created. */
