@@ -163,6 +163,7 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
       ...(typeof body.description === "string" ? { description: body.description } : {}),
       ...(typeof body.earliestStart === "string" ? { earliestStart: body.earliestStart } : {}),
       ...(typeof body.deadlineAt === "string" ? { deadlineAt: body.deadlineAt } : {}),
+      ...(body.autoArchiveAt === null || typeof body.autoArchiveAt === "string" ? { autoArchiveAt: body.autoArchiveAt } : {}),
       ...(isTimeBlockBody(body.timeBlock)
         ? {
             timeBlock: {
