@@ -44,18 +44,20 @@ function MarkdownLinks({ children }: { children: string | null | undefined }) {
   );
 }
 
+/** `datetime-local` wants local wall time without a zone; the API stores an instant. */
+function toLocalInput(instant: string | null): string {
+  if (instant === null) return "";
+  const date = new Date(instant);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 /**
  * The decay line is editable, because the default is a guess about how long an intention stays
  * worth keeping: a task parked behind someone else should survive longer, and one you already know
  * you will not do should go now.
  */
-function DecayField({ task, onSave }: { task: TaskDetail; onSave: (value: string | null) => Promise<void> }) {
-  const toLocalInput = (instant: string | null): string => {
-    if (instant === null) return "";
-    const date = new Date(instant);
-    const pad = (value: number) => String(value).padStart(2, "0");
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-  };
+function DecayControl({ task, onSave }: { task: TaskDetail; onSave: (value: string | null) => Promise<void> }) {
   const [value, setValue] = useState(toLocalInput(task.autoArchiveAt));
   useEffect(() => setValue(toLocalInput(task.autoArchiveAt)), [task.autoArchiveAt]);
   const [busy, setBusy] = useState(false);
@@ -63,6 +65,7 @@ function DecayField({ task, onSave }: { task: TaskDetail; onSave: (value: string
   async function commit(next: string): Promise<void> {
     setBusy(true);
     try {
+      // `<input type="datetime-local">` already gives local wall time, so Date parses it as local.
       await onSave(next === "" ? null : new Date(next).toISOString());
     } finally {
       setBusy(false);
@@ -70,13 +73,7 @@ function DecayField({ task, onSave }: { task: TaskDetail; onSave: (value: string
   }
 
   return (
-    <section>
-      <div className="section-label">Planning</div>
-      <strong>Priority {task.priority}</strong>
-      {task.durationMinutesRemaining !== null
-        ? <span>{task.durationMinutesRemaining} minutes remaining{task.splittable ? ", splittable" : ""}</span>
-        : <span>No time estimate</span>}
-      {task.deadlineAt && <span>Due {formatDateTime(task.deadlineAt)}</span>}
+    <>
       <label className="decay-field">
         <span>{task.lifecycleStatus === "archived" ? "Archived" : "Archives"} at</span>
         <input
@@ -94,7 +91,7 @@ function DecayField({ task, onSave }: { task: TaskDetail; onSave: (value: string
         <button
           type="button"
           disabled={busy}
-          onClick={() => void commit(toLocalInput(new Date(Date.now() + 30 * 86_400_000).toISOString()))}
+          onClick={() => void commit(new Date(Date.now() + 30 * 86_400_000).toISOString())}
         >
           Keep another month
         </button>
@@ -106,6 +103,20 @@ function DecayField({ task, onSave }: { task: TaskDetail; onSave: (value: string
         Leave it blank to keep this task forever. Untouched tasks decay a month after they were
         created, so the board only holds work you are still going to do.
       </p>
+    </>
+  );
+}
+
+function PlanningSection({ task, onSaveDecay }: { task: TaskDetail; onSaveDecay: (value: string | null) => Promise<void> }) {
+  return (
+    <section>
+      <div className="section-label">Planning</div>
+      <strong>Priority {task.priority}</strong>
+      {task.durationMinutesRemaining !== null
+        ? <span>{task.durationMinutesRemaining} minutes remaining{task.splittable ? ", splittable" : ""}</span>
+        : <span>No time estimate</span>}
+      {task.deadlineAt && <span>Due {formatDateTime(task.deadlineAt)}</span>}
+      <DecayControl task={task} onSave={onSaveDecay} />
     </section>
   );
 }
@@ -314,9 +325,9 @@ export function TaskPage() {
           <DependencySection task={task} onRemoveDependency={(dependentId, prerequisiteId) => void removeDependency(dependentId, prerequisiteId)} />
         </div>
         <div className="detail-sidebar">
-          <DecayField
+          <PlanningSection
             task={task}
-            onSave={async (value) => {
+            onSaveDecay={async (value) => {
               await action(() => api.updateTask(id, { autoArchiveAt: value }));
             }}
           />
