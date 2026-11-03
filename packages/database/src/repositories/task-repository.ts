@@ -669,12 +669,14 @@ export class TaskRepository {
    */
   unarchiveTask(id: number): TaskDetail {
     const current = this.getTask(id);
-    const minimum = new Date(Date.now() + UNARCHIVE_MINIMUM_DAYS * 86_400_000);
+    // A task set to never decay keeps that choice: unarchiving must not put it back on a clock,
+    // or the next sweep would hide a task someone just deliberately brought back.
     const original = current.autoArchiveAt === null ? null : new Date(current.autoArchiveAt);
-    const next = original !== null && original > minimum ? original : minimum;
+    const minimum = new Date(Date.now() + UNARCHIVE_MINIMUM_DAYS * 86_400_000);
+    const next = original === null ? null : original > minimum ? original : minimum;
     this.database.connection
       .prepare("UPDATE tasks SET lifecycle_status = 'active', auto_archive_at = ?, updated_at = ? WHERE id = ?")
-      .run(next.toISOString(), now(), id);
+      .run(next === null ? null : next.toISOString(), now(), id);
     return this.getTask(id);
   }
 
