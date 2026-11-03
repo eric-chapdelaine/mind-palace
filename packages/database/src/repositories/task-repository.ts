@@ -604,19 +604,19 @@ export class TaskRepository {
     if (input.maxChunkMinutes !== undefined) add("max_chunk_minutes", input.maxChunkMinutes);
     if (input.earliestStart !== undefined) add("earliest_start", input.earliestStart);
     if (input.deadlineAt !== undefined) add("deadline_at", input.deadlineAt);
-    // An explicit decay instant wins over the status-derived one above, because pushing a task's
-    // expiry out is exactly what a caller setting it by hand means to do.
-    if (input.autoArchiveAt !== undefined) {
-      this.database.connection
-        .prepare("UPDATE tasks SET auto_archive_at = ? WHERE id = ?")
-        .run(input.autoArchiveAt, taskId);
-    }
     if (assignments.length > 0) {
       add("updated_at", now());
       const result = this.database.connection
         .prepare(`UPDATE tasks SET ${assignments.join(", ")} WHERE id = ?`)
         .run(...values, taskId);
       if (result.changes !== 1) throw new Error("Expected task to exist");
+    }
+    // Written last, so an explicit instant wins over the status-derived one above: pushing a task's
+    // expiry out is exactly what a caller setting it by hand means to do.
+    if (input.autoArchiveAt !== undefined) {
+      this.database.connection
+        .prepare("UPDATE tasks SET auto_archive_at = ? WHERE id = ?")
+        .run(input.autoArchiveAt, taskId);
     }
     if (input.tagIds) this.setTaskTags(taskId, input.tagIds);
     if (input.dependsOnTaskIds) this.setTaskDependencies(taskId, input.dependsOnTaskIds);
