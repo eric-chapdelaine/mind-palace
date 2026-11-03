@@ -19,9 +19,6 @@
 export const recurrenceTemplatesMigration = {
   version: 17,
   name: "recurrence templates become their own table",
-  // Deleting the old template tasks needs FK enforcement out of the way for task_tags; the child
-  // tasks themselves are untouched, because parent/child was expressed through a shared tag.
-  foreignKeysOff: true,
   sql: String.raw`
     CREATE TABLE recurrence_templates (
       id INTEGER PRIMARY KEY,
@@ -105,8 +102,10 @@ export const recurrenceTemplatesMigration = {
     DROP TABLE recurrence_occurrences;
     ALTER TABLE recurrence_occurrences_new RENAME TO recurrence_occurrences;
 
-    -- The template used to be a task. Its children do not reference it, so removing it leaves them
-    -- intact and tagged with the routine tag the template now owns.
+    -- The template used to be a task. Deleting it must cascade to the rows that pointed at it (its
+    -- task_tags, time blocks and dependencies), so FK enforcement stays on here: with it off, those
+    -- rows survive as orphans and every later read joins against a task that no longer exists. Its
+    -- children do not reference it, so they are untouched.
     DELETE FROM tasks WHERE id IN (SELECT legacy_task_id FROM recurrence_templates);
     DROP TABLE recurrence_rules;
 

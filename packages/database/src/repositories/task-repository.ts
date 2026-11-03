@@ -9,7 +9,6 @@ import {
   type IntegrationStatus,
   type KanbanStatus,
   type LifecycleStatus,
-  type MaterializeResult,
   type RecurrenceTemplate,
   type RuleCondition,
   type RuleEffect,
@@ -621,7 +620,7 @@ export class TaskRepository {
       // A finished task is its own record; it does not need a decay date. Reopening one puts it
       // back under the default clock, so a re-opened task cannot linger forever unnoticed.
       const currentStatus = current === undefined ? null : text(row(current, "task").kanban_status);
-    const wasTerminal = currentStatus === "completed" || currentStatus === "cancelled";
+      const wasTerminal = currentStatus === "completed" || currentStatus === "cancelled";
       if (input.kanbanStatus === "completed" || input.kanbanStatus === "cancelled") {
         add("auto_archive_at", null);
       } else if (wasTerminal) {
@@ -666,15 +665,10 @@ export class TaskRepository {
   }
 
   /**
-   * Archive every open task whose decay instant has passed. Returns the archived ids so the job can
-   * log them (and so a re-run is visibly a no-op). Terminal rows keep no instant and are never
-   * touched; archived rows stay archived.
-   *
-   * Recurrence templates are excluded: a routine that is still spawning children is by definition
-   * still in use, and silently archiving it would leave the template hidden while its children kept
-   * appearing. To stop a routine, archive the template — `listRecurrenceTemplates` skips archived ones.
+   * Archive every open task whose decay instant has passed. Terminal rows keep no instant and are
+   * never touched; archived rows stay archived, so a second sweep is a no-op.
    */
-  archiveDueTasks(instant: string = now()): number[] {
+  archiveDueTasks(instant: string = now()): void {
     const due = this.database.connection
       .prepare(
         `SELECT id FROM tasks
@@ -684,7 +678,7 @@ export class TaskRepository {
       )
       .all(instant)
       .map((value) => integer(row(value, "due task").id));
-    if (due.length === 0) return [];
+    if (due.length === 0) return;
     const timestamp = now();
     const archive = this.database.connection.prepare(
       "UPDATE tasks SET lifecycle_status = 'archived', updated_at = ? WHERE id = ?",
@@ -697,7 +691,6 @@ export class TaskRepository {
       this.database.connection.exec("ROLLBACK");
       throw error;
     }
-    return due;
   }
 
   /**
@@ -903,7 +896,7 @@ export class TaskRepository {
     const timestamp = now();
     this.database.connection.exec("BEGIN IMMEDIATE");
     try {
-      this.database.connection
+      const result = this.database.connection
         .prepare(
           `INSERT INTO recurrence_templates
             (public_id, title, description, priority, duration_minutes, splittable, min_chunk_minutes,
@@ -918,7 +911,7 @@ export class TaskRepository {
           JSON.stringify(input.weekdays ?? []), input.localStartTime ?? null, input.nextOccurrenceDate,
           input.autoArchiveHour ?? null, input.active === false ? 0 : 1, timestamp, timestamp,
         );
-      const rowId = Number(this.database.connection.prepare("SELECT last_insert_rowid() AS id").get()!.id);
+      const rowId = insertedId(result);
       this.setRecurrenceTemplateTags(rowId, input.tagIds ?? []);
       this.database.connection.exec("COMMIT");
       return this.getRecurrenceTemplate(rowId)!;
@@ -1007,12 +1000,6 @@ export class TaskRepository {
       ),
       updatedAt: text(item.updated_at),
     };
-  }
-
-  setRecurrenceTemplateRoutineTag(templateId: number, tagId: number): void {
-    this.database.connection
-      .prepare("UPDATE recurrence_templates SET routine_tag_id = ?, updated_at = ? WHERE id = ?")
-      .run(tagId, now(), templateId);
   }
 
   /**

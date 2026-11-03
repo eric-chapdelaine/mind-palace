@@ -1,6 +1,6 @@
 import type { TaskRepository } from "@mind-palace/database";
 import { reservedTagIds } from "@mind-palace/database";
-import { scheduleHorizonDays, weekdayTagPublicIds, type MaterializeResult } from "@mind-palace/shared";
+import { weekdayTagPublicIds, type MaterializeResult } from "@mind-palace/shared";
 import { localInstant, startOfLocalDay, weekdayIndex, addDays, daysBetween, localDate } from "./clock.js";
 
 export class RecurrenceService {

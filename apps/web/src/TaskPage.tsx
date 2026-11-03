@@ -1,5 +1,5 @@
 import type { Tag, TaskDetail, TaskSummary } from "@mind-palace/shared";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";

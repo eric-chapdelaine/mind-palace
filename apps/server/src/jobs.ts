@@ -57,9 +57,9 @@ export function scheduledJobs({ weather, garmin, tasks, recurrence }: {
     },
     {
       name: "task-auto-archive",
-      // Runs once the day's recurrence rows have been created, so an occurrence due today is archived
-      // by tonight's run rather than tomorrow's. Cheap when nothing is due (one indexed SELECT), and
-      // `runOnStart` catches up on the sweeps a restart skipped.
+      // Late evening, so a task whose decay instant was earlier today is gone by tomorrow morning.
+      // Cheap when nothing is due (one indexed SELECT); `runOnStart` catches up on sweeps a restart
+      // skipped, which is why a Pi that was off all weekend still tidies up when it comes back.
       schedule: { kind: "times", at: ["23:30"], timeZone: TIME_ZONE },
       runOnStart: true,
       run: () => {
