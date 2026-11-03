@@ -866,7 +866,7 @@ export class TaskRepository {
             (public_id, title, description, priority, duration_minutes, splittable, min_chunk_minutes,
              max_chunk_minutes, frequency, interval_count, weekdays_json, local_start_time,
              next_occurrence_date, auto_archive_hour, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           randomUUID(), input.title.trim(), input.description ?? null, input.priority ?? 0,
