@@ -163,11 +163,9 @@ function HealthEvent({ kind, startAt, endAt, href, title, subtitle, day, dayEnd,
   );
 }
 
-function WeekTaskRow({ task, scheduled, removeLabel, onRemove, onDragStart, onDragEnd, onCardDrop, dragOver, onDragEnter, onDragLeave }: {
+function WeekTaskRow({ task, scheduled, onDragStart, onDragEnd, onCardDrop, dragOver, onDragEnter, onDragLeave }: {
   task: TaskSummary;
   scheduled: boolean;
-  removeLabel: string;
-  onRemove: (taskId: number) => void;
   onDragStart: (event: DragEvent<HTMLDivElement>, taskId: number) => void;
   onDragEnd: () => void;
   onCardDrop?: (event: DragEvent<HTMLDivElement>) => void;
@@ -193,13 +191,6 @@ function WeekTaskRow({ task, scheduled, removeLabel, onRemove, onDragStart, onDr
       {scheduled && <span className="week-task-ok" title="Fully scheduled this week">✓</span>}
       {task.durationMinutesRemaining !== null && <span className="week-task-duration">{task.durationMinutesRemaining}m</span>}
       {reason !== null && <span className="week-task-ineligible" title={reason.detail}>{reason.label}</span>}
-      <button
-        type="button"
-        className="week-task-remove"
-        aria-label={removeLabel}
-        title={removeLabel}
-        onClick={() => onRemove(task.id)}
-      >×</button>
     </div>
   );
 }
@@ -442,16 +433,6 @@ export function SchedulePage() {
     const next = listTags(task, null);
     if (sameIds(directTagIds(task), next)) return;
     await applyTags(taskId, next);
-  }
-
-  /** "Remove" from the proposal list: no tag to remove any more, so this archives the task instead. */
-  async function removeFromProposal(taskId: number) {
-    try {
-      await api.setLifecycle(taskId, "archived");
-      await load();
-    } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : String(actionError));
-    }
   }
 
   /**
@@ -901,8 +882,6 @@ export function SchedulePage() {
                   key={task.id}
                   task={task}
                   scheduled={isFullyScheduled(task)}
-                  removeLabel="Remove from this week"
-                  onRemove={(taskId) => void removeFromProposal(taskId)}
                   onDragStart={startDrag}
                   onDragEnd={endDrag}
                   onCardDrop={(event) => void reorderInList(event, thisWeekTasks, task.id, null)}
