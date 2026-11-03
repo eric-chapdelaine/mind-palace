@@ -11,9 +11,9 @@ The Hono server is the single-owner control plane and sole SQLite writer. It hos
 - `POST /api/time-blocks`, `POST /api/time-blocks/:id/status`: manual block lifecycle.
 - `POST|GET /api/recurrence-templates`, `PATCH|DELETE /api/recurrence-templates/:id`, `POST /api/recurrences/materialize`: recurrences are their own resource, not tasks. Authoring one also creates its occurrences for the next week; the daily job keeps them topped up, and the materialize response reports what it did.
 - `GET /api/weather`, `POST /api/weather/refresh`: cached Boston forecast.
-- `GET /api/jobs`: background job scheduler status.
+- `GET /api/jobs`: background job scheduler status. `POST /api/jobs/:name/run` forces one.
 - `POST /api/integrations/calendar/import`: normalized Google Calendar event import.
-- `POST /api/integrations/garmin/import`, `GET /api/health-observations`: plan-versus-actual health data.
+- `POST /api/integrations/garmin/sync`, `GET /api/health-observations`: plan-versus-actual health data.
 - `POST /api/tasks/:id/lifecycle`: lifecycle transitions such as `archived`.
 - `POST /api/tasks/:id/unarchive`: restore a decayed task and push its decay clock at least two weeks out.
 

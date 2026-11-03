@@ -1,10 +1,12 @@
 # Web
 
-The React application provides three product surfaces:
+The React application's main surfaces:
 
 - `/`: work/personal/all filters, five-column kanban, cross-column and within-column dragging, fuzzy tag selection and creation, a completed-task disclosure ordered by completion time, a collapsible tag hierarchy, and quick task capture with an optional estimate.
 - `/tasks/:id`: editable task planning details and tags, Markdown description rendering, sub-task links, time blocks, and per-task schedule acceptance.
 - `/schedule`: a Google Calendar-style seven-day hourly grid beginning today, previous/today/next navigation, Boston weather context, fixed and planned blocks, elapsed-time muting, schedule generation, acceptance, and unscheduled tasks.
+- `/recurrence`: the recurrence rules that create ordinary tasks on their own schedule, each with its decay hour and a button to populate the current window by hand.
+- `/tags`, `/rules`, `/time-blocks/:id`: the tag graph, the scheduler rule set, and a single time block.
 
 The interface polls the local API because v0 does not need a realtime transport.
 

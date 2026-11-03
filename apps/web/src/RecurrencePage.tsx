@@ -228,6 +228,10 @@ export function RecurrencePage() {
 
   useEffect(() => {
     void load();
+    // The materialize job runs at 00:15 and the decay sweep at 23:30, so the list can change
+    // without a click; a slow poll keeps it honest without the churn of the task pages.
+    const interval = window.setInterval(() => void load(), 30_000);
+    return () => window.clearInterval(interval);
   }, []);
 
   function reportMaterialization(result: MaterializeResult): void {
@@ -255,8 +259,8 @@ export function RecurrencePage() {
     }
   }
 
+  /** Deleting stops future occurrences; ones already on the board are ordinary tasks and stay. */
   async function remove(template: RecurrenceTemplate): Promise<void> {
-    if (!window.confirm(`Delete the “${template.title}” recurrence? Tasks it already created stay on the board.`)) return;
     try {
       await api.deleteRecurrenceTemplate(template.id);
       await load();

@@ -67,7 +67,7 @@ export const reservedTagPublicIds = {
 /**
  * Weekday tags in JavaScript `Date#getDay()` order: index 0 = Sunday .. index 6 = Saturday.
  * They are the selectors for the seeded day-pin rules (`assignDays`), so a task carrying one must
- * be scheduled on that day. They used to be children of `mind-palace:this-week`; that tag is gone.
+ * be scheduled on that day. They are plain selectors: the rules decide what a day means.
  */
 export const weekdayTagPublicIds = [
   "mind-palace:sunday",
@@ -78,6 +78,9 @@ export const weekdayTagPublicIds = [
   "mind-palace:friday",
   "mind-palace:saturday",
 ] as const;
+
+/** Days an ordinary task stays on the board before it decays. */
+export const defaultAutoArchiveDays = 30;
 
 /** Short weekday names in `Date#getDay()` order, so 0 = Sunday. */
 export const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
@@ -150,10 +153,9 @@ export interface TimeBlock {
 }
 
 /**
- * A routine is configuration, not work: it says that an ordinary task should exist on certain days,
- * and carries the values each occurrence is born with. It is deliberately not a task — a task is a
- * thing to do on a particular day, and conflating the two made the template occupy a kanban column
- * and need excluding from the scheduler, the decay sweep and the briefing.
+ * A recurrence is configuration, not work: it says that an ordinary task should exist on certain
+ * days, and carries the values each occurrence is born with. It is deliberately not a task, or it
+ * would need excluding from the scheduler, the decay sweep, the briefing and every kanban list.
  */
 export interface RecurrenceTemplate {
   id: number;
@@ -174,7 +176,6 @@ export interface RecurrenceTemplate {
   autoArchiveHour: number | null;
   /** The tag grouping this routine with the occurrences it produced; null until it first runs. */
   routineTagId: number | null;
-  active: boolean;
   tagIds: number[];
   updatedAt: string;
 }
@@ -526,7 +527,6 @@ export interface UpsertRecurrenceInput {
    * routine can be gone by 10am. Null/omitted means end of that day.
    */
   autoArchiveHour?: number | null;
-  active?: boolean;
 }
 
 /**

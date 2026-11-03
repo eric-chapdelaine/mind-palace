@@ -89,11 +89,11 @@ export class RecurrenceService {
     endDate: string,
     today: string,
     weekdayTagIds: number[],
-  ): MaterializeResult & { fired: number } {
+  ): { created: number[]; alreadyPresent: number; fired: number } {
     const created: number[] = [];
     let alreadyPresent = 0;
     const dates = this.dates(template, endDate, today);
-    if (dates.length === 0) return { created, alreadyPresent, idleTemplates: [], fired: 0 };
+    if (dates.length === 0) return { created, alreadyPresent, fired: 0 };
 
     // Every occurrence carries a tag that names its recurrence, so /tags/:id lists its whole history.
     const ownTagId = template.routineTagId ?? this.tasks.ensureTemplateTag(template.id, {
@@ -109,6 +109,7 @@ export class RecurrenceService {
         alreadyPresent += 1;
         continue;
       }
+      // A template with no hour keeps its whole day, so "end of day" is 23:59 rather than 23:00.
       const autoArchiveAt = localInstant(
         occurrenceDate,
         template.autoArchiveHour ?? 23,
@@ -140,6 +141,6 @@ export class RecurrenceService {
       this.tasks.recordRecurrenceOccurrence(template.id, occurrenceDate, child.id);
       created.push(child.id);
     }
-    return { created, alreadyPresent, idleTemplates: [], fired: dates.length };
+    return { created, alreadyPresent, fired: dates.length };
   }
 }

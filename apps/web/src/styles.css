@@ -194,14 +194,14 @@ body.dragging .task-card:hover .task-card-expand > div { opacity: 0; }
 /* Two-pane read: the calendar scrolls in place; the proposed list is a persistent sidebar. */
 .schedule-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 1rem; align-items: start; }
 .schedule-body-collapsed { grid-template-columns: minmax(0, 1fr) auto; }
-.this-week-panel { position: sticky; top: 56px; display: grid; gap: .6rem; max-height: calc(100vh - 72px); overflow: auto; }
-.this-week-panel-collapsed { width: 40px; justify-items: center; }
+.proposed-panel { position: sticky; top: 56px; display: grid; gap: .6rem; max-height: calc(100vh - 72px); overflow: auto; }
+.proposed-panel-collapsed { width: 40px; justify-items: center; }
 .week-panel-head { display: flex; align-items: center; gap: .5rem; }
 .week-panel-head .eyebrow { flex: 1 1 auto; }
 .week-picks-count { border-radius: 999px; background: #eee; color: #222; padding: .05rem .45rem; font-size: .75rem; white-space: nowrap; }
 .panel-toggle { border: 1px solid #ccc; background: #fff; border-radius: 4px; padding: .15rem .45rem; color: #444; line-height: 1; cursor: pointer; }
 .panel-toggle:hover { border-color: #222; color: #222; }
-.this-week-panel-collapsed .panel-toggle-expand {
+.proposed-panel-collapsed .panel-toggle-expand {
   writing-mode: vertical-rl;
   padding: .6rem .25rem;
   align-self: start;
@@ -336,7 +336,7 @@ body.dragging .task-card:hover .task-card-expand > div { opacity: 0; }
 @media (max-width: 1100px) {
   /* Narrower windows: put the proposed list back above/below the calendar instead of beside it. */
   .schedule-body { grid-template-columns: 1fr; }
-  .this-week-panel { position: static; max-height: none; overflow: visible; }
+  .proposed-panel { position: static; max-height: none; overflow: visible; }
 }
 .mini-block { display: grid; gap: .2rem; border-top: 1px solid #ddd; padding-top: .5rem; }
 .mini-block-link { display: grid; gap: .2rem; color: inherit; text-decoration: none; }

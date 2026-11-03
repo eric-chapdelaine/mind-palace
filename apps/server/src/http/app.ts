@@ -77,7 +77,6 @@ function recurrenceTemplateInput(body: Record<string, unknown>): UpsertRecurrenc
     ...(typeof body.maxChunkMinutes === "number" ? { maxChunkMinutes: body.maxChunkMinutes } : {}),
     ...(Array.isArray(body.tagIds) ? { tagIds: body.tagIds.map(Number) } : {}),
     ...(typeof body.localStartTime === "string" ? { localStartTime: body.localStartTime } : {}),
-    ...(typeof body.active === "boolean" ? { active: body.active } : {}),
   };
 }
 

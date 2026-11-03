@@ -1,4 +1,4 @@
-import type { Tag, TaskDetail, TaskSummary } from "@mind-palace/shared";
+import { defaultAutoArchiveDays, type Tag, type TaskDetail, type TaskSummary } from "@mind-palace/shared";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
@@ -91,7 +91,7 @@ function DecayControl({ task, onSave }: { task: TaskDetail; onSave: (value: stri
         <button
           type="button"
           disabled={busy}
-          onClick={() => void commit(new Date(Date.now() + 30 * 86_400_000).toISOString())}
+          onClick={() => void commit(new Date(Date.now() + defaultAutoArchiveDays * 86_400_000).toISOString())}
         >
           Keep another month
         </button>

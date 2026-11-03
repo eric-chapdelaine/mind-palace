@@ -45,9 +45,9 @@ function effectiveTagIds(task: TaskSummary): string[] {
 }
 
 /**
- * The tasks this page proposes for the week: open, not archived, and actually schedulable. This used
- * to be gated on the `this-week` tag, which meant the list was a second, hand-maintained to-do list
- * that disagreed with the scheduler's own eligibility rule. It is now exactly that rule.
+ * The tasks this page proposes for the week: open, not archived, and actually schedulable. The list
+ * is derived so it cannot become a second, hand-maintained to-do list that disagrees with the
+ * scheduler's own eligibility rule.
  */
 function isProposed(task: TaskSummary): boolean {
   return !terminalStatuses.has(task.kanbanStatus)
@@ -57,8 +57,8 @@ function isProposed(task: TaskSummary): boolean {
 
 /**
  * Why a proposed task will be skipped by the scheduler, or null when it is schedulable.
- * Mirrors the filters in `TaskRepository.listSchedulableTasks`: a task must be Ready /
- * In progress and carry a duration estimate (tasks without one are never auto-scheduled).
+ * Mirrors the filters in `TaskRepository.listSchedulableTasks`: a task must be Ready / In progress
+ * and have time remaining (a task with no estimate is never auto-scheduled).
  */
 function schedulabilityReason(task: TaskSummary): { label: string; detail: string } | null {
   if (task.kanbanStatus !== "ready" && task.kanbanStatus !== "in_progress") {
@@ -569,7 +569,7 @@ export function SchedulePage() {
   const days = Array.from({ length: 7 }, (_, index) => addDays(rangeStart, index));
   const rangeEnd = addDays(rangeStart, 7);
   const committed = tasks.filter(isProposed);
-  const thisWeekTasks = committed.filter((task) => dayTagIndex(task) === -1).sort((a, b) => b.rank - a.rank);
+  const proposedTasks = committed.filter((task) => dayTagIndex(task) === -1).sort((a, b) => b.rank - a.rank);
 
   // Minutes of non-superseded, non-missed blocks per task; calendar events are real blocks too,
   // so a task is fully scheduled when its blocks cover its remaining estimate (creating and
@@ -843,14 +843,14 @@ export function SchedulePage() {
           })}
         </div>
       </div>
-      <aside className={`this-week-panel${sidebarCollapsed ? " this-week-panel-collapsed" : ""}`}>
+      <aside className={`proposed-panel${sidebarCollapsed ? " proposed-panel-collapsed" : ""}`}>
         {sidebarCollapsed ? (
           <button
             className="panel-toggle panel-toggle-expand"
             onClick={() => setSidebarCollapsed(false)}
             title="Show the tasks waiting to be scheduled"
           >
-            To schedule {thisWeekTasks.length}
+            To schedule {proposedTasks.length}
           </button>
         ) : (
           <>
@@ -871,26 +871,26 @@ export function SchedulePage() {
               stay put when you regenerate.
             </p>
             <div
-              className={`week-picks${dragOverColumn === "this-week" ? " drag-over" : ""}`}
+              className={`week-picks${dragOverColumn === "proposed" ? " drag-over" : ""}`}
               onDragOver={(event) => event.preventDefault()}
-              onDragEnter={() => setDragOverColumn("this-week")}
+              onDragEnter={() => setDragOverColumn("proposed")}
               onDragLeave={leaveColumn}
               onDrop={dropOnThisWeek}
             >
-              {thisWeekTasks.map((task) => (
+              {proposedTasks.map((task) => (
                 <WeekTaskRow
                   key={task.id}
                   task={task}
                   scheduled={isFullyScheduled(task)}
                   onDragStart={startDrag}
                   onDragEnd={endDrag}
-                  onCardDrop={(event) => void reorderInList(event, thisWeekTasks, task.id, null)}
+                  onCardDrop={(event) => void reorderInList(event, proposedTasks, task.id, null)}
                   dragOver={dragOverRow === task.id}
                   onDragEnter={() => setDragOverRow(task.id)}
                   onDragLeave={() => setDragOverRow(null)}
                 />
               ))}
-              {thisWeekTasks.length === 0 && <p className="week-task-empty">Nothing to schedule — every open task is either finished, archived, or has no time estimate.</p>}
+              {proposedTasks.length === 0 && <p className="week-task-empty">Nothing to schedule — every open task is either finished, archived, or has no time estimate.</p>}
             </div>
           </>
         )}

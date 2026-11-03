@@ -21,15 +21,15 @@ function ArchivedTaskRow({ task, allTags, onUnarchive }: { task: TaskSummary; al
     <div className="archived-row">
       <TaskCard task={task} allTags={allTags} />
       <div className="archived-row-actions">
-        {task.autoArchiveAt && <span className="muted">decayed {shortDate(task.autoArchiveAt)}</span>}
+        {task.autoArchiveAt && (
+          <span className="muted">
+            decayed {new Date(task.autoArchiveAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+          </span>
+        )}
         <button onClick={onUnarchive}>Unarchive</button>
       </div>
     </div>
   );
-}
-
-function shortDate(instant: string): string {
-  return new Date(instant).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 export function DashboardPage() {
@@ -421,8 +421,41 @@ export function DashboardPage() {
             );
           })}
         </section>
-        <details className="completed-tasks"><summary>Completed ({completed.length})</summary>{completed.length === 0 ? <p className="muted">No completed tasks.</p> : <div className="completed-list">{completed.map((task) => <TaskCard key={task.id} task={task} allTags={tags} checked onToggleComplete={() => void toggleComplete(task)} />)}</div>}</details>
-        <details className="completed-tasks"><summary>Archived ({archived.length})</summary>{archived.length === 0 ? <p className="muted">Nothing archived. Tasks decay out of the board a month after they were created.</p> : <div className="completed-list">{archived.map((task) => <ArchivedTaskRow key={task.id} task={task} allTags={tags} onUnarchive={() => void unarchive(task)} />)}</div>}</details>
+        <details className="completed-tasks">
+          <summary>Completed ({completed.length})</summary>
+          {completed.length === 0
+            ? <p className="muted">No completed tasks.</p>
+            : (
+              <div className="completed-list">
+                {completed.map((task) => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    allTags={tags}
+                    checked
+                    onToggleComplete={() => void toggleComplete(task)}
+                  />
+                ))}
+              </div>
+            )}
+        </details>
+        <details className="completed-tasks">
+          <summary>Archived ({archived.length})</summary>
+          {archived.length === 0
+            ? <p className="muted">Nothing archived. Tasks decay out of the board a month after they were created.</p>
+            : (
+              <div className="completed-list">
+                {archived.map((task) => (
+                  <ArchivedTaskRow
+                    key={task.id}
+                    task={task}
+                    allTags={tags}
+                    onUnarchive={() => void unarchive(task)}
+                  />
+                ))}
+              </div>
+            )}
+        </details>
         <aside className="dashboard-sidebar"><CreateTaskPanel tags={tags} onCreateTask={createTask} onCreateTag={createTag} /><TagHierarchyPanel tags={tags} /></aside>
       </div>
     </main>

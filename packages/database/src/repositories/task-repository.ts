@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  defaultAutoArchiveDays,
   reservedTagPublicIds,
   type CreateTagInput,
   type CreateTaskInput,
@@ -188,12 +189,6 @@ export interface SchedulableTask {
   dependsOnTaskIds: number[];
 }
 
-/**
- * How far ahead of creation an ordinary task decays by default. A month is long enough that a task
- * waits for a free weekend and short enough that the board does not fill with intent nobody acted
- * on; both numbers are policy, so they live here rather than in the migration or the UI.
- */
-const DEFAULT_AUTO_ARCHIVE_DAYS = 30;
 /** Unarchiving pushes a task at least this far out, so it does not immediately re-archive. */
 const UNARCHIVE_MINIMUM_DAYS = 14;
 
@@ -366,7 +361,7 @@ export class TaskRepository {
       ? input.autoArchiveAt
       : terminal || input.timeBlock?.type === "calendar_event"
         ? null
-        : new Date(Date.now() + DEFAULT_AUTO_ARCHIVE_DAYS * 86_400_000).toISOString();
+        : new Date(Date.now() + defaultAutoArchiveDays * 86_400_000).toISOString();
 
     const result = this.database.connection
       .prepare(
@@ -477,7 +472,7 @@ export class TaskRepository {
   /**
    * Expand a task into a goal: create (or reuse) a tag named after the task, mark it a goal,
    * and attach it to the task so the task becomes its first subtask. Parent/child links
-   * between tasks are expressed through shared tags (see ensureTaskTag), so this conversion
+   * between tasks are expressed through shared tags (see setTaskTags), so this conversion
    * is the moment a task grows a subtask container — later tasks tagged with the goal are
    * its subtasks.
    */
@@ -544,37 +539,6 @@ export class TaskRepository {
     }
   }
 
-  /**
-   * Find-or-create the tag that maps a parent task to its work, then attach it to the task.
-   * Parent-child links between tasks are expressed through shared tags instead of a
-   * parent_task_id column; recurrence materialization uses this to stamp each occurrence
-   * (and its template) with a tag that names the parent task.
-   */
-  ensureTaskTag(taskId: number, input: { title: string; description?: string }): Tag {
-    const title = input.title.trim();
-    if (!title) throw new Error("Tag title is required");
-    const timestamp = now();
-    this.database.connection.exec("BEGIN IMMEDIATE");
-    try {
-      const existing = this.database.connection
-        .prepare("SELECT id FROM tags WHERE title = ? COLLATE NOCASE")
-        .get(title);
-      const tagId = existing
-        ? integer(row(existing, "tag").id)
-        : insertedId(this.database.connection
-            .prepare("INSERT INTO tags (public_id, title, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
-            .run(randomUUID(), title, input.description?.trim() || null, timestamp, timestamp));
-      this.database.connection
-        .prepare("INSERT OR IGNORE INTO task_tags (task_id, tag_id, source, created_at) VALUES (?, ?, 'system', ?)")
-        .run(taskId, tagId, timestamp);
-      this.database.connection.exec("COMMIT");
-      return this.listTags().find((tag) => tag.id === tagId)!;
-    } catch (error) {
-      this.database.connection.exec("ROLLBACK");
-      throw error;
-    }
-  }
-
   private insertTagParent(childId: number, parentId: number, timestamp: string): void {
     if (childId === parentId) throw new Error("A tag cannot be its own parent");
     const tags = this.database.connection.prepare("SELECT id FROM tags WHERE id IN (?, ?)").all(childId, parentId);
@@ -624,7 +588,7 @@ export class TaskRepository {
       if (input.kanbanStatus === "completed" || input.kanbanStatus === "cancelled") {
         add("auto_archive_at", null);
       } else if (wasTerminal) {
-        add("auto_archive_at", new Date(Date.now() + DEFAULT_AUTO_ARCHIVE_DAYS * 86_400_000).toISOString());
+        add("auto_archive_at", new Date(Date.now() + defaultAutoArchiveDays * 86_400_000).toISOString());
       }
       // Any other move leaves the instant alone. NULL there means "never decay", which is a choice
       // someone made; filling it in because a card was dragged would silently undo that choice.
@@ -901,7 +865,7 @@ export class TaskRepository {
           `INSERT INTO recurrence_templates
             (public_id, title, description, priority, duration_minutes, splittable, min_chunk_minutes,
              max_chunk_minutes, frequency, interval_count, weekdays_json, local_start_time,
-             next_occurrence_date, auto_archive_hour, active, created_at, updated_at)
+             next_occurrence_date, auto_archive_hour, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
@@ -909,7 +873,7 @@ export class TaskRepository {
           input.durationMinutes, input.splittable ? 1 : 0, input.minChunkMinutes ?? 30,
           input.maxChunkMinutes ?? 180, input.frequency, input.intervalCount ?? 1,
           JSON.stringify(input.weekdays ?? []), input.localStartTime ?? null, input.nextOccurrenceDate,
-          input.autoArchiveHour ?? null, input.active === false ? 0 : 1, timestamp, timestamp,
+          input.autoArchiveHour ?? null, timestamp, timestamp,
         );
       const rowId = insertedId(result);
       this.setRecurrenceTemplateTags(rowId, input.tagIds ?? []);
@@ -930,7 +894,7 @@ export class TaskRepository {
           `UPDATE recurrence_templates SET title = ?, description = ?, priority = ?, duration_minutes = ?,
              splittable = ?, min_chunk_minutes = ?, max_chunk_minutes = ?, frequency = ?, interval_count = ?,
              weekdays_json = ?, local_start_time = ?, next_occurrence_date = ?, auto_archive_hour = ?,
-             active = ?, updated_at = ?
+             updated_at = ?
            WHERE id = ?`,
         )
         .run(
@@ -938,7 +902,7 @@ export class TaskRepository {
           input.splittable ? 1 : 0, input.minChunkMinutes ?? 30, input.maxChunkMinutes ?? 180,
           input.frequency, input.intervalCount ?? 1, JSON.stringify(input.weekdays ?? []),
           input.localStartTime ?? null, input.nextOccurrenceDate, input.autoArchiveHour ?? null,
-          input.active === false ? 0 : 1, timestamp, id,
+          timestamp, id,
         );
       this.setRecurrenceTemplateTags(id, input.tagIds ?? []);
       this.database.connection.exec("COMMIT");
@@ -957,14 +921,14 @@ export class TaskRepository {
     for (const tagId of tagIds) insert.run(templateId, tagId);
   }
 
-  getRecurrenceTemplate(id: number): RecurrenceTemplate | null {
+  private getRecurrenceTemplate(id: number): RecurrenceTemplate | null {
     const value = this.database.connection.prepare("SELECT * FROM recurrence_templates WHERE id = ?").get(id);
     return value ? this.mapRecurrenceTemplate(row(value, "recurrence template")) : null;
   }
 
   listRecurrenceTemplates(): RecurrenceTemplate[] {
     return this.database.connection
-      .prepare("SELECT * FROM recurrence_templates WHERE active = 1 ORDER BY title")
+      .prepare("SELECT * FROM recurrence_templates ORDER BY title")
       .all()
       .map((value) => this.mapRecurrenceTemplate(row(value, "recurrence template")));
   }
@@ -991,7 +955,6 @@ export class TaskRepository {
       nextOccurrenceDate: text(item.next_occurrence_date),
       autoArchiveHour: item.auto_archive_hour === null ? null : integer(item.auto_archive_hour),
       routineTagId: item.routine_tag_id === null ? null : integer(item.routine_tag_id),
-      active: boolean(item.active),
       tagIds: json<number[]>(
         (this.database.connection
           .prepare("SELECT COALESCE(json_group_array(tag_id), '[]') AS ids FROM recurrence_template_tags WHERE template_id = ?")

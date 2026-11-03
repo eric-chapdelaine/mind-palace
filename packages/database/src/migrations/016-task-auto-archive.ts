@@ -1,24 +1,16 @@
 /**
- * Two changes that answer the same question — what is still worth looking at?
+ * `tasks.auto_archive_at` is the instant a task decays: the sweep archives rows whose instant has
+ * passed, so work you never got to leaves the board on its own. It is a timestamp rather than a day
+ * because decay genuinely carries a time — "wake up" is gone by 10am, an ordinary task lingers a
+ * month — and `YYYY-MM-DD` cannot express the first. NULL means never.
  *
- * `tasks.auto_archive_at` is the instant a task decays. The daily `task-auto-archive` job archives
- * rows whose instant has passed, so a task you never got to leaves the board on its own instead of
- * accumulating. It is a timestamp rather than a day because the decay point genuinely carries a
- * time: a "wake up" occurrence should be gone by 10am on the day it was created, while an ordinary
- * task should linger a month. A `YYYY-MM-DD` column cannot express the first one.
- * NULL means never — completed, cancelled and calendar-event rows keep NULL, ordinary tasks default
- * to a month (see `TaskRepository.createTask`). Recurrence templates are skipped by the job rather
- * than by a NULL date, so a still-running routine is never archived out from under its children.
+ * `recurrence_rules.auto_archive_hour` is the template's own expiry policy: the local hour at which
+ * an occurrence's child decays. NULL means end of that day. That is what makes decay per-recurrence
+ * rather than one global default.
  *
- * `recurrence_rules.auto_archive_hour` is the template's own expiry policy: the local hour of the
- * occurrence's day at which its child decays. NULL means end of that day. That is what makes the
- * rule per-routine instead of one global default.
- *
- * The `this-week` tag goes away. It was the scheduler's eligibility gate, the "this week" bucket and
- * the weekday tags' parent all at once, so a task could be perfectly schedulable and silently
- * invisible. What belongs in the week is the scheduler's answer now (priority, rules, weather), not
- * a tag a person has to remember to add. Weekday tags survive as selectors for the seeded
- * `assignDays` pins; they just no longer hang off a parent.
+ * The `this-week` tag is deleted. It was the scheduler's eligibility gate and a bucket at once, so a
+ * task could be perfectly schedulable and silently invisible; what belongs in the week is now the
+ * scheduler's answer. The weekday tags survive as selectors for the seeded `assignDays` rules.
  */
 export const taskAutoArchiveMigration = {
   version: 16,

@@ -1,20 +1,17 @@
 /**
  * A recurrence template becomes its own table.
  *
- * A template is not an instance of a task. A task is a thing to do on a particular day; a template
- * is the rule saying such things should exist. Storing templates as `tasks` rows meant a template
- * occupied a kanban column, carried a duration, a rank and a decay date, showed up in tag lists, and
- * had to be excluded by name from the scheduler, the archive sweep and the briefing — four
- * exclusions that existed only to undo the fact that it was a task.
+ * A template is not an instance of a task: a task is a thing to do on a particular day, a template
+ * is the rule saying such things should exist. As a `tasks` row it occupied a kanban column, carried
+ * a duration, a rank and a decay date, and had to be excluded by name from the scheduler, the decay
+ * sweep and the briefing.
  *
  * The conversion copies each `recurrence_rules` row and the fields its occurrences are born with
- * (title, estimate, priority, tags) into `recurrence_templates`, re-points the occurrence ledger at
- * the template, and deletes the task that used to represent it. `legacy_task_id` is only used by
- * this migration to make the joins on the way through.
+ * into `recurrence_templates`, re-points the occurrence ledger at the template, and deletes the task
+ * that used to represent it. `legacy_task_id` exists only for the joins on the way through.
  *
- * Occurrences are keyed by `(template_id, occurrence_date)` only. `child_task_id` is a plain
- * reference: the ledger records which day a template has produced, not that a particular task must
- * live forever. That is what lets a deleted or completed occurrence be regenerated.
+ * The ledger is keyed by `(template_id, occurrence_date)` and keeps `child_task_id` as a plain
+ * nullable reference, so a deleted or completed occurrence can be generated again.
  */
 export const recurrenceTemplatesMigration = {
   version: 17,
@@ -113,6 +110,5 @@ export const recurrenceTemplatesMigration = {
     ALTER TABLE recurrence_templates DROP COLUMN legacy_task_id;
 
     CREATE INDEX recurrence_occurrences_child_idx ON recurrence_occurrences(child_task_id);
-    CREATE INDEX recurrence_templates_active_idx ON recurrence_templates(active, next_occurrence_date);
   `,
 } as const;

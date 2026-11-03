@@ -4,7 +4,7 @@ This package owns SQLite setup, ordered migrations, and persistence repositories
 
 ## Repository Boundaries
 
-- `TaskRepository` owns task attributes, tags, time blocks, recurrence, schedule runs, weather, integration mappings, and health observations.
+- `TaskRepository` owns task attributes, tags, time blocks, recurrence templates and their occurrence ledger, schedule runs, weather, integration mappings, and health observations.
 
 Keep provider calls and child processes out of repositories. Services normalize external data first, then call repository methods.
 
