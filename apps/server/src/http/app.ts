@@ -52,7 +52,11 @@ export interface IntegrationRegistration {
 function recurrenceTemplateInput(body: Record<string, unknown>): UpsertRecurrenceInput {
   const frequency = body.frequency;
   if (frequency !== "daily" && frequency !== "weekly") throw new Error("frequency must be daily or weekly");
+  // Weekday indices are `Date#getDay()` values; anything else silently selects no day at all.
   const weekdays = Array.isArray(body.weekdays) ? body.weekdays.map(Number) : [];
+  if (weekdays.some((day) => !Number.isInteger(day) || day < 0 || day > 6)) {
+    throw new Error("weekdays must be whole numbers 0-6 (0 = Sunday)");
+  }
   if (frequency === "weekly" && weekdays.length === 0) throw new Error("A weekly recurrence needs at least one weekday");
   const autoArchiveHour = body.autoArchiveHour === null || body.autoArchiveHour === undefined
     ? null
@@ -62,14 +66,20 @@ function recurrenceTemplateInput(body: Record<string, unknown>): UpsertRecurrenc
   }
   const durationMinutes = Number(body.durationMinutes ?? 30);
   if (!Number.isInteger(durationMinutes) || durationMinutes < 0) throw new Error("durationMinutes must be a whole number of minutes");
+  const intervalCount = body.intervalCount === undefined ? 1 : Number(body.intervalCount);
+  if (!Number.isInteger(intervalCount) || intervalCount < 1) throw new Error("intervalCount must be a whole number of at least 1");
+  const nextOccurrenceDate = requiredString(body.nextOccurrenceDate, "nextOccurrenceDate");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(nextOccurrenceDate) || Number.isNaN(Date.parse(nextOccurrenceDate))) {
+    throw new Error("nextOccurrenceDate must be a date like 2026-11-03");
+  }
   return {
     title: requiredString(body.title, "title"),
     durationMinutes,
     frequency,
     weekdays,
     autoArchiveHour,
-    intervalCount: typeof body.intervalCount === "number" ? body.intervalCount : 1,
-    nextOccurrenceDate: requiredString(body.nextOccurrenceDate, "nextOccurrenceDate"),
+    intervalCount,
+    nextOccurrenceDate,
     ...(typeof body.description === "string" || body.description === null ? { description: body.description } : {}),
     ...(typeof body.priority === "number" ? { priority: body.priority } : {}),
     ...(typeof body.splittable === "boolean" ? { splittable: body.splittable } : {}),
