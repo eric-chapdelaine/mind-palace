@@ -631,6 +631,10 @@ export class TaskRepository {
   /**
    * Archive every open task whose decay instant has passed. Terminal rows keep no instant and are
    * never touched; archived rows stay archived, so a second sweep is a no-op.
+   *
+   * A task with accepted time on the calendar is exempt: someone committed that hour, and hiding
+   * the task while its block stayed behind would leave time reserved for work the board no longer
+   * shows. Manual blocks count here even while still proposed — placing one by hand is a commitment.
    */
   archiveDueTasks(instant: string = now()): void {
     const due = this.database.connection
@@ -638,7 +642,9 @@ export class TaskRepository {
         `SELECT id FROM tasks
           WHERE auto_archive_at IS NOT NULL AND auto_archive_at <= ?
             AND lifecycle_status <> 'archived'
-            AND kanban_status NOT IN ('completed', 'cancelled')`,
+            AND kanban_status NOT IN ('completed', 'cancelled')
+            AND NOT EXISTS (SELECT 1 FROM time_blocks block WHERE block.task_id = tasks.id
+                              AND (block.source = 'manual' OR block.status IN ('accepted', 'completed')))`,
       )
       .all(instant)
       .map((value) => integer(row(value, "due task").id));
