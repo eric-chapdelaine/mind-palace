@@ -170,7 +170,6 @@ export interface RecurrenceTemplate {
   frequency: Frequency;
   intervalCount: number;
   weekdays: number[];
-  localStartTime: string | null;
   nextOccurrenceDate: string;
   /** Local hour (`0`-`23`) of the occurrence's day at which its child task decays; null = end of day. */
   autoArchiveHour: number | null;
@@ -520,7 +519,6 @@ export interface UpsertRecurrenceInput {
   frequency: Frequency;
   intervalCount?: number;
   weekdays?: number[];
-  localStartTime?: string;
   nextOccurrenceDate: string;
   /**
    * Local hour (`0`-`23`) of the occurrence's day at which its child task decays, so a "wake up"

@@ -864,15 +864,15 @@ export class TaskRepository {
         .prepare(
           `INSERT INTO recurrence_templates
             (public_id, title, description, priority, duration_minutes, splittable, min_chunk_minutes,
-             max_chunk_minutes, frequency, interval_count, weekdays_json, local_start_time,
+             max_chunk_minutes, frequency, interval_count, weekdays_json,
              next_occurrence_date, auto_archive_hour, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           randomUUID(), input.title.trim(), input.description ?? null, input.priority ?? 0,
           input.durationMinutes, input.splittable ? 1 : 0, input.minChunkMinutes ?? 30,
           input.maxChunkMinutes ?? 180, input.frequency, input.intervalCount ?? 1,
-          JSON.stringify(input.weekdays ?? []), input.localStartTime ?? null, input.nextOccurrenceDate,
+          JSON.stringify(input.weekdays ?? []), input.nextOccurrenceDate,
           input.autoArchiveHour ?? null, timestamp, timestamp,
         );
       const rowId = insertedId(result);
@@ -893,7 +893,7 @@ export class TaskRepository {
         .prepare(
           `UPDATE recurrence_templates SET title = ?, description = ?, priority = ?, duration_minutes = ?,
              splittable = ?, min_chunk_minutes = ?, max_chunk_minutes = ?, frequency = ?, interval_count = ?,
-             weekdays_json = ?, local_start_time = ?, next_occurrence_date = ?, auto_archive_hour = ?,
+             weekdays_json = ?, next_occurrence_date = ?, auto_archive_hour = ?,
              updated_at = ?
            WHERE id = ?`,
         )
@@ -901,7 +901,7 @@ export class TaskRepository {
           input.title.trim(), input.description ?? null, input.priority ?? 0, input.durationMinutes,
           input.splittable ? 1 : 0, input.minChunkMinutes ?? 30, input.maxChunkMinutes ?? 180,
           input.frequency, input.intervalCount ?? 1, JSON.stringify(input.weekdays ?? []),
-          input.localStartTime ?? null, input.nextOccurrenceDate, input.autoArchiveHour ?? null,
+          input.nextOccurrenceDate, input.autoArchiveHour ?? null,
           timestamp, id,
         );
       this.setRecurrenceTemplateTags(id, input.tagIds ?? []);
@@ -951,7 +951,6 @@ export class TaskRepository {
       frequency: text(item.frequency) as RecurrenceTemplate["frequency"],
       intervalCount: integer(item.interval_count),
       weekdays: item.weekdays_json ? json<number[]>(item.weekdays_json, []) : [],
-      localStartTime: nullableText(item.local_start_time),
       nextOccurrenceDate: text(item.next_occurrence_date),
       autoArchiveHour: item.auto_archive_hour === null ? null : integer(item.auto_archive_hour),
       routineTagId: item.routine_tag_id === null ? null : integer(item.routine_tag_id),
