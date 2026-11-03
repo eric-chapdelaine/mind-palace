@@ -1,6 +1,6 @@
 import type { TaskRepository } from "@mind-palace/database";
 import { reservedTagIds } from "@mind-palace/database";
-import { weekdayTagPublicIds, type MaterializeResult } from "@mind-palace/shared";
+import { weekdayTagPublicIds, type MaterializeResult, type RecurrenceTemplate } from "@mind-palace/shared";
 import { localInstant, startOfLocalDay, weekdayIndex, addDays, daysBetween, localDate } from "./clock.js";
 
 export class RecurrenceService {
@@ -39,11 +39,7 @@ export class RecurrenceService {
   }
 
   /** The dates a rule selects inside `[today, endDate]`, oldest first. */
-  private dates(
-    template: { frequency: "daily" | "weekly"; intervalCount: number; weekdays: number[]; nextOccurrenceDate: string },
-    endDate: string,
-    today: string,
-  ): string[] {
+  private dates(template: RecurrenceTemplate, endDate: string, today: string): string[] {
     const seriesStart = template.nextOccurrenceDate;
     const interval = Math.max(1, template.intervalCount);
     // The anchor bounds the window from below, so a future-dated rule does not fire early; `today`
@@ -65,7 +61,7 @@ export class RecurrenceService {
   }
 
   private materializeTemplate(
-    template: ReturnType<TaskRepository["listRecurrenceTemplates"]>[number],
+    template: RecurrenceTemplate,
     endDate: string,
     today: string,
     weekdayTagIds: number[],
