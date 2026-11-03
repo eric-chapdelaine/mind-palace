@@ -51,6 +51,13 @@ export type TagType = (typeof tagTypes)[number];
 export const priorities = [0, 1, 2, 3, 4, 5] as const;
 export type Priority = (typeof priorities)[number];
 
+/**
+ * How many days ahead the schedule is planned. One number on purpose: the scheduler lays out this
+ * window, and recurrence materialization fills exactly the same window, so the board never holds
+ * work the scheduler cannot place or vice versa. Changing one without the other breaks that.
+ */
+export const scheduleHorizonDays = 7;
+
 /** Reserved tags that carry behavior (see AGENTS.md "tag-driven behavior"). */
 export const reservedTagPublicIds = {
   calendarEvent: "mind-palace:calendar-event",

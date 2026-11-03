@@ -4,6 +4,7 @@ import type { ScheduledJob } from "./services/job-scheduler.js";
 import type { TaskRepository } from "@mind-palace/database";
 import type { WeatherService } from "./services/weather-service.js";
 import { HOME_TIME_ZONE, addDays, localDate } from "./services/clock.js";
+import { scheduleHorizonDays } from "@mind-palace/shared";
 
 /** Pinned times below are wall-clock in this zone (the household's), not UTC. */
 const TIME_ZONE = HOME_TIME_ZONE;
@@ -16,12 +17,11 @@ const TIME_ZONE = HOME_TIME_ZONE;
  * Jobs must be idempotent: an interval tick or pinned time can land at any moment, and `runOnStart`
  * can fire on a restart. Prefer a cheap "is anything actually due?" check inside `run`.
  */
-export function scheduledJobs({ weather, garmin, tasks, recurrence, lookaheadDays }: {
+export function scheduledJobs({ weather, garmin, tasks, recurrence }: {
   weather: WeatherService;
   garmin: GarminService;
   tasks: TaskRepository;
   recurrence: RecurrenceService;
-  lookaheadDays: number;
 }): ScheduledJob[] {
   return [
     {
@@ -45,19 +45,19 @@ export function scheduledJobs({ weather, garmin, tasks, recurrence, lookaheadDay
     },
     {
       name: "recurrence-materialize",
-      // Just after midnight, so "today" is settled and the routine rows exist before the day starts.
-      // `runOnStart` covers a reboot or a night the Pi was off; the sweep is idempotent and never
-      // backfills, so starting late creates today onward rather than a week of dead rows.
+      // Just after midnight, so "today" is settled and the recurrence rows exist before the day
+      // starts. `runOnStart` covers a reboot or a night the Pi was off; the sweep is idempotent and
+      // never backfills, so starting late creates today onward rather than a week of dead rows.
       schedule: { kind: "times", at: ["00:15"], timeZone: TIME_ZONE },
       runOnStart: true,
       run: () => {
         const today = localDate(new Date(), TIME_ZONE);
-        recurrence.materializeThrough(addDays(today, lookaheadDays), today);
+        recurrence.materializeThrough(addDays(today, scheduleHorizonDays), today);
       },
     },
     {
       name: "task-auto-archive",
-      // Runs once the day's routine rows have been created, so an occurrence due today is archived
+      // Runs once the day's recurrence rows have been created, so an occurrence due today is archived
       // by tonight's run rather than tomorrow's. Cheap when nothing is due (one indexed SELECT), and
       // `runOnStart` catches up on the sweeps a restart skipped.
       schedule: { kind: "times", at: ["23:30"], timeZone: TIME_ZONE },

@@ -6,6 +6,7 @@ import type { TaskRepository } from "@mind-palace/database";
 import {
   kanbanStatuses,
   lifecycleStatuses,
+  scheduleHorizonDays,
   tagTypes,
   timeBlockStatuses,
   timeBlockTypes,
@@ -24,7 +25,6 @@ import type { CalendarImportService } from "../services/calendar-import-service.
 import type { GarminService } from "../services/garmin-service.js";
 import type { ScheduleService } from "../services/schedule-service.js";
 import type { WeatherService } from "../services/weather-service.js";
-import { RECURRENCE_LOOKAHEAD_DAYS } from "../services/recurrence-service.js";
 import type { RecurrenceService } from "../services/recurrence-service.js";
 import { addDays, localDate } from "../services/clock.js";
 import type { JobScheduler } from "../services/job-scheduler.js";
@@ -320,7 +320,7 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
     const body = (await context.req.json()) as Record<string, unknown>;
     const template = tasks.createRecurrenceTemplate(recurrenceTemplateInput(body));
     const materialized = recurrence.materializeThrough(
-      addDays(localDate(new Date()), RECURRENCE_LOOKAHEAD_DAYS),
+      addDays(localDate(new Date()), scheduleHorizonDays),
       localDate(new Date()),
       template.id,
     );
@@ -332,7 +332,7 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
     const body = (await context.req.json()) as Record<string, unknown>;
     const template = tasks.updateRecurrenceTemplate(templateId, recurrenceTemplateInput(body));
     const materialized = recurrence.materializeThrough(
-      addDays(localDate(new Date()), RECURRENCE_LOOKAHEAD_DAYS),
+      addDays(localDate(new Date()), scheduleHorizonDays),
       localDate(new Date()),
       template.id,
     );
@@ -353,7 +353,7 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
     const body = (await context.req.json()) as Record<string, unknown>;
     const endDate = typeof body.endDate === "string"
       ? body.endDate
-      : addDays(localDate(new Date()), RECURRENCE_LOOKAHEAD_DAYS);
+      : addDays(localDate(new Date()), scheduleHorizonDays);
     return context.json(recurrence.materializeThrough(endDate));
   });
   app.post("/api/weather/refresh", async (context) => context.json(await weather.getWeather(true)));

@@ -1,7 +1,7 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { TaskRepository } from "@mind-palace/database";
-import type { Schedule, ScheduleScores, ScheduleUnscheduled, WeatherForecast } from "@mind-palace/shared";
+import { scheduleHorizonDays, type Schedule, type ScheduleScores, type ScheduleUnscheduled, type WeatherForecast } from "@mind-palace/shared";
 import { runPythonWorker } from "./worker.js";
 import type { WeatherService } from "./weather-service.js";
 
@@ -43,9 +43,6 @@ export function mergeAssignments(assignments: Assignment[]): Assignment[] {
   }
   return merged;
 }
-
-/** How far ahead the worker lays out slots. Sent in the payload so a run is reproducible. */
-const HORIZON_DAYS = 7;
 
 /**
  * Solver configuration. The worker owns the defaults (slot size, day window, timezone); the
@@ -104,14 +101,14 @@ export class ScheduleService {
       // Floor the start to the hour: the worker looks weather up by the slot's UTC hour, so the
       // current hour's forecast must be included even though it starts before `now`.
       const weatherFrom = new Date(Math.floor(now.getTime() / 3_600_000) * 3_600_000);
-      const horizonEnd = new Date(now.getTime() + (HORIZON_DAYS + 1) * 86_400_000);
+      const horizonEnd = new Date(now.getTime() + (scheduleHorizonDays + 1) * 86_400_000);
       weather = await this.weather.getWeather(false, weatherFrom.toISOString(), horizonEnd.toISOString());
     } catch {
       weather = [];
     }
     const input = {
       now: now.toISOString(),
-      horizonDays: HORIZON_DAYS,
+      horizonDays: scheduleHorizonDays,
       config: SCHEDULER_CONFIG,
       tasks: this.tasks.listSchedulableTasks(),
       // The solver only needs live blocks; superseded/missed rows are history, not constraints.

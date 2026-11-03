@@ -1,11 +1,7 @@
 import type { TaskRepository } from "@mind-palace/database";
 import { reservedTagIds } from "@mind-palace/database";
-import { weekdayTagPublicIds, type MaterializeResult } from "@mind-palace/shared";
+import { scheduleHorizonDays, weekdayTagPublicIds, type MaterializeResult } from "@mind-palace/shared";
 import { localInstant, startOfLocalDay, weekdayIndex, addDays, daysBetween, localDate } from "./clock.js";
-
-/** Days of occurrences to keep on the board. Equal to `ScheduleService`'s horizon: a
- *  occurrence further out is a row nothing can schedule. */
-export const RECURRENCE_LOOKAHEAD_DAYS = 7;
 
 export class RecurrenceService {
   constructor(private readonly tasks: TaskRepository) {}
