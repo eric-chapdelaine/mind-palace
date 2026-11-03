@@ -8,12 +8,14 @@ import { HealthObservationPage } from "./HealthObservationPage";
 import { TagsPage } from "./TagsPage";
 import { TagPage } from "./TagPage";
 import { RulesPage } from "./RulesPage";
+import { RecurrencePage } from "./RecurrencePage";
 import { Breadcrumbs, CrumbTitleProvider, resetTrail } from "./components/Breadcrumbs";
 
 const navItems = [
   { to: "/", label: "Dashboard" },
   { to: "/schedule", label: "Schedule" },
   { to: "/tags", label: "Tags" },
+  { to: "/recurrence", label: "Recurrence" },
   { to: "/rules", label: "Rules" },
 ];
 
@@ -64,6 +66,7 @@ export function App() {
           <Route path="/tags" element={<TagsPage />} />
           <Route path="/tags/:id" element={<TagPage />} />
           <Route path="/schedule" element={<SchedulePage />} />
+          <Route path="/recurrence" element={<RecurrencePage />} />
           <Route path="/rules" element={<RulesPage />} />
           <Route path="/health_activity/:id" element={<HealthActivityPage />} />
           <Route path="/health_observation/:id" element={<HealthObservationPage />} />

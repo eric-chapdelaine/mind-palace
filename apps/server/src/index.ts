@@ -21,7 +21,9 @@ const calendar = new CalendarImportService(tasks);
 const garmin = new GarminService(tasks);
 const recurrence = new RecurrenceService(tasks);
 const briefing = new BriefingService(tasks);
-const scheduler = new JobScheduler(scheduledJobs({ weather, garmin }));
+const scheduler = new JobScheduler(
+  scheduledJobs({ weather, garmin, tasks, recurrence }),
+);
 
 // Enabling an integration is authenticating it: a provider reports `connected` only once its
 // credential store exists, so this list is inert (and the UI stays clean) until then.

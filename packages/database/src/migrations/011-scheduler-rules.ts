@@ -28,8 +28,8 @@ export const schedulerRulesMigration = {
       CHECK (strength_kind = 'hard' OR (tier IS NOT NULL AND weight IS NOT NULL))
     );
 
-    -- Seeded default rules. Weekday tags are children of mind-palace:this-week; each pin is a
-    -- hard day restriction. days use Python date.weekday() order: 0 = Monday .. 6 = Sunday.
+    -- Seeded default rules. Each weekday pin is a hard day restriction selected by that weekday's
+    -- tag; days use Python date.weekday() order: 0 = Monday .. 6 = Sunday.
     INSERT OR IGNORE INTO scheduler_rules
       (public_id, title, enabled, condition_json, effect_json, strength_kind, tier, weight, reason, created_at, updated_at)
     VALUES

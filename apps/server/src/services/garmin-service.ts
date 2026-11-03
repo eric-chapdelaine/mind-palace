@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { TaskRepository } from "@mind-palace/database";
+import { HOME_TIME_ZONE } from "./clock.js";
 import type {
   GarminSyncResult,
   HealthActivityProviderInput,
@@ -16,7 +17,7 @@ interface WorkerResult {
   activities: HealthActivityProviderInput[];
 }
 
-const timeZone = "America/New_York";
+const timeZone = HOME_TIME_ZONE;
 
 /** Calendar date (YYYY-MM-DD) in the owner's timezone — the dates Garmin's API expects. */
 function localDate(value: Date): string {

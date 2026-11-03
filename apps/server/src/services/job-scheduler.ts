@@ -1,3 +1,5 @@
+import { DAY_MS, zoneOffsetMs } from "./clock.js";
+
 export type JobSchedule =
   /** Fixed daily wall-clock times in `timeZone`, each `"HH:MM"`. */
   | { kind: "times"; at: string[]; timeZone: string }
@@ -37,42 +39,16 @@ interface JobRuntime {
   lastError: string | null;
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-const offsetFormatters = new Map<string, Intl.DateTimeFormat>();
-
-/** Offset (ms) of `timeZone` from UTC at `date`; positive east of Greenwich. */
-function zoneOffsetMs(timeZone: string, date: Date): number {
-  let formatter = offsetFormatters.get(timeZone);
-  if (!formatter) {
-    formatter = new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      hourCycle: "h23",
-      year: "numeric", month: "2-digit", day: "2-digit",
-      hour: "2-digit", minute: "2-digit", second: "2-digit",
-    });
-    offsetFormatters.set(timeZone, formatter);
-  }
-  const parts: Record<string, string> = {};
-  for (const part of formatter.formatToParts(date)) parts[part.type] = part.value;
-  const asUtc = Date.UTC(
-    Number(parts.year), Number(parts.month) - 1, Number(parts.day),
-    Number(parts.hour), Number(parts.minute), Number(parts.second),
-  );
-  // Drop milliseconds so the offset is a whole number of seconds and pinned times land exactly.
-  return asUtc - (date.getTime() - date.getMilliseconds());
-}
-
 /** Next instant after `now` whose wall clock in `timeZone` matches `"HH:MM"`. */
 function nextDailyTime(now: Date, time: string, timeZone: string): Date {
   const [hour, minute] = time.split(":").map(Number);
-  const offset = zoneOffsetMs(timeZone, now);
+  const offset = zoneOffsetMs(now, timeZone);
   const wall = new Date(now.getTime() + offset);
   let wallCandidate = Date.UTC(wall.getUTCFullYear(), wall.getUTCMonth(), wall.getUTCDate(), hour, minute, 0);
   if (wallCandidate <= wall.getTime()) wallCandidate += DAY_MS;
   // Convert wall → UTC twice: the offset at `now` may differ from the offset at the target (DST).
   let candidate = wallCandidate - offset;
-  candidate = wallCandidate - zoneOffsetMs(timeZone, new Date(candidate));
+  candidate = wallCandidate - zoneOffsetMs(new Date(candidate), timeZone);
   return new Date(candidate);
 }
 
@@ -146,6 +122,16 @@ export class JobScheduler {
     }));
   }
 
+  /** Run one job immediately, by name. Returns false when no job has that name. */
+  /** Run a job out of band. Unknown names and a job already in flight are both refused. */
+  async runNow(name: string): Promise<"ran" | "unknown" | "busy"> {
+    const runtime = this.runtimes.find((candidate) => candidate.job.name === name);
+    if (!runtime) return "unknown";
+    if (runtime.running) return "busy";
+    await this.execute(runtime, false);
+    return "ran";
+  }
+
   private scheduleNext(runtime: JobRuntime): void {
     const now = new Date();
     runtime.nextRunAt = computeNextRun(runtime.job.schedule, now);
@@ -153,10 +139,11 @@ export class JobScheduler {
     runtime.timer.unref();
   }
 
-  private async execute(runtime: JobRuntime): Promise<void> {
+  /** `reschedule` is false for an out-of-band run, which must not move the job's own timer. */
+  private async execute(runtime: JobRuntime, reschedule = true): Promise<void> {
     if (runtime.running) {
       console.warn(`[jobs] ${runtime.job.name} is still running; skipping this tick`);
-      this.scheduleNext(runtime);
+      if (reschedule) this.scheduleNext(runtime);
       return;
     }
     runtime.running = true;
@@ -171,7 +158,7 @@ export class JobScheduler {
       runtime.running = false;
       runtime.lastFinishedAt = new Date().toISOString();
       runtime.runCount += 1;
-      this.scheduleNext(runtime);
+      if (reschedule) this.scheduleNext(runtime);
     }
   }
 }

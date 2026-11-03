@@ -1,6 +1,7 @@
-import type { Tag, TaskDetail, TaskSummary } from "@mind-palace/shared";
+import { defaultAutoArchiveDays, type Tag, type TaskDetail, type TaskSummary } from "@mind-palace/shared";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { toIsoInstant, toLocalDateTimeInput } from "./lib/datetime";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "./api";
@@ -44,7 +45,61 @@ function MarkdownLinks({ children }: { children: string | null | undefined }) {
   );
 }
 
-function PlanningSection({ task }: { task: TaskDetail }) {
+/**
+ * The decay line is editable, because the default is a guess about how long an intention stays
+ * worth keeping: a task parked behind someone else should survive longer, and one you already know
+ * you will not do should go now.
+ */
+function DecayControl({ task, onSave }: { task: TaskDetail; onSave: (value: string | null) => Promise<void> }) {
+  const [value, setValue] = useState(toLocalDateTimeInput(task.autoArchiveAt));
+  useEffect(() => setValue(toLocalDateTimeInput(task.autoArchiveAt)), [task.autoArchiveAt]);
+  const [busy, setBusy] = useState(false);
+
+  async function commit(next: string): Promise<void> {
+    setBusy(true);
+    try {
+      await onSave(toIsoInstant(next));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <label className="decay-field">
+        <span>{task.lifecycleStatus === "archived" ? "Archived" : "Archives"} at</span>
+        <input
+          type="datetime-local"
+          value={value}
+          disabled={busy}
+          onChange={(event) => setValue(event.target.value)}
+          onBlur={(event) => {
+            // Only write when the value actually moved: blur fires on every tab-through.
+            if (event.target.value !== toLocalDateTimeInput(task.autoArchiveAt)) void commit(event.target.value);
+          }}
+        />
+      </label>
+      <div className="button-row">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void commit(new Date(Date.now() + defaultAutoArchiveDays * 86_400_000).toISOString())}
+        >
+          Keep another month
+        </button>
+        {task.autoArchiveAt !== null && (
+          <button type="button" disabled={busy} onClick={() => void commit("")}>Never decay</button>
+        )}
+      </div>
+      <p className="form-hint muted">
+        Leave it blank to keep this task forever. Untouched tasks decay a month after they were
+        created, so the board only holds work you are still going to do.
+      </p>
+    </>
+  );
+}
+
+function PlanningSection({ task, onSaveDecay }: { task: TaskDetail; onSaveDecay: (value: string | null) => Promise<void> }) {
   return (
     <section>
       <div className="section-label">Planning</div>
@@ -53,6 +108,7 @@ function PlanningSection({ task }: { task: TaskDetail }) {
         ? <span>{task.durationMinutesRemaining} minutes remaining{task.splittable ? ", splittable" : ""}</span>
         : <span>No time estimate</span>}
       {task.deadlineAt && <span>Due {formatDateTime(task.deadlineAt)}</span>}
+      <DecayControl task={task} onSave={onSaveDecay} />
     </section>
   );
 }
@@ -71,9 +127,8 @@ function DependencyLink({ task, onRemove }: { task: TaskSummary; onRemove: () =>
 
 /**
  * Read-only display of both dependency directions. Blocking tasks are picked on the
- * Dashboard via the "Set blocking tasks" button (multi-select, like "Add to this week"); a
- * dependency is not a hard gate — manual completion never ripples — but the scheduler
- * orders prerequisites first.
+ * Dashboard via the "Set blocking tasks" button; a dependency is not a hard gate — manual
+ * completion never ripples — but the scheduler orders prerequisites first.
  */
 function DependencySection({ task, onRemoveDependency }: {
   task: TaskDetail;
@@ -191,7 +246,7 @@ export function TaskPage() {
   }
 
   function setBlockingTasks() {
-    // Pick blocking tasks on the Dashboard (multi-select, like "Add to this week").
+    // Pick blocking tasks on the Dashboard (multi-select mode).
     navigate("/", { state: { selectingDependenciesFor: id } });
   }
 
@@ -233,7 +288,9 @@ export function TaskPage() {
               Mark completed
             </button>
           )}
-          <button onClick={() => void action(() => api.setLifecycle(id, "archived"))}>Archive</button>
+          {task.lifecycleStatus === "archived"
+            ? <button className="primary-button" onClick={() => void action(() => api.unarchiveTask(id))}>Unarchive</button>
+            : <button onClick={() => void action(() => api.setLifecycle(id, "archived"))}>Archive</button>}
         </div>
       </header>
 
@@ -260,7 +317,12 @@ export function TaskPage() {
           <DependencySection task={task} onRemoveDependency={(dependentId, prerequisiteId) => void removeDependency(dependentId, prerequisiteId)} />
         </div>
         <div className="detail-sidebar">
-          <PlanningSection task={task} />
+          <PlanningSection
+            task={task}
+            onSaveDecay={async (value) => {
+              await action(() => api.updateTask(id, { autoArchiveAt: value }));
+            }}
+          />
         </div>
       </div>
     </main>

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  defaultAutoArchiveDays,
   reservedTagPublicIds,
   type CreateTagInput,
   type CreateTaskInput,
@@ -9,7 +10,7 @@ import {
   type IntegrationStatus,
   type KanbanStatus,
   type LifecycleStatus,
-  type RecurrenceRule,
+  type RecurrenceTemplate,
   type RuleCondition,
   type RuleEffect,
   type RuleStrength,
@@ -188,22 +189,14 @@ export interface SchedulableTask {
   dependsOnTaskIds: number[];
 }
 
-export interface RecurrenceTemplate {
-  rule: RecurrenceRule;
-  title: string;
-  description: string | null;
-  priority: number;
-  rank: number;
-  durationMinutesRemaining: number;
-  splittable: boolean;
-  tagIds: number[];
-}
+/** Unarchiving pushes a task at least this far out, so it does not immediately re-archive. */
+const UNARCHIVE_MINIMUM_DAYS = 14;
 
 const taskSummarySql = String.raw`
   SELECT
     t.id, t.public_id, t.title, t.priority, t.rank, t.description,
     t.kanban_status, t.lifecycle_status, t.splittable, t.duration_minutes_remaining, t.duration_estimated,
-    t.earliest_start, t.deadline_at,
+    t.earliest_start, t.deadline_at, t.auto_archive_at,
     t.completed_at, t.origin, t.updated_at,
     COALESCE((SELECT json_group_array(json_object(
       'id', tag.id, 'publicId', tag.public_id, 'title', tag.title, 'description', tag.description,
@@ -238,6 +231,7 @@ function mapTaskSummary(value: Row): TaskSummary {
     splittable: boolean(value.splittable),
     earliestStart: nullableText(value.earliest_start),
     deadlineAt: nullableText(value.deadline_at),
+    autoArchiveAt: nullableText(value.auto_archive_at),
     completedAt: nullableText(value.completed_at),
     origin: text(value.origin),
     tags: tags.map((tag) => ({ ...tag, parentIds: [] })),
@@ -265,7 +259,6 @@ export class TaskRepository {
       maxChunkMinutes: task.max_chunk_minutes === null ? 180 : integer(task.max_chunk_minutes),
       createdAt: text(task.created_at),
       timeBlocks: this.listTimeBlocksForTask(id),
-      recurrence: this.listRecurrence(id),
       dependsOn,
       dependents,
     };
@@ -361,20 +354,28 @@ export class TaskRepository {
     // A task created together with a calendar_event block has no work left outside that block.
     const durationMinutesRemaining =
       input.timeBlock?.type === "calendar_event" ? 0 : input.durationMinutesRemaining ?? null;
+    // Imported commitments opt out of decay; everything else gets a month. Terminal rows keep
+    // NULL: the Completed/Cancelled view is already their record.
+    const terminal = kanbanStatus === "completed" || kanbanStatus === "cancelled";
+    const autoArchiveAt = input.autoArchiveAt !== undefined
+      ? input.autoArchiveAt
+      : terminal || input.timeBlock?.type === "calendar_event"
+        ? null
+        : new Date(Date.now() + defaultAutoArchiveDays * 86_400_000).toISOString();
 
     const result = this.database.connection
       .prepare(
         `INSERT INTO tasks
           (public_id, title, description, kanban_status, priority, rank, duration_minutes_remaining, duration_estimated,
-           splittable, min_chunk_minutes, max_chunk_minutes, earliest_start, deadline_at,
+           splittable, min_chunk_minutes, max_chunk_minutes, earliest_start, deadline_at, auto_archive_at,
            origin, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         randomUUID(), title, input.description?.trim() || null, kanbanStatus, input.priority ?? 0,
         input.rank ?? Date.now(), durationMinutesRemaining, durationMinutesRemaining === null ? 0 : 1,
         input.splittable ? 1 : 0, input.minChunkMinutes ?? 30, input.maxChunkMinutes ?? 180,
-        input.earliestStart ?? null, input.deadlineAt ?? null,
+        input.earliestStart ?? null, input.deadlineAt ?? null, autoArchiveAt,
         input.origin ?? "manual", timestamp, timestamp,
       );
     const taskId = insertedId(result);
@@ -471,7 +472,7 @@ export class TaskRepository {
   /**
    * Expand a task into a goal: create (or reuse) a tag named after the task, mark it a goal,
    * and attach it to the task so the task becomes its first subtask. Parent/child links
-   * between tasks are expressed through shared tags (see ensureTaskTag), so this conversion
+   * between tasks are expressed through shared tags (see setTaskTags), so this conversion
    * is the moment a task grows a subtask container — later tasks tagged with the goal are
    * its subtasks.
    */
@@ -509,12 +510,11 @@ export class TaskRepository {
   }
 
   /**
-   * Find-or-create the tag that maps a parent task to its work, then attach it to the task.
-   * Parent-child links between tasks are expressed through shared tags instead of a
-   * parent_task_id column; recurrence materialization uses this to stamp each occurrence
-   * (and its template) with a tag that names the parent task.
+   * Find-or-create the tag that names a routine, remember it on the template, and return it.
+   * Occurrences carry it, so /tags/:id lists a routine's whole history even though the template is
+   * no longer a task.
    */
-  ensureTaskTag(taskId: number, input: { title: string; description?: string }): Tag {
+  ensureTemplateTag(templateId: number, input: { title: string; description?: string }): Tag {
     const title = input.title.trim();
     if (!title) throw new Error("Tag title is required");
     const timestamp = now();
@@ -529,8 +529,8 @@ export class TaskRepository {
             .prepare("INSERT INTO tags (public_id, title, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
             .run(randomUUID(), title, input.description?.trim() || null, timestamp, timestamp));
       this.database.connection
-        .prepare("INSERT OR IGNORE INTO task_tags (task_id, tag_id, source, created_at) VALUES (?, ?, 'system', ?)")
-        .run(taskId, tagId, timestamp);
+        .prepare("UPDATE recurrence_templates SET routine_tag_id = ?, updated_at = ? WHERE id = ?")
+        .run(tagId, timestamp, templateId);
       this.database.connection.exec("COMMIT");
       return this.listTags().find((tag) => tag.id === tagId)!;
     } catch (error) {
@@ -559,6 +559,11 @@ export class TaskRepository {
   }
 
   updateTask(taskId: number, input: UpdateTaskInput): void {
+    // Read the current column before deciding the decay clock: reopening a finished task restarts
+    // it, but an ordinary move must not touch a date that is deliberately NULL.
+    const current = this.database.connection
+      .prepare("SELECT kanban_status FROM tasks WHERE id = ?")
+      .get(taskId);
     const assignments: string[] = [];
     const values: Array<string | number | null> = [];
     const add = (column: string, value: string | number | null) => {
@@ -576,6 +581,17 @@ export class TaskRepository {
       } else {
         add("completed_at", null);
       }
+      // A finished task is its own record; it does not need a decay date. Reopening one puts it
+      // back under the default clock, so a re-opened task cannot linger forever unnoticed.
+      const currentStatus = current === undefined ? null : text(row(current, "task").kanban_status);
+      const wasTerminal = currentStatus === "completed" || currentStatus === "cancelled";
+      if (input.kanbanStatus === "completed" || input.kanbanStatus === "cancelled") {
+        add("auto_archive_at", null);
+      } else if (wasTerminal) {
+        add("auto_archive_at", new Date(Date.now() + defaultAutoArchiveDays * 86_400_000).toISOString());
+      }
+      // Any other move leaves the instant alone. NULL there means "never decay", which is a choice
+      // someone made; filling it in because a card was dragged would silently undo that choice.
     }
     if (input.priority !== undefined) add("priority", input.priority);
     if (input.rank !== undefined) add("rank", input.rank);
@@ -595,6 +611,13 @@ export class TaskRepository {
         .run(...values, taskId);
       if (result.changes !== 1) throw new Error("Expected task to exist");
     }
+    // Written last, so an explicit instant wins over the status-derived one above: pushing a task's
+    // expiry out is exactly what a caller setting it by hand means to do.
+    if (input.autoArchiveAt !== undefined) {
+      this.database.connection
+        .prepare("UPDATE tasks SET auto_archive_at = ? WHERE id = ?")
+        .run(input.autoArchiveAt, taskId);
+    }
     if (input.tagIds) this.setTaskTags(taskId, input.tagIds);
     if (input.dependsOnTaskIds) this.setTaskDependencies(taskId, input.dependsOnTaskIds);
   }
@@ -603,6 +626,58 @@ export class TaskRepository {
     this.database.connection
       .prepare("UPDATE tasks SET lifecycle_status = ?, updated_at = ? WHERE id = ?")
       .run(status, now(), id);
+  }
+
+  /**
+   * Archive every open task whose decay instant has passed. Terminal rows keep no instant and are
+   * never touched; archived rows stay archived, so a second sweep is a no-op.
+   *
+   * A task with accepted time on the calendar is exempt: someone committed that hour, and hiding
+   * the task while its block stayed behind would leave time reserved for work the board no longer
+   * shows. Manual blocks count here even while still proposed — placing one by hand is a commitment.
+   */
+  archiveDueTasks(instant: string = now()): void {
+    const due = this.database.connection
+      .prepare(
+        `SELECT id FROM tasks
+          WHERE auto_archive_at IS NOT NULL AND auto_archive_at <= ?
+            AND lifecycle_status <> 'archived'
+            AND kanban_status NOT IN ('completed', 'cancelled')
+            AND NOT EXISTS (SELECT 1 FROM time_blocks block WHERE block.task_id = tasks.id
+                              AND (block.source = 'manual' OR block.status IN ('accepted', 'completed')))`,
+      )
+      .all(instant)
+      .map((value) => integer(row(value, "due task").id));
+    if (due.length === 0) return;
+    const timestamp = now();
+    const archive = this.database.connection.prepare(
+      "UPDATE tasks SET lifecycle_status = 'archived', updated_at = ? WHERE id = ?",
+    );
+    this.database.connection.exec("BEGIN IMMEDIATE");
+    try {
+      for (const id of due) archive.run(timestamp, id);
+      this.database.connection.exec("COMMIT");
+    } catch (error) {
+      this.database.connection.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  /**
+   * Unarchive a task and reset its clock to two weeks out, or keep its original instant when that is
+   * further away — so unarchiving something that was already set to linger does not shorten it.
+   */
+  unarchiveTask(id: number): TaskDetail {
+    const current = this.getTask(id);
+    // A task set to never decay keeps that choice: unarchiving must not put it back on a clock,
+    // or the next sweep would hide a task someone just deliberately brought back.
+    const original = current.autoArchiveAt === null ? null : new Date(current.autoArchiveAt);
+    const minimum = new Date(Date.now() + UNARCHIVE_MINIMUM_DAYS * 86_400_000);
+    const next = original === null ? null : original > minimum ? original : minimum;
+    this.database.connection
+      .prepare("UPDATE tasks SET lifecycle_status = 'active', auto_archive_at = ?, updated_at = ? WHERE id = ?")
+      .run(next === null ? null : next.toISOString(), now(), id);
+    return this.getTask(id);
   }
 
   setTaskTags(taskId: number, tagIds: number[]): void {
@@ -785,69 +860,155 @@ export class TaskRepository {
     }
   }
 
-  upsertRecurrence(taskId: number, input: UpsertRecurrenceInput): RecurrenceRule {
+  /**
+   * Create or update a routine. A template is not a task, so this writes only the template and its
+   * tags: nothing is placed on the board until `materializeRecurrences` runs.
+   */
+  createRecurrenceTemplate(input: UpsertRecurrenceInput): RecurrenceTemplate {
     const timestamp = now();
-    this.database.connection
-      .prepare(
-        `INSERT INTO recurrence_rules
-          (task_id, frequency, interval_count, weekdays_json, local_start_time, next_occurrence_date, active, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
-         ON CONFLICT(task_id) DO UPDATE SET frequency = excluded.frequency, interval_count = excluded.interval_count,
-           weekdays_json = excluded.weekdays_json, local_start_time = excluded.local_start_time,
-           next_occurrence_date = excluded.next_occurrence_date, active = 1, updated_at = excluded.updated_at`,
-      )
-      .run(
-        taskId, input.frequency, input.intervalCount ?? 1, JSON.stringify(input.weekdays ?? []),
-        input.localStartTime ?? null, input.nextOccurrenceDate, timestamp, timestamp,
-      );
-    return this.listRecurrence(taskId)!;
+    this.database.connection.exec("BEGIN IMMEDIATE");
+    try {
+      const result = this.database.connection
+        .prepare(
+          `INSERT INTO recurrence_templates
+            (public_id, title, description, priority, duration_minutes, splittable, min_chunk_minutes,
+             max_chunk_minutes, frequency, interval_count, weekdays_json,
+             next_occurrence_date, auto_archive_hour, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          randomUUID(), input.title.trim(), input.description ?? null, input.priority ?? 0,
+          input.durationMinutes, input.splittable ? 1 : 0, input.minChunkMinutes ?? 30,
+          input.maxChunkMinutes ?? 180, input.frequency, input.intervalCount ?? 1,
+          JSON.stringify(input.weekdays ?? []), input.nextOccurrenceDate,
+          input.autoArchiveHour ?? null, timestamp, timestamp,
+        );
+      const rowId = insertedId(result);
+      this.setRecurrenceTemplateTags(rowId, input.tagIds ?? []);
+      this.database.connection.exec("COMMIT");
+      return this.requireRecurrenceTemplate(rowId);
+    } catch (error) {
+      this.database.connection.exec("ROLLBACK");
+      throw error;
+    }
   }
 
-  private listRecurrence(taskId: number): RecurrenceRule | null {
-    const value = this.database.connection.prepare("SELECT * FROM recurrence_rules WHERE task_id = ?").get(taskId);
-    if (!value) return null;
-    const item = row(value, "recurrence");
-    return {
-      id: integer(item.id), taskId: integer(item.task_id), frequency: text(item.frequency) as RecurrenceRule["frequency"],
-      intervalCount: integer(item.interval_count), weekdays: item.weekdays_json ? json<number[]>(item.weekdays_json, []) : [],
-      localStartTime: nullableText(item.local_start_time), nextOccurrenceDate: text(item.next_occurrence_date),
-      active: boolean(item.active),
-    };
+  updateRecurrenceTemplate(id: number, input: UpsertRecurrenceInput): RecurrenceTemplate {
+    const timestamp = now();
+    this.database.connection.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.connection
+        .prepare(
+          `UPDATE recurrence_templates SET title = ?, description = ?, priority = ?, duration_minutes = ?,
+             splittable = ?, min_chunk_minutes = ?, max_chunk_minutes = ?, frequency = ?, interval_count = ?,
+             weekdays_json = ?, next_occurrence_date = ?, auto_archive_hour = ?,
+             updated_at = ?
+           WHERE id = ?`,
+        )
+        .run(
+          input.title.trim(), input.description ?? null, input.priority ?? 0, input.durationMinutes,
+          input.splittable ? 1 : 0, input.minChunkMinutes ?? 30, input.maxChunkMinutes ?? 180,
+          input.frequency, input.intervalCount ?? 1, JSON.stringify(input.weekdays ?? []),
+          input.nextOccurrenceDate, input.autoArchiveHour ?? null,
+          timestamp, id,
+        );
+      this.setRecurrenceTemplateTags(id, input.tagIds ?? []);
+      this.database.connection.exec("COMMIT");
+    } catch (error) {
+      this.database.connection.exec("ROLLBACK");
+      throw error;
+    }
+    return this.requireRecurrenceTemplate(id);
+  }
+
+  private setRecurrenceTemplateTags(templateId: number, tagIds: number[]): void {
+    this.database.connection.prepare("DELETE FROM recurrence_template_tags WHERE template_id = ?").run(templateId);
+    const insert = this.database.connection.prepare(
+      "INSERT OR IGNORE INTO recurrence_template_tags (template_id, tag_id) VALUES (?, ?)",
+    );
+    for (const tagId of tagIds) insert.run(templateId, tagId);
+  }
+
+  private getRecurrenceTemplate(id: number): RecurrenceTemplate | null {
+    const value = this.database.connection.prepare("SELECT * FROM recurrence_templates WHERE id = ?").get(id);
+    return value ? this.mapRecurrenceTemplate(row(value, "recurrence template")) : null;
+  }
+
+  /** The same read as `getRecurrenceTemplate`, for callers that must fail rather than handle null. */
+  requireRecurrenceTemplate(id: number): RecurrenceTemplate {
+    const template = this.getRecurrenceTemplate(id);
+    if (template === null) throw new Error(`Expected database row for recurrence template ${id}`);
+    return template;
   }
 
   listRecurrenceTemplates(): RecurrenceTemplate[] {
     return this.database.connection
-      .prepare(
-        `SELECT rule.*, task.title, task.description, task.priority, task.rank, task.duration_minutes_remaining, task.splittable,
-          COALESCE((SELECT json_group_array(task_tag.tag_id) FROM task_tags task_tag WHERE task_tag.task_id = task.id), '[]') AS tag_ids
-         FROM recurrence_rules rule JOIN tasks task ON task.id = rule.task_id WHERE rule.active = 1`,
-      )
+      .prepare("SELECT * FROM recurrence_templates ORDER BY title")
       .all()
-      .map((value) => {
-        const item = row(value, "recurrence template");
-        return {
-          rule: {
-            id: integer(item.id), taskId: integer(item.task_id), frequency: text(item.frequency) as RecurrenceRule["frequency"],
-            intervalCount: integer(item.interval_count), weekdays: item.weekdays_json ? json<number[]>(item.weekdays_json, []) : [],
-            localStartTime: nullableText(item.local_start_time), nextOccurrenceDate: text(item.next_occurrence_date), active: boolean(item.active),
-          },
-          title: text(item.title), description: nullableText(item.description), priority: integer(item.priority),
-          rank: Number(item.rank), durationMinutesRemaining: integer(item.duration_minutes_remaining), splittable: boolean(item.splittable),
-          tagIds: json<number[]>(item.tag_ids, []),
-        };
-      });
+      .map((value) => this.mapRecurrenceTemplate(row(value, "recurrence template")));
   }
 
-  recurrenceOccurrenceExists(ruleId: number, date: string): boolean {
+  deleteRecurrenceTemplate(id: number): void {
+    const result = this.database.connection.prepare("DELETE FROM recurrence_templates WHERE id = ?").run(id);
+    if (result.changes !== 1) throw new Error(`Expected database row for recurrence template ${id}`);
+  }
+
+  private mapRecurrenceTemplate(item: Row): RecurrenceTemplate {
+    return {
+      id: integer(item.id),
+      publicId: text(item.public_id),
+      title: text(item.title),
+      description: nullableText(item.description),
+      priority: integer(item.priority),
+      durationMinutes: integer(item.duration_minutes),
+      splittable: boolean(item.splittable),
+      minChunkMinutes: item.min_chunk_minutes === null ? 30 : integer(item.min_chunk_minutes),
+      maxChunkMinutes: item.max_chunk_minutes === null ? 180 : integer(item.max_chunk_minutes),
+      frequency: text(item.frequency) as RecurrenceTemplate["frequency"],
+      intervalCount: integer(item.interval_count),
+      weekdays: item.weekdays_json ? json<number[]>(item.weekdays_json, []) : [],
+      nextOccurrenceDate: text(item.next_occurrence_date),
+      autoArchiveHour: item.auto_archive_hour === null ? null : integer(item.auto_archive_hour),
+      routineTagId: item.routine_tag_id === null ? null : integer(item.routine_tag_id),
+      tagIds: json<number[]>(
+        (this.database.connection
+          .prepare("SELECT COALESCE(json_group_array(tag_id), '[]') AS ids FROM recurrence_template_tags WHERE template_id = ?")
+          .get(integer(item.id)) as Row | undefined)?.ids ?? "[]",
+        [],
+      ),
+      updatedAt: text(item.updated_at),
+    };
+  }
+
+  /**
+   * Whether this routine already produced a live task for `date`. The occurrence ledger is a record
+   * of what was generated, not a lock: a child that was deleted or finished is regenerated, because
+   * the point of a routine is that today's row exists today.
+   */
+  /**
+   * Whether this recurrence has already produced a card for this date — whatever became of it. The
+   * card is the day's record, so completing it must not cause another; re-creating it would put a
+   * duplicate beside the finished one. (There is no delete route, so a row cannot be freed this way.)
+   */
+  recurrenceOccurrenceIsLive(templateId: number, date: string): boolean {
     return Boolean(this.database.connection
-      .prepare("SELECT 1 FROM recurrence_occurrences WHERE recurrence_rule_id = ? AND occurrence_date = ?")
-      .get(ruleId, date));
+      .prepare(
+        `SELECT 1 FROM recurrence_occurrences occurrence
+           JOIN tasks child ON child.id = occurrence.child_task_id
+          WHERE occurrence.template_id = ? AND occurrence.occurrence_date = ?`,
+      )
+      .get(templateId, date));
   }
 
-  recordRecurrenceOccurrence(ruleId: number, date: string, childTaskId: number): void {
+  /** Record that a template produced a child for a date, replacing any earlier child for it. */
+  recordRecurrenceOccurrence(templateId: number, date: string, childTaskId: number): void {
     this.database.connection
-      .prepare("INSERT INTO recurrence_occurrences (recurrence_rule_id, occurrence_date, child_task_id, created_at) VALUES (?, ?, ?, ?)")
-      .run(ruleId, date, childTaskId, now());
+      .prepare(
+        `INSERT INTO recurrence_occurrences (template_id, occurrence_date, child_task_id, created_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(template_id, occurrence_date) DO UPDATE SET child_task_id = excluded.child_task_id`,
+      )
+      .run(templateId, date, childTaskId, now());
   }
 
   listSchedulableTasks(): SchedulableTask[] {
@@ -865,6 +1026,9 @@ export class TaskRepository {
          FROM tasks task
          WHERE task.kanban_status IN ('ready', 'in_progress') AND task.duration_estimated = 1
            AND task.duration_minutes_remaining > 0
+           -- An archived task is out of the plan: it is still readable, but nothing should place it
+           -- in the week. This is the only gate — what belongs this week is the scheduler's answer.
+           AND task.lifecycle_status NOT IN ('archived', 'completed', 'cancelled')
          ORDER BY task.priority ASC, task.rank DESC`,
       )
       .all()
@@ -873,10 +1037,6 @@ export class TaskRepository {
         const tagIds = json<string[]>(item.tag_ids, []);
         const derivedTagIds = json<string[]>(item.derived_tag_ids, []);
         const effectiveTagIds = [...new Set([...tagIds, ...derivedTagIds])];
-        // Eligibility for the week is tag-driven: a task is schedulable only when it carries
-        // mind-palace:this-week, directly or through an ancestor tag (the weekday tags are
-        // children of this-week, so a day-pinned task is eligible through its day tag).
-        if (!effectiveTagIds.includes(reservedTagIds.thisWeek)) return null;
         return {
           id: integer(item.id), title: text(item.title), priority: integer(item.priority), rank: Number(item.rank),
           durationMinutesRemaining: integer(item.duration_minutes_remaining), splittable: boolean(item.splittable),
@@ -885,8 +1045,7 @@ export class TaskRepository {
           tagIds: effectiveTagIds,
           dependsOnTaskIds: json<number[]>(item.depends_on_task_ids, []),
         };
-      })
-      .filter((task): task is SchedulableTask => task !== null);
+      });
   }
 
   createScheduleRun(horizonStart: string, horizonEnd: string, input: unknown, modelVersion: string): ScheduleRun {

@@ -2,15 +2,7 @@ import type { TaskDetail, TimeBlock, UpdateTimeBlockInput } from "@mind-palace/s
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "./api";
-
-function toLocalDateTime(value: string): string {
-  const date = new Date(value);
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-}
-
-function toIso(value: string): string | null {
-  return value ? new Date(value).toISOString() : null;
-}
+import { toIsoInstant, toLocalDateTimeInput } from "./lib/datetime";
 
 export function TimeBlockPage() {
   const id = Number(useParams().id);
@@ -27,8 +19,8 @@ export function TimeBlockPage() {
       const nextBlock = await api.timeBlock(id);
       setBlock(nextBlock);
       setTask(await api.task(nextBlock.taskId));
-      setStartAt(toLocalDateTime(nextBlock.startAt));
-      setEndAt(toLocalDateTime(nextBlock.endAt));
+      setStartAt(toLocalDateTimeInput(nextBlock.startAt));
+      setEndAt(toLocalDateTimeInput(nextBlock.endAt));
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError));
@@ -44,8 +36,8 @@ export function TimeBlockPage() {
     setBusy(true);
     setError(null);
     try {
-      const nextStart = toIso(startAt);
-      const nextEnd = toIso(endAt);
+      const nextStart = toIsoInstant(startAt);
+      const nextEnd = toIsoInstant(endAt);
       if (nextStart && nextEnd && new Date(nextEnd) <= new Date(nextStart)) {
         throw new Error("End time must be after start time");
       }
@@ -56,8 +48,8 @@ export function TimeBlockPage() {
       const saved = await api.updateTimeBlock(id, input);
       setBlock(saved);
       setTask(await api.task(saved.taskId));
-      setStartAt(toLocalDateTime(saved.startAt));
-      setEndAt(toLocalDateTime(saved.endAt));
+      setStartAt(toLocalDateTimeInput(saved.startAt));
+      setEndAt(toLocalDateTimeInput(saved.endAt));
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : String(saveError));
     } finally {
@@ -112,7 +104,7 @@ export function TimeBlockPage() {
         </div>
         <div className="button-row">
           <button className="primary-button" disabled={busy}>{busy ? "Saving..." : "Save changes"}</button>
-          <button type="button" onClick={() => { setStartAt(toLocalDateTime(block.startAt)); setEndAt(toLocalDateTime(block.endAt)); setError(null); }}>Cancel</button>
+          <button type="button" onClick={() => { setStartAt(toLocalDateTimeInput(block.startAt)); setEndAt(toLocalDateTimeInput(block.endAt)); setError(null); }}>Cancel</button>
         </div>
       </form>
     </main>

@@ -51,17 +51,23 @@ export type TagType = (typeof tagTypes)[number];
 export const priorities = [0, 1, 2, 3, 4, 5] as const;
 export type Priority = (typeof priorities)[number];
 
+/**
+ * How many days ahead the schedule is planned. One number on purpose: the scheduler lays out this
+ * window, and recurrence materialization fills exactly the same window, so the board never holds
+ * work the scheduler cannot place or vice versa. Changing one without the other breaks that.
+ */
+export const scheduleHorizonDays = 7;
+
 /** Reserved tags that carry behavior (see AGENTS.md "tag-driven behavior"). */
 export const reservedTagPublicIds = {
   calendarEvent: "mind-palace:calendar-event",
   routine: "mind-palace:routine",
-  thisWeek: "mind-palace:this-week",
 } as const;
 
 /**
  * Weekday tags in JavaScript `Date#getDay()` order: index 0 = Sunday .. index 6 = Saturday.
- * Each one's parent is `mind-palace:this-week` (see migration 004), so a task tagged with a
- * weekday is eligible this week and must be scheduled on that day.
+ * They are the selectors for the seeded day-pin rules (`assignDays`), so a task carrying one must
+ * be scheduled on that day. They are plain selectors: the rules decide what a day means.
  */
 export const weekdayTagPublicIds = [
   "mind-palace:sunday",
@@ -72,6 +78,12 @@ export const weekdayTagPublicIds = [
   "mind-palace:friday",
   "mind-palace:saturday",
 ] as const;
+
+/** Days an ordinary task stays on the board before it decays. */
+export const defaultAutoArchiveDays = 30;
+
+/** Short weekday names in `Date#getDay()` order, so 0 = Sunday. */
+export const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
 export type JsonObject = Record<string, unknown>;
 
@@ -90,6 +102,12 @@ export interface TaskSummary {
   earliestStart: string | null;
   deadlineAt: string | null;
   completedAt: string | null;
+  /**
+   * Instant at which this task stops appearing on the board, or null for never. Set when the task is
+   * created — a month out, or the routine's own decay point for a recurrence occurrence — and
+   * pushed forward when an archived task is unarchived.
+   */
+  autoArchiveAt: string | null;
   origin: string;
   tags: Tag[];
   derivedTags: Tag[];
@@ -101,7 +119,6 @@ export interface TaskDetail extends TaskSummary {
   maxChunkMinutes: number;
   createdAt: string;
   timeBlocks: TimeBlock[];
-  recurrence: RecurrenceRule | null;
   /** Tasks this task depends on — they must be completed (and are scheduled) first. Empty unless linked. */
   dependsOn: TaskSummary[];
   /** Tasks that depend on this task — this task must come first for them. Not a hard gate on manual completion. */
@@ -135,15 +152,52 @@ export interface TimeBlock {
   notes: string | null;
 }
 
-export interface RecurrenceRule {
+/**
+ * A recurrence is configuration, not work: it says that an ordinary task should exist on certain
+ * days, and carries the values each occurrence is born with. It is deliberately not a task, or it
+ * would need excluding from the scheduler, the decay sweep, the briefing and every kanban list.
+ */
+export interface RecurrenceTemplate {
   id: number;
-  taskId: number;
-  frequency: "daily" | "weekly";
+  publicId: string;
+  title: string;
+  description: string | null;
+  priority: number;
+  durationMinutes: number;
+  splittable: boolean;
+  minChunkMinutes: number;
+  maxChunkMinutes: number;
+  frequency: Frequency;
   intervalCount: number;
   weekdays: number[];
-  localStartTime: string | null;
   nextOccurrenceDate: string;
-  active: boolean;
+  /** Local hour (`0`-`23`) of the occurrence's day at which its child task decays; null = end of day. */
+  autoArchiveHour: number | null;
+  /** The tag grouping this routine with the occurrences it produced; null until it first runs. */
+  routineTagId: number | null;
+  tagIds: number[];
+  updatedAt: string;
+}
+
+export type Frequency = "daily" | "weekly";
+
+/**
+ * What one materialization pass did. Reported to the caller because "nothing was created" is a
+ * legitimate outcome — a weekly routine often has no firing date inside a seven-day window — and a
+ * silent 200 reads as a broken job.
+ */
+/** What saving a recurrence returns: the template plus what its first materialization did. */
+export interface SavedRecurrence {
+  template: RecurrenceTemplate;
+  materialized: MaterializeResult;
+}
+
+export interface MaterializeResult {
+  created: number[];
+  /** Dates a rule selected but that already had a live child, so nothing was created. */
+  alreadyPresent: number;
+  /** Routines that fired nowhere in the window (their weekdays all fall outside it). */
+  idleTemplates: string[];
 }
 
 export interface WeatherForecast {
@@ -379,6 +433,11 @@ export interface CreateTaskInput {
   tagIds?: number[];
   origin?: string;
   /**
+   * When this task decays; `null` never, omitted the default month. Recurrence occurrences pass
+   * their own instant so a "wake up" row is gone by the time the morning is over.
+   */
+  autoArchiveAt?: string | null;
+  /**
    * Create the task together with its first time block — the Quick-capture surface for
    * tag-driven commitment kinds (currently only calendar events). The block's minutes are
    * subtracted from `durationMinutesRemaining` exactly like any other created block.
@@ -406,6 +465,11 @@ export interface UpdateTaskInput {
   earliestStart?: string | null;
   deadlineAt?: string | null;
   tagIds?: number[];
+  /**
+   * When this task decays and leaves the board. `null` never; omitted leaves the current instant
+   * alone. Setting it is how you push a task's expiry out (or bring it in) by hand.
+   */
+  autoArchiveAt?: string | null;
   /**
    * Replace the full set of tasks this task depends on (like `tagIds`, the editor sends the
    * whole list and the repository diffs it against the current links). Omit to leave deps alone.
@@ -442,12 +506,25 @@ export interface UpdateTimeBlockInput {
   endAt?: string;
 }
 
+/** Everything a routine needs to define itself, including the values each occurrence is born with. */
 export interface UpsertRecurrenceInput {
-  frequency: RecurrenceRule["frequency"];
+  title: string;
+  description?: string | null;
+  priority?: number;
+  durationMinutes: number;
+  splittable?: boolean;
+  minChunkMinutes?: number;
+  maxChunkMinutes?: number;
+  tagIds?: number[];
+  frequency: Frequency;
   intervalCount?: number;
   weekdays?: number[];
-  localStartTime?: string;
   nextOccurrenceDate: string;
+  /**
+   * Local hour (`0`-`23`) of the occurrence's day at which its child task decays, so a "wake up"
+   * routine can be gone by 10am. Null/omitted means end of that day.
+   */
+  autoArchiveHour?: number | null;
 }
 
 /**

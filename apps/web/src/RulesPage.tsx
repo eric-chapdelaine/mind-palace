@@ -6,6 +6,7 @@ import {
   type SchedulerRule,
   type SchedulerRuleInput,
   type Tag,
+  weekdayLabels,
 } from "@mind-palace/shared";
 import { useEffect, useState } from "react";
 import { api } from "./api";
@@ -20,7 +21,8 @@ const EFFECT_TYPES = [
   { value: "withinAfter", label: "Within X of prerequisite" },
 ] as const;
 
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+/** Rule `days` are 1 = Monday .. 6 = Saturday, 0 = Sunday; `weekdayLabels` is Sunday-first. */
+const WEEKDAYS = [1, 2, 3, 4, 5, 6, 0].map((day) => weekdayLabels[day]!);
 
 /** Sentinel for a rule whose `applies` is too complex for the simple tag picker; kept verbatim. */
 const KEEP_CONDITION = "__keep__";
