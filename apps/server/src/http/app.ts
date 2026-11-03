@@ -94,7 +94,9 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
   // sweep (decay, recurrence materialization) instead of waiting for its pinned time.
   app.post("/api/jobs/:name/run", async (context) => {
     const name = context.req.param("name");
-    if (!await scheduler.runNow(name)) throw new Error(`No job named ${name}`);
+    const result = await scheduler.runNow(name);
+    if (result === "unknown") throw new Error(`No job named ${name}`);
+    if (result === "busy") throw new Error(`Job ${name} is already running`);
     return context.json(scheduler.status());
   });
   app.get("/api/tasks", (context) => context.json(tasks.listTasks()));

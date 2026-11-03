@@ -123,11 +123,13 @@ export class JobScheduler {
   }
 
   /** Run one job immediately, by name. Returns false when no job has that name. */
-  async runNow(name: string): Promise<boolean> {
+  /** Run a job out of band. Unknown names and a job already in flight are both refused. */
+  async runNow(name: string): Promise<"ran" | "unknown" | "busy"> {
     const runtime = this.runtimes.find((candidate) => candidate.job.name === name);
-    if (!runtime) return false;
-    await this.execute(runtime);
-    return true;
+    if (!runtime) return "unknown";
+    if (runtime.running) return "busy";
+    await this.execute(runtime, false);
+    return "ran";
   }
 
   private scheduleNext(runtime: JobRuntime): void {
@@ -137,10 +139,11 @@ export class JobScheduler {
     runtime.timer.unref();
   }
 
-  private async execute(runtime: JobRuntime): Promise<void> {
+  /** `reschedule` is false for an out-of-band run, which must not move the job's own timer. */
+  private async execute(runtime: JobRuntime, reschedule = true): Promise<void> {
     if (runtime.running) {
       console.warn(`[jobs] ${runtime.job.name} is still running; skipping this tick`);
-      this.scheduleNext(runtime);
+      if (reschedule) this.scheduleNext(runtime);
       return;
     }
     runtime.running = true;
@@ -155,7 +158,7 @@ export class JobScheduler {
       runtime.running = false;
       runtime.lastFinishedAt = new Date().toISOString();
       runtime.runCount += 1;
-      this.scheduleNext(runtime);
+      if (reschedule) this.scheduleNext(runtime);
     }
   }
 }
