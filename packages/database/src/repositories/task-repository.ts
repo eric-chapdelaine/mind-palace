@@ -969,13 +969,17 @@ export class TaskRepository {
    * of what was generated, not a lock: a child that was deleted or finished is regenerated, because
    * the point of a routine is that today's row exists today.
    */
+  /**
+   * Whether this recurrence has already produced a card for this date — whatever became of it. The
+   * card is the day's record, so completing it must not cause another; re-creating it would put a
+   * duplicate beside the finished one. (There is no delete route, so a row cannot be freed this way.)
+   */
   recurrenceOccurrenceIsLive(templateId: number, date: string): boolean {
     return Boolean(this.database.connection
       .prepare(
         `SELECT 1 FROM recurrence_occurrences occurrence
            JOIN tasks child ON child.id = occurrence.child_task_id
-          WHERE occurrence.template_id = ? AND occurrence.occurrence_date = ?
-            AND child.lifecycle_status NOT IN ('archived', 'completed', 'cancelled')`,
+          WHERE occurrence.template_id = ? AND occurrence.occurrence_date = ?`,
       )
       .get(templateId, date));
   }
