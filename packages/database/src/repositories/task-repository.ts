@@ -886,7 +886,7 @@ export class TaskRepository {
       const rowId = insertedId(result);
       this.setRecurrenceTemplateTags(rowId, input.tagIds ?? []);
       this.database.connection.exec("COMMIT");
-      return this.getRecurrenceTemplate(rowId)!;
+      return this.requireRecurrenceTemplate(rowId);
     } catch (error) {
       this.database.connection.exec("ROLLBACK");
       throw error;
@@ -918,7 +918,7 @@ export class TaskRepository {
       this.database.connection.exec("ROLLBACK");
       throw error;
     }
-    return this.getRecurrenceTemplate(id)!;
+    return this.requireRecurrenceTemplate(id);
   }
 
   private setRecurrenceTemplateTags(templateId: number, tagIds: number[]): void {
@@ -934,6 +934,13 @@ export class TaskRepository {
     return value ? this.mapRecurrenceTemplate(row(value, "recurrence template")) : null;
   }
 
+  /** The same read as `getRecurrenceTemplate`, for callers that must fail rather than handle null. */
+  requireRecurrenceTemplate(id: number): RecurrenceTemplate {
+    const template = this.getRecurrenceTemplate(id);
+    if (template === null) throw new Error(`Expected database row for recurrence template ${id}`);
+    return template;
+  }
+
   listRecurrenceTemplates(): RecurrenceTemplate[] {
     return this.database.connection
       .prepare("SELECT * FROM recurrence_templates ORDER BY title")
@@ -942,7 +949,8 @@ export class TaskRepository {
   }
 
   deleteRecurrenceTemplate(id: number): void {
-    this.database.connection.prepare("DELETE FROM recurrence_templates WHERE id = ?").run(id);
+    const result = this.database.connection.prepare("DELETE FROM recurrence_templates WHERE id = ?").run(id);
+    if (result.changes !== 1) throw new Error(`Expected database row for recurrence template ${id}`);
   }
 
   private mapRecurrenceTemplate(item: Row): RecurrenceTemplate {
