@@ -216,6 +216,19 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
     return context.json(tasks.getTask(taskId));
   });
 
+  // A drag is one gesture, so it gets one request: move the card and renumber its column in a
+  // single transaction. `index` counts the cards above it in that column (0 = first).
+  app.post("/api/tasks/:id/move", async (context) => {
+    const taskId = numberParam(context.req.param("id"), "task id");
+    const body = await context.req.json();
+    if (!kanbanStatuses.includes(body.kanbanStatus)) {
+      throw new Error("kanbanStatus must be one of " + kanbanStatuses.join(", "));
+    }
+    if (!Number.isInteger(body.index) || body.index < 0) throw new Error("index must be a non-negative integer");
+    tasks.moveTask(taskId, body.kanbanStatus, body.index);
+    return context.json(tasks.getTask(taskId));
+  });
+
   app.post("/api/scheduler-rules", async (context) => {
     const body = (await context.req.json()) as Record<string, unknown>;
     return context.json(tasks.createSchedulerRule(parseRuleInput(body)), 201);

@@ -6,6 +6,7 @@ import type {
   IntegrationSummary,
   LifecycleStatus,
   MaterializeResult,
+  MoveTaskInput,
   RecurrenceTemplate,
   SavedRecurrence,
   Schedule,
@@ -87,6 +88,9 @@ export const api = {
     request<TaskDetail>("/api/tasks", { method: "POST", body: JSON.stringify(input) }),
   updateTask: (id: number, input: UpdateTaskInput) =>
     request<TaskDetail>(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+  /** Drop a card: one atomic request moves it and renumbers its column. */
+  moveTask: (id: number, input: MoveTaskInput) =>
+    request<TaskDetail>(`/api/tasks/${id}/move`, { method: "POST", body: JSON.stringify(input) }),
   removeTaskDependency: (id: number, dependsOnTaskId: number) =>
     request<TaskDetail>(`/api/tasks/${id}/dependencies/${dependsOnTaskId}`, { method: "DELETE" }),
   createTag: (input: { title: string; description?: string; parentIds?: number[]; type?: TagType | null }) =>
