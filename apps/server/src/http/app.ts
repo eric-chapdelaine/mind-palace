@@ -311,6 +311,12 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
     return context.json(schedule.getSchedule());
   });
 
+  // Accept the whole plan at once, the counterpart of generating it in one click.
+  app.post("/api/schedule/accept", (context) => {
+    tasks.acceptAllProposedBlocks();
+    return context.json(schedule.getSchedule());
+  });
+
   // Remove the "task :id depends on :dependencyId" link (either direction of the page UI).
   app.delete("/api/tasks/:id/dependencies/:dependencyId", (context) => {
     const taskId = numberParam(context.req.param("id"), "task id");

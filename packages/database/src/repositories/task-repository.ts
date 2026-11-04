@@ -746,7 +746,12 @@ export class TaskRepository {
     return mapTimeBlock(row(this.database.connection.prepare("SELECT * FROM time_blocks WHERE id = ?").get(id), "time block"));
   }
 
-  /** Move a block's window; the task's remaining estimate rebalances to the new held minutes. */
+  /**
+   * Move a block's window; the task's remaining estimate rebalances to the new held minutes.
+   * The window is movable while the block is live — an accepted block keeps its status, because
+   * accepting commits the hours to the plan, not the clock face (`setTimeBlockStatus` still
+   * locks the status itself).
+   */
   updateTimeBlock(id: number, input: UpdateTimeBlockInput): TimeBlock {
     const current = this.getTimeBlock(id);
     const startAt = input.startAt ?? current.startAt;
@@ -831,6 +836,14 @@ export class TaskRepository {
     this.database.connection
       .prepare("UPDATE time_blocks SET status = 'accepted', updated_at = ? WHERE task_id = ? AND status = 'proposed'")
       .run(now(), taskId);
+  }
+
+  /** Accept every proposal in one statement; returns how many blocks changed status. */
+  acceptAllProposedBlocks(): number {
+    const result = this.database.connection
+      .prepare("UPDATE time_blocks SET status = 'accepted', updated_at = ? WHERE status = 'proposed'")
+      .run(now());
+    return Number(result.changes);
   }
 
   supersedeProposedBlocks(): void {

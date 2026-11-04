@@ -6,6 +6,7 @@ import {
   type SleepSession,
   type Tag,
   type TaskSummary,
+  type TimeBlock,
   type UpdateTaskInput,
   type WeatherForecast,
 } from "@mind-palace/shared";
@@ -111,6 +112,14 @@ function blockWindow(day: Date, cursorMinutes: number, durationMinutes: number):
   const endAt = new Date(startAt);
   endAt.setMinutes(startAt.getMinutes() + durationMinutes);
   return { startAt: startAt.toISOString(), endAt: endAt.toISOString() };
+}
+
+/**
+ * Blocks whose window you can drag: the live plan (proposed or accepted). Imported calendar events
+ * are someone else's commitment and finished blocks are history, so neither moves.
+ */
+function isMovable(block: TimeBlock): boolean {
+  return (block.status === "proposed" || block.status === "accepted") && block.type !== "calendar_event";
 }
 
 const terminalStatuses = new Set(["completed", "cancelled"]);
@@ -391,6 +400,22 @@ export function SchedulePage() {
     }
   }
 
+  /**
+   * Accept every proposal at once. Each block keeps its own status, so this is the same change as
+   * clicking Accept on each card — it just saves the clicks when the generated week looks right.
+   */
+  async function acceptAll() {
+    setBusy(true);
+    try {
+      setSchedule(await api.acceptSchedule());
+      setError(null);
+    } catch (acceptError) {
+      setError(acceptError instanceof Error ? acceptError.message : String(acceptError));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const taskById = new Map(tasks.map((task) => [task.id, task]));
   const tagIdByPublicId = new Map(tags.map((tag) => [tag.publicId, tag.id]));
   const dayTagIdSet = new Set(
@@ -525,7 +550,7 @@ export function SchedulePage() {
   }
 
   /**
-   * Drop on a day column: move a dragged proposed block to that time, or — human-driven scheduling —
+   * Drop on a day column: move a dragged live block to that time, or — human-driven scheduling —
    * place a dragged task at that time as a manual block. Both snap to the slot grid.
    */
   async function dropOnCalendarDay(event: DragEvent<HTMLElement>, day: Date) {
@@ -539,7 +564,7 @@ export function SchedulePage() {
     const rect = event.currentTarget.getBoundingClientRect();
     if (blockRaw !== "") {
       const block = schedule?.timeBlocks.find((entry) => entry.id === Number(blockRaw));
-      if (!block || block.status !== "proposed") return;
+      if (!block || !isMovable(block)) return;
       const durationMinutes = (new Date(block.endAt).getTime() - new Date(block.startAt).getTime()) / 60_000;
       const cursorMinutes = (event.clientY - rect.top) / hourHeight * 60 - blockGrabOffsetMinutes.current;
       try {
@@ -588,6 +613,7 @@ export function SchedulePage() {
       new Date(block.startAt) < rangeEnd && new Date(block.endAt) > rangeStart
     ))
     .map((block) => ({ ...block, key: `block-${block.id}` }));
+  const proposedBlockCount = (schedule?.timeBlocks ?? []).filter((block) => block.status === "proposed").length;
   const rangeLabel = `${rangeStart.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
@@ -625,6 +651,15 @@ export function SchedulePage() {
         <button onClick={() => setRangeStart(addDays(rangeStart, 7))} aria-label="Next seven days">›</button>
       </div>
       <h2>{rangeLabel}</h2>
+      <button
+        disabled={busy || proposedBlockCount === 0}
+        onClick={() => void acceptAll()}
+        title={proposedBlockCount === 0
+          ? "Nothing to accept — every block is already committed"
+          : `Accept all ${proposedBlockCount} proposed block${proposedBlockCount === 1 ? "" : "s"} in the plan`}
+      >
+        Accept all{proposedBlockCount > 0 ? ` (${proposedBlockCount})` : ""}
+      </button>
       <button className="primary-button" disabled={busy} onClick={() => void generate()}>
         {busy ? "Optimizing..." : "Generate schedule"}
       </button>
@@ -813,8 +848,10 @@ export function SchedulePage() {
                 // Calendar imports are fixed commitments the solver cannot move; tint them like the
                 // Garmin health windows so they read as external time rather than schedulable work.
                 const fixed = block.type === "calendar_event";
-                // Proposed blocks can be dragged to a new time; accepted/imported blocks cannot.
-                const movable = block.status === "proposed" && !fixed;
+                // Proposals and accepted blocks can be dragged to a new time: accepting reserves the
+                // plan, not the clock face, so a committed hour still moves. Imported calendar
+                // events and finished blocks stay put.
+                const movable = isMovable(block);
 
                 return <article
                   className={`calendar-event block-${block.status}${fixed ? " calendar-event-fixed" : ""} ${compact ? "calendar-event-compact" : ""} ${new Date(block.endAt) <= now ? "schedule-past" : ""}${movable ? " calendar-event-movable" : ""}${draggingBlockId === block.id ? " calendar-event-dragging" : ""}`}
@@ -867,8 +904,8 @@ export function SchedulePage() {
             <p className="muted">
               Every open task with time remaining, which is what the scheduler will place. Drag one onto a day header
               to pin it there, or into the calendar to schedule it at that time; drag one onto another task to reorder
-              it — ✓ marks tasks already fully scheduled. Drag a placed block to a new time to move it; accepted blocks
-              stay put when you regenerate.
+              it — ✓ marks tasks already fully scheduled. Drag a placed block to a new time to move it, accepted ones
+              included; accepted blocks stay put when you regenerate. <em>Accept all</em> commits the whole week at once.
             </p>
             <div
               className={`week-picks${dragOverColumn === "proposed" ? " drag-over" : ""}`}
