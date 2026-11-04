@@ -78,6 +78,9 @@ code, pre { overflow-wrap: anywhere; white-space: pre-wrap; }
 .drop-line { position: absolute; left: 0; right: 0; height: 2px; margin-top: -1px; background: #111; border-radius: 2px; pointer-events: none; z-index: 5; }
 body.dragging { user-select: none; }
 body.dragging .task-card, body.dragging .kanban-column { cursor: grabbing; }
+/* Cards collapse to their resting height the moment a drag starts, and must do so instantly: the
+   drag measures the board right then, and a mid-transition height would size the gap wrongly. */
+body.dragging .task-card-expand { transition: none; }
 .task-card:hover { transform: translateY(-2px); box-shadow: 0 4px 10px #0002; }
 /* Dragging is pointer-driven board reordering, so never let hover lift or expand cards mid-drag. */
 body.dragging .task-card { transform: none; box-shadow: none; }

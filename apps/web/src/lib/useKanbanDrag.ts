@@ -19,6 +19,8 @@ const TOUCH_LONG_PRESS_MS = 260;
 const TOUCH_SLOP = 10;
 /** Distance from a viewport or board edge at which the board starts scrolling itself. */
 const SCROLL_EDGE = 80;
+/** Minimum distance the pointer keeps from a dragged card's edge, so it visibly holds the card. */
+const GRAB_INSET = 12;
 
 export interface KanbanDragState {
   draggingId: number | null;
@@ -73,8 +75,17 @@ export function useKanbanDrag({
   const lift = useCallback((session: Session) => {
     const board = boardRef.current;
     if (board === null) return;
+    // Collapse the hover expansion *before* measuring. The card being grabbed is hovered by
+    // definition, so measuring first sizes the slot to the expanded card while the layout snaps
+    // back to the resting height — every card below would then slide by the wrong amount and
+    // overlap its neighbour. `dragging` also drops the hover lift, so this is the resting layout.
+    document.body.classList.add("dragging");
+    void board.offsetHeight; // flush layout, so the collapse is already in effect
     const geometry = captureBoardGeometry(board);
-    if (geometry === null) return;
+    if (geometry === null) {
+      document.body.classList.remove("dragging");
+      return;
+    }
     // Two views of one snapshot: `origin` still holds the lifted card (the offsets need its slot),
     // `geometry` has it removed (the hit test must measure the layout the user can see).
     session.origin = geometry;
@@ -96,9 +107,14 @@ export function useKanbanDrag({
     });
     document.body.appendChild(ghost);
     session.ghost = ghost;
+    // The card just shrank (hover expansion collapsed), so a grab near its old bottom edge would
+    // leave the pointer outside the card that is now following it. Re-anchor the grab point inside
+    // the card we have, inset a little so the pointer visibly holds it.
+    const inset = Math.min(GRAB_INSET, rect.height / 3, rect.width / 3);
+    session.grabX = rect.left + Math.min(Math.max(session.grabX - rect.left, inset), rect.width - inset);
+    session.grabY = rect.top + Math.min(Math.max(session.grabY - rect.top, inset), rect.height - inset);
     // The original stays in the layout so the captured geometry stays valid; only its paint goes.
     session.card.style.visibility = "hidden";
-    document.body.classList.add("dragging");
     setState({ draggingId: session.taskId, offsets: new Map(), indicator: null });
     session.frame = window.requestAnimationFrame(() => tick(session));
   }, [boardRef]);
