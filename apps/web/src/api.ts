@@ -99,6 +99,7 @@ export const api = {
     request<Tag[]>(`/api/tags/${id}/parents/${parentId}`, { method: "DELETE" }),
   generateSchedule: () => request<Schedule>("/api/schedule/generate", { method: "POST" }),
   acceptTaskSchedule: (id: number) => request<Schedule>(`/api/tasks/${id}/accept-schedule`, { method: "POST" }),
+  acceptSchedule: () => request<Schedule>("/api/schedule/accept", { method: "POST" }),
   setTimeBlockStatus: (id: number, status: "completed" | "missed") =>
     request<Schedule>(`/api/time-blocks/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
   deleteTimeBlock: (id: number) => request<Schedule>(`/api/time-blocks/${id}`, { method: "DELETE" }),

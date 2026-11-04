@@ -140,9 +140,11 @@ multi-select "what is blocking this?" for dependencies.
 
 **Schedule** (`/schedule`) is the week: seven days of half-hours, each header showing that
 day's high and peak rain chance, with sleep and workout overlays when Garmin is connected.
-*Generate schedule* fills it; proposals can be dragged; tasks can be dragged in from the
-sidebar to place them by hand; the tasks that did not fit are listed with the solver's reason,
-and a running `Placed n/m · style s` line says how much of the week the solver could use.
+*Generate schedule* fills it and *Accept all* commits the whole week at once; blocks can be
+dragged to a new hour whether they are still proposals or already accepted (an accepted block
+keeps its status, it just moves); tasks can be dragged in from the sidebar to place them by
+hand; the tasks that did not fit are listed with the solver's reason, and a running
+`Placed n/m · style s` line says how much of the week the solver could use.
 
 **Task** (`/tasks/:id`) is one task in full: priority, remaining estimate and whether it can
 split, earliest start, deadline, decay date, Markdown description, tags, dependencies, blocks,
