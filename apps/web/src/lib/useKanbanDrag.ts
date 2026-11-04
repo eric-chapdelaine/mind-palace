@@ -254,8 +254,13 @@ function scrollToward(x: number, y: number, board: HTMLElement): void {
 
 /** Swallow the click that follows a real drop, so a moved card doesn't open its detail page. */
 function suppressNextClick(): void {
-  window.addEventListener("click", (event) => {
+  const swallow = (event: MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
-  }, { capture: true, once: true });
+    window.clearTimeout(expiry);
+    window.removeEventListener("click", swallow, true);
+  };
+  // A touch drop fires no click at all, so a guard left waiting would eat the next unrelated tap.
+  const expiry = window.setTimeout(() => window.removeEventListener("click", swallow, true), 300);
+  window.addEventListener("click", swallow, true);
 }
