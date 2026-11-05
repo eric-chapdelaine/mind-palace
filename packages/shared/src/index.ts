@@ -477,6 +477,16 @@ export interface UpdateTaskInput {
   dependsOnTaskIds?: number[];
 }
 
+/**
+ * Move one task to a column and an index within that column's visible order. `index` counts the
+ * cards above it, so 0 means first. The server renumbers the whole column in one transaction,
+ * which keeps a drag from ever leaving the board with duplicate ranks.
+ */
+export interface MoveTaskInput {
+  kanbanStatus: KanbanStatus;
+  index: number;
+}
+
 export interface CreateTagInput {
   title: string;
   description?: string;

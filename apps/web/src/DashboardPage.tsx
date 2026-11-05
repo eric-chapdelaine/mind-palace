@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { reservedTagPublicIds, type CreateTaskInput, type KanbanStatus, type Tag, type TaskDetail, type TaskSummary } from "@mind-palace/shared";
 import { api } from "./api";
@@ -6,6 +6,8 @@ import { CreateTaskPanel } from "./components/CreateTaskPanel";
 import { TaskCard } from "./components/TaskCard";
 import { TagHierarchyPanel } from "./components/TagHierarchy";
 import { TagPicker } from "./components/TagPicker";
+import { reorderTasks, type DropTarget } from "./lib/boardDrag";
+import { useKanbanDrag } from "./lib/useKanbanDrag";
 import { readTagFilterPreferences, writeTagFilterPreferences } from "./tagFilterPreferences";
 
 const columns: Array<{ status: KanbanStatus; label: string }> = [
@@ -73,27 +75,10 @@ export function DashboardPage() {
     return () => { cancelled = true; };
   }, [dependencyTargetId]);
 
-  // Kanban drag state: which card is being dragged (its spot shows a dotted placeholder), its
-  // measured height (so the placeholder matches), and where a drop would land (the hint line).
-  const [draggingId, setDraggingId] = useState<number | null>(null);
-  const [draggingHeight, setDraggingHeight] = useState(0);
-  const [dropHint, setDropHint] = useState<{ status: KanbanStatus; beforeTaskId: number | null } | null>(null);
-
-  // Custom pointer-driven drag instead of native HTML5 DnD: Firefox ignores setDragImage and
-  // cancels a drag when its source element leaves the DOM (the placeholder swap), which left the
-  // board stuck and ghost-less there. Mutable drag session lives in refs so the window listeners
-  // always see fresh data and cleanup is reliable on every mouse-up.
-  const dragSessionRef = useRef<{
-    taskId: number;
-    startX: number;
-    startY: number;
-    started: boolean;
-    cardEl: HTMLAnchorElement;
-    ghost: HTMLElement | null;
-  } | null>(null);
-  const dropHintRef = useRef<{ status: KanbanStatus; beforeTaskId: number | null } | null>(null);
-  const moveTaskRef = useRef(moveTask);
-  moveTaskRef.current = moveTask; // keep the latest closure (fresh tasks/active) available to listeners
+  // Dragging lives in useKanbanDrag: it snapshots the board's geometry once per gesture and moves
+  // cards with transforms, so opening the drop gap can never reflow what the hit test measures.
+  const boardRef = useRef<HTMLDivElement | null>(null);
+  const drag = useKanbanDrag({ boardRef, onDrop: dropTask, enabled: !selecting });
 
   async function load() {
     try {
@@ -116,39 +101,6 @@ export function DashboardPage() {
   useEffect(() => {
     writeTagFilterPreferences(includedTagIds, excludedTagIds);
   }, [includedTagIds, excludedTagIds]);
-
-  // Always-on window listeners gate on the active drag session, so re-renders never lose them.
-  useEffect(() => {
-    function onPointerMove(event: PointerEvent) {
-      if (dragSessionRef.current) handleDragMove(event);
-    }
-    function onPointerUp() {
-      if (dragSessionRef.current) handleDragEnd();
-    }
-    function onPointerCancel() {
-      if (dragSessionRef.current) abortDrag();
-    }
-    function onWindowBlur() {
-      if (dragSessionRef.current) abortDrag();
-    }
-    function onMouseLeaveViewport() {
-      // Release outside the window never delivers pointerup; cancel so nothing is left behind.
-      if (dragSessionRef.current) abortDrag();
-    }
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
-    window.addEventListener("pointercancel", onPointerCancel);
-    window.addEventListener("blur", onWindowBlur);
-    document.documentElement.addEventListener("mouseleave", onMouseLeaveViewport);
-    return () => {
-      abortDrag();
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-      window.removeEventListener("pointercancel", onPointerCancel);
-      window.removeEventListener("blur", onWindowBlur);
-      document.documentElement.removeEventListener("mouseleave", onMouseLeaveViewport);
-    };
-  }, []);
 
   // Included acts as a whitelist; excluded is resolved afterwards, so a tag on both lists hides its tasks.
   const visible = tasks.filter((task) => {
@@ -186,16 +138,14 @@ export function DashboardPage() {
     return tag;
   }
 
-  async function moveTask(taskId: number, status: KanbanStatus, beforeTaskId?: number) {
-    const destination = active
-      .filter((task) => task.kanbanStatus === status && task.id !== taskId)
-      .sort((a, b) => b.rank - a.rank);
-    const beforeIndex = beforeTaskId ? destination.findIndex((task) => task.id === beforeTaskId) : -1;
-    destination.splice(beforeIndex < 0 ? destination.length : beforeIndex, 0, tasks.find((task) => task.id === taskId)!);
-    await Promise.all(destination.map((task, index) => api.updateTask(task.id, {
-      kanbanStatus: task.id === taskId ? status : task.kanbanStatus,
-      rank: destination.length - index,
-    })));
+  /** A drop: show it at once, then persist it. The server renumbers the column in one transaction. */
+  async function dropTask(taskId: number, target: DropTarget) {
+    setTasks((current) => reorderTasks(current, taskId, target));
+    try {
+      await api.moveTask(taskId, { kanbanStatus: target.status, index: target.index });
+    } catch (moveError) {
+      setError(moveError instanceof Error ? moveError.message : String(moveError));
+    }
     await load();
   }
 
@@ -206,118 +156,6 @@ export function DashboardPage() {
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : String(nextError));
     }
-  }
-
-  // ---- Kanban drag & drop (custom pointer-driven; see the drag-session notes above) ----
-
-  const DRAG_START_DISTANCE = 8; // px of pointer movement before a press becomes a drag
-
-  function beginCardPointerDown(event: ReactPointerEvent<HTMLAnchorElement>, taskId: number) {
-    if (selecting || event.button !== 0) return;
-    abortDrag(); // self-heal any stale session (e.g. previous drag released outside the window)
-    dragSessionRef.current = {
-      taskId,
-      startX: event.clientX,
-      startY: event.clientY,
-      started: false,
-      cardEl: event.currentTarget,
-      ghost: null,
-    };
-  }
-
-  function setHint(hint: { status: KanbanStatus; beforeTaskId: number | null } | null) {
-    dropHintRef.current = hint;
-    setDropHint(hint);
-  }
-
-  function handleDragMove(event: PointerEvent) {
-    const session = dragSessionRef.current;
-    if (!session) return;
-    if (!session.started) {
-      if (Math.hypot(event.clientX - session.startX, event.clientY - session.startY) < DRAG_START_DISTANCE) return;
-      // Activate the drag: lift a fixed-position clone of the card that follows the cursor.
-      const rect = session.cardEl.getBoundingClientRect();
-      const ghost = session.cardEl.cloneNode(true) as HTMLElement;
-      ghost.className = `${ghost.className} task-card-drag-ghost`;
-      ghost.style.position = "fixed";
-      ghost.style.left = `${rect.left}px`;
-      ghost.style.top = `${rect.top}px`;
-      ghost.style.width = `${rect.width}px`;
-      ghost.style.outline = "none";
-      ghost.style.transition = "none";
-      ghost.style.pointerEvents = "none";
-      document.body.appendChild(ghost);
-      session.ghost = ghost;
-      session.started = true;
-      document.body.classList.add("dragging");
-      setDraggingId(session.taskId);
-      setDraggingHeight(rect.height);
-      setHint(null);
-      return;
-    }
-    if (session.ghost) {
-      session.ghost.style.transform = `translate(${event.clientX - session.startX}px, ${event.clientY - session.startY}px)`;
-    }
-    setHint(dropTargetAt(event.clientX, event.clientY, session.taskId));
-  }
-
-  function handleDragEnd() {
-    const session = dragSessionRef.current;
-    if (session?.started) {
-      const hint = dropHintRef.current;
-      if (hint) {
-        void moveTaskRef.current(session.taskId, hint.status, hint.beforeTaskId ?? undefined);
-        // Swallow the click that follows a real drop, so a moved card doesn't navigate to its
-        // detail page. Deliberately gated on the drop itself, not on "a drag started": a firm
-        // trackpad press can drift a few px past the drag threshold without intending to drag,
-        // and swallowing that click is what forced double-clicking to open a task on macOS.
-        suppressNextClick();
-      }
-    }
-    abortDrag();
-  }
-
-  function abortDrag() {
-    const session = dragSessionRef.current;
-    dragSessionRef.current = null;
-    session?.ghost?.remove();
-    document.body.classList.remove("dragging");
-    setHint(null);
-    setDraggingId(null);
-    setDraggingHeight(0);
-  }
-
-  function suppressNextClick() {
-    window.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-    }, { capture: true, once: true });
-  }
-
-  /** Board position under the pointer, or null when a drop there wouldn't be accepted. */
-  function dropTargetAt(x: number, y: number, draggingTaskId: number): { status: KanbanStatus; beforeTaskId: number | null } | null {
-    let node: Element | null = document.elementFromPoint(x, y);
-    while (node && node !== document.body) {
-      if (node instanceof HTMLElement) {
-        if (node.classList.contains("kanban-column")) {
-          return { status: node.dataset.status as KanbanStatus, beforeTaskId: null };
-        }
-        if (node.classList.contains("task-card")) {
-          const id = Number(node.dataset.taskId);
-          if (Number.isInteger(id) && id !== draggingTaskId) {
-            const column = node.closest(".kanban-column");
-            if (column instanceof HTMLElement) {
-              return { status: column.dataset.status as KanbanStatus, beforeTaskId: id };
-            }
-          }
-          return null; // the dragged card itself, or a card we don't recognise: no drop
-        }
-        // The dotted placeholder where the card was lifted from: dropping there puts it back.
-        if (node.classList.contains("task-card-placeholder")) return null;
-      }
-      node = node.parentElement;
-    }
-    return null;
   }
 
   // ---- Multi-select (used to pick the tasks that block another task) ----
@@ -387,40 +225,41 @@ export function DashboardPage() {
       )}
       {error && <div className="error-banner">{error}</div>}
       <div className="mind-layout">
-        <section className="kanban-board">
+        <section className="kanban-board" ref={boardRef}>
           {columns.map((column) => {
             const items = active.filter((task) => task.kanbanStatus === column.status).sort((a, b) => b.rank - a.rank);
             return (
               <div className="kanban-column" key={column.status} data-status={column.status}>
                 <div className="kanban-heading"><h2>{column.label}</h2><span>{items.length}</span></div>
-                <div className="kanban-stack">
+                {/* Cards slide by transform and the drop line is absolutely positioned, so showing
+                    a drop never reflows the stack (that reflow is what made targets flicker). */}
+                <div className={`kanban-stack${drag.state.draggingId === null ? "" : " dragging"}`}>
                   {items.map((task) => (
-                    <Fragment key={task.id}>
-                      {dropHint?.status === column.status && dropHint.beforeTaskId === task.id && <div className="drop-line" />}
-                      {draggingId === task.id ? (
-                        <div className="task-card-placeholder" style={{ minHeight: draggingHeight || undefined }} />
-                      ) : (
-                        <TaskCard
-                          task={task}
-                          allTags={tags}
-                          selected={selecting && selectedIds.includes(task.id)}
-                          highlighted={selecting && dependencyTargetId === task.id}
-                          highlightLabel="this task"
-                          {...(selecting ? { onCardClick: () => toggleSelection(task.id) } : {})}
-                          onPointerDown={(event) => beginCardPointerDown(event, task.id)}
-                          checked={task.kanbanStatus === "completed"}
-                          onToggleComplete={() => void toggleComplete(task)}
-                        />
-                      )}
-                    </Fragment>
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      allTags={tags}
+                      dragging={drag.state.draggingId === task.id}
+                      offsetY={drag.state.offsets.get(task.id) ?? 0}
+                      selected={selecting && selectedIds.includes(task.id)}
+                      highlighted={selecting && dependencyTargetId === task.id}
+                      highlightLabel="this task"
+                      {...(selecting ? { onCardClick: () => toggleSelection(task.id) } : {})}
+                      onPointerDown={(event) => drag.onCardPointerDown(event, task.id)}
+                      checked={task.kanbanStatus === "completed"}
+                      onToggleComplete={() => void toggleComplete(task)}
+                    />
                   ))}
-                  {items.length > 0 && dropHint?.status === column.status && dropHint.beforeTaskId === null && <div className="drop-line" />}
                   {items.length === 0 && <div className="column-empty">Drop tasks here</div>}
+                  {drag.state.indicator?.status === column.status && (
+                    <div className="drop-line" style={{ top: drag.state.indicator.y }} />
+                  )}
                 </div>
               </div>
             );
           })}
         </section>
+
         <details className="completed-tasks">
           <summary>Completed ({completed.length})</summary>
           {completed.length === 0

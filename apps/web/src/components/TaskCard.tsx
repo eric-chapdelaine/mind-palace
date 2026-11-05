@@ -14,9 +14,13 @@ function truncate(text: string, maxChars = 140): string {
   return `${cut.slice(0, lastSpace > 0 ? lastSpace : maxChars).trimEnd()}…`;
 }
 
-export function TaskCard({ task, selected = false, highlighted = false, highlightLabel, checked = false, allTags, onToggleComplete, onCardClick, onPointerDown }: {
+export function TaskCard({ task, selected = false, highlighted = false, highlightLabel, checked = false, allTags, dragging = false, offsetY = 0, onToggleComplete, onCardClick, onPointerDown }: {
   task: TaskSummary;
   selected?: boolean;
+  /** This card is the one being dragged: it stays in the layout but stops painting. */
+  dragging?: boolean;
+  /** How far the card slides, in px, to open the gap at the current drop target. */
+  offsetY?: number;
   /** Mark the card as the subject of the current multi-select (e.g. the task whose blockers are being picked). */
   highlighted?: boolean;
   /** Badge text shown on a highlighted card (defaults to "this task"). */
@@ -30,7 +34,8 @@ export function TaskCard({ task, selected = false, highlighted = false, highligh
 }) {
   return (
     <Link
-      className={`task-card${selected ? " selected" : ""}${highlighted ? " highlighted" : ""}`}
+      className={`task-card${selected ? " selected" : ""}${highlighted ? " highlighted" : ""}${dragging ? " is-dragging" : ""}`}
+      style={offsetY === 0 ? undefined : { transform: `translateY(${offsetY}px)` }}
       draggable={false}
       data-task-id={task.id}
       onDragStart={(event) => event.preventDefault()}

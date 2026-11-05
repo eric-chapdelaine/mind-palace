@@ -622,6 +622,61 @@ export class TaskRepository {
     if (input.dependsOnTaskIds) this.setTaskDependencies(taskId, input.dependsOnTaskIds);
   }
 
+  /**
+   * Move a task into `kanbanStatus` at position `index` among the cards already there, and renumber
+   * that column's ranks to match. One transaction, because a drag is a single gesture: doing it as
+   * one PATCH per card meant a dropped request could leave two cards sharing a rank, which the board
+   * then renders in whichever order the query happens to return them.
+   *
+   * Ranks descend with position (`order.length - index`), matching the board's `rank DESC` sort.
+   */
+  moveTask(taskId: number, kanbanStatus: KanbanStatus, index: number): void {
+    const timestamp = now();
+    const connection = this.database.connection;
+    connection.exec("BEGIN IMMEDIATE");
+    try {
+      const current = connection.prepare("SELECT kanban_status, auto_archive_at FROM tasks WHERE id = ?").get(taskId);
+      const existing = row(current, "task");
+      const wasTerminal = ["completed", "cancelled"].includes(text(existing.kanban_status));
+      const terminal = kanbanStatus === "completed" || kanbanStatus === "cancelled";
+      // Reopening a finished task restarts its decay clock. Any other move leaves the instant alone:
+      // NULL there is a deliberate "never decays", and a drag must not undo that choice.
+      const autoArchiveAt = terminal
+        ? null
+        : wasTerminal
+          ? new Date(Date.now() + defaultAutoArchiveDays * 86_400_000).toISOString()
+          : nullableText(existing.auto_archive_at);
+      // Everything already in the column keeps its order; the moved task is spliced in by index.
+      // `index` counts the cards the board draws, so a decayed (archived) task sitting in the same
+      // column must not consume a slot and shift the drop somewhere else.
+      const columnRows = connection
+        .prepare("SELECT id, lifecycle_status FROM tasks WHERE kanban_status = ? AND id <> ? ORDER BY rank DESC, id DESC")
+        .all(kanbanStatus, taskId)
+        .map((value) => {
+          const existingRow = row(value, "task");
+          return { id: integer(existingRow.id), visible: text(existingRow.lifecycle_status) !== "archived" };
+        });
+      const visible = columnRows.filter((entry) => entry.visible);
+      const anchor = visible[Math.max(0, Math.min(index, visible.length))];
+      const order = columnRows.map((entry) => entry.id);
+      order.splice(anchor === undefined ? order.length : order.indexOf(anchor.id), 0, taskId);
+      const rank = connection.prepare("UPDATE tasks SET rank = ? WHERE id = ?");
+      order.forEach((id, position) => rank.run(order.length - position, id));
+      // Only the moved card changes column and status; the others are just renumbered.
+      const lifecycle = kanbanStatus === "completed" ? "completed" : kanbanStatus === "cancelled" ? "cancelled" : "active";
+      connection.prepare(
+        `UPDATE tasks SET kanban_status = ?, lifecycle_status = ?, updated_at = ?,
+                          completed_at = CASE WHEN ? = 'completed' THEN COALESCE(completed_at, ?) ELSE NULL END,
+                          auto_archive_at = ?
+         WHERE id = ?`,
+      ).run(kanbanStatus, lifecycle, timestamp, kanbanStatus, timestamp, autoArchiveAt, taskId);
+      connection.exec("COMMIT");
+    } catch (error) {
+      connection.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
   setTaskLifecycle(id: number, status: LifecycleStatus): void {
     this.database.connection
       .prepare("UPDATE tasks SET lifecycle_status = ?, updated_at = ? WHERE id = ?")
