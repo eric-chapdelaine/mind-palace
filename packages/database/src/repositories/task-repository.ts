@@ -514,36 +514,6 @@ export class TaskRepository {
     if (result.changes !== 1) throw new Error("Tag relation does not exist");
   }
 
-  /**
-   * Find-or-create the tag that names a routine, remember it on the template, and return it.
-   * Occurrences carry it, so /tags/:id lists a routine's whole history even though the template is
-   * no longer a task.
-   */
-  ensureTemplateTag(templateId: number, input: { title: string; description?: string }): Tag {
-    const title = input.title.trim();
-    if (!title) throw new Error("Tag title is required");
-    const timestamp = now();
-    this.database.connection.exec("BEGIN IMMEDIATE");
-    try {
-      const existing = this.database.connection
-        .prepare("SELECT id FROM tags WHERE title = ? COLLATE NOCASE")
-        .get(title);
-      const tagId = existing
-        ? integer(row(existing, "tag").id)
-        : insertedId(this.database.connection
-            .prepare("INSERT INTO tags (public_id, title, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
-            .run(randomUUID(), title, input.description?.trim() || null, timestamp, timestamp));
-      this.database.connection
-        .prepare("UPDATE recurrence_templates SET routine_tag_id = ?, updated_at = ? WHERE id = ?")
-        .run(tagId, timestamp, templateId);
-      this.database.connection.exec("COMMIT");
-      return this.listTags().find((tag) => tag.id === tagId)!;
-    } catch (error) {
-      this.database.connection.exec("ROLLBACK");
-      throw error;
-    }
-  }
-
   private insertTagParent(childId: number, parentId: number, timestamp: string): void {
     if (childId === parentId) throw new Error("A tag cannot be its own parent");
     const tags = this.database.connection.prepare("SELECT id FROM tags WHERE id IN (?, ?)").all(childId, parentId);
@@ -964,13 +934,6 @@ export class TaskRepository {
       this.database.connection.exec("ROLLBACK");
       throw error;
     }
-    // The routine's tag is what a day/time rule selects, so it has to exist before the first
-    // occurrence does. Creating it after the commit means the Rules page can target a new routine
-    // immediately. `ensureTemplateTag` opens its own transaction, so it cannot run inside ours.
-    this.ensureTemplateTag(rowId, {
-      title: input.title,
-      description: `Recurring occurrences of “${input.title.trim()}”.`,
-    });
     return this.requireRecurrenceTemplate(rowId);
   }
 
@@ -1097,6 +1060,24 @@ export class TaskRepository {
          ON CONFLICT(template_id, period_start, sequence) DO UPDATE SET child_task_id = excluded.child_task_id`,
       )
       .run(templateId, periodStart, sequence, childTaskId, now());
+  }
+
+  /**
+   * Every task a template produced, newest period first. The ledger is the record of a routine's
+   * history, so a tag is not needed to find it.
+   */
+  listRecurrenceOccurrenceTasks(templateId: number): TaskSummary[] {
+    return this.database.connection
+      .prepare(
+        `${taskSummarySql}
+         JOIN (SELECT child_task_id, MAX(period_start) AS period_start
+                 FROM recurrence_occurrences
+                WHERE template_id = ? AND child_task_id IS NOT NULL
+                GROUP BY child_task_id) occurrence ON occurrence.child_task_id = t.id
+         ORDER BY occurrence.period_start DESC, t.priority ASC, t.title COLLATE NOCASE`,
+      )
+      .all(templateId)
+      .map((value) => mapTaskSummary(row(value, "recurrence occurrence")));
   }
 
   listSchedulableTasks(): SchedulableTask[] {

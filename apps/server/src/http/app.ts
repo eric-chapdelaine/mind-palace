@@ -365,6 +365,10 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
     return context.json({ ok: true });
   });
 
+  // A routine's history comes from the occurrence ledger, not from a tag it was given.
+  app.get("/api/recurrence-templates/:id/tasks", (context) =>
+    context.json(tasks.listRecurrenceOccurrenceTasks(numberParam(context.req.param("id"), "recurrence template id"))));
+
   app.post("/api/schedule/generate", async (context) => context.json(await schedule.generate()));
   // Materialize the recurrence window on demand. Reports what it did — a recurrence whose period
   // falls outside the window legitimately creates nothing, and saying so beats a silent 200.

@@ -166,7 +166,11 @@ export interface RecurrenceTemplate {
   nextOccurrenceDate: string;
   /** Local hour (`0`-`23`) on the occurrence's last day (its only day for a daily card) at which its child decays; null = end of day. */
   autoArchiveHour: number | null;
-  /** The tag grouping this routine with the occurrences it produced; null until it first runs. */
+  /**
+   * Legacy: the tag a routine used to be given automatically, named after its title. New routines
+   * get none; their history comes from the occurrence ledger. Kept so an existing routine's tag
+   * and the rules on it keep working.
+   */
   routineTagId: number | null;
   tagIds: number[];
   updatedAt: string;
