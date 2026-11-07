@@ -3,7 +3,6 @@ import { fileURLToPath } from "node:url";
 import type { TaskRepository } from "@mind-palace/database";
 import {
   reservedTagPublicIds,
-  weekdayTagPublicIds,
   type BriefingBoardColumn,
   type BriefingBlock,
   type BriefingDay,
@@ -18,7 +17,7 @@ import {
   type TimeBlock,
   type WeatherForecast,
 } from "@mind-palace/shared";
-import { HOME_TIME_ZONE, addDays, daysBetween, startOfLocalDay, weekdayIndex, zoneOffsetMs } from "./clock.js";
+import { HOME_TIME_ZONE, addDays, daysBetween, startOfLocalDay, zoneOffsetMs } from "./clock.js";
 import { runPythonWorker } from "./worker.js";
 
 /** Boston. Sunrise/sunset are computed for this point; the weather cache is for the same place. */
@@ -477,8 +476,11 @@ export class BriefingService {
 
   /**
    * The tasks that deserve the full-width treatment: everything with a block today, everything
-   * pinned to today by a weekday tag, and anything already in progress. Priority first, then the
+   * scheduled today, due today, released today, or already in progress. Priority first, then the
    * board's own rank order.
+   *
+   * There is no "day tag" any more: a task belongs to today because the plan put it there (a block)
+   * or because its own window says so, not because someone stamped a weekday on it once.
    *
    * Routine work is excluded: sleep, meals and wind-down are already on today's timeline above, and
    * as full-width cards they crowd out the handful of tasks the page exists to surface.
@@ -490,16 +492,16 @@ export class BriefingService {
     routineTaskIds: Set<number>,
   ): BriefingTask[] {
     const blockedToday = new Set(todayBlocks.map((block) => block.taskId));
-    const weekday = weekdayIndex(date);
-    const weekdayTag = weekdayTagPublicIds[weekday];
     const selected = tasks.filter((task) => {
       if (terminalStatuses.has(task.kanbanStatus) || routineTaskIds.has(task.id)) return false;
       // Calendar events are on the timeline, not on the list of things to do today.
       if (isCalendarEvent(task)) return false;
       if (blockedToday.has(task.id)) return true;
       if (task.kanbanStatus === "in_progress") return true;
-      const tagIds = [...task.tags, ...task.derivedTags].map((tag) => tag.publicId);
-      return weekdayTag !== undefined && tagIds.includes(weekdayTag);
+      const deadline = instantOf(task.deadlineAt);
+      if (deadline !== null && partsOf(deadline).date === date) return true;
+      const release = instantOf(task.earliestStart);
+      return release !== null && partsOf(release).date === date;
     });
     const ordered = selected.sort((left, right) => left.priority - right.priority || right.rank - left.rank);
     // Recurrence leaves one row per day behind ("[LIFE] Sleep" x N). They are separate work items,

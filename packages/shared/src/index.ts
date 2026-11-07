@@ -64,21 +64,6 @@ export const reservedTagPublicIds = {
   routine: "mind-palace:routine",
 } as const;
 
-/**
- * Weekday tags in JavaScript `Date#getDay()` order: index 0 = Sunday .. index 6 = Saturday.
- * They are the selectors for the seeded day-pin rules (`assignDays`), so a task carrying one must
- * be scheduled on that day. They are plain selectors: the rules decide what a day means.
- */
-export const weekdayTagPublicIds = [
-  "mind-palace:sunday",
-  "mind-palace:monday",
-  "mind-palace:tuesday",
-  "mind-palace:wednesday",
-  "mind-palace:thursday",
-  "mind-palace:friday",
-  "mind-palace:saturday",
-] as const;
-
 /** Days an ordinary task stays on the board before it decays. */
 export const defaultAutoArchiveDays = 30;
 
@@ -169,9 +154,17 @@ export interface RecurrenceTemplate {
   maxChunkMinutes: number;
   frequency: Frequency;
   intervalCount: number;
-  weekdays: number[];
+  /**
+   * How many interchangeable occurrences each period gets. A `daily` period is one day, so this is
+   * always 1. A `weekly` period is a week, so 1 means "once this week, any day" and 3 means
+   * "three times this week". The period's span is the occurrence's window: rules decide the day.
+   * One occurrence is a **cadence** (it stays inside its period); more than one is a **quota**
+   * (they are interchangeable and can all land on the period's best days).
+   */
+  timesPerPeriod: number;
+  /** The first period's start date. Periods are counted from here, never from the run date. */
   nextOccurrenceDate: string;
-  /** Local hour (`0`-`23`) of the occurrence's day at which its child task decays; null = end of day. */
+  /** Local hour (`0`-`23`) on the occurrence's last day (its only day for a daily card) at which its child decays; null = end of day. */
   autoArchiveHour: number | null;
   /** The tag grouping this routine with the occurrences it produced; null until it first runs. */
   routineTagId: number | null;
@@ -194,9 +187,9 @@ export interface SavedRecurrence {
 
 export interface MaterializeResult {
   created: number[];
-  /** Dates a rule selected but that already had a live child, so nothing was created. */
+  /** Period slots that already had a child (or, for a quota, had ever been filled), so nothing was created. */
   alreadyPresent: number;
-  /** Routines that fired nowhere in the window (their weekdays all fall outside it). */
+  /** Routines with no period in the window, so they created nothing. */
   idleTemplates: string[];
 }
 
@@ -356,9 +349,10 @@ export type RuleCondition =
 /**
  * The rule effects the worker implements. This list is the contract: the API rejects anything
  * outside it. `assignDays`, `timeWindow`, `weatherGate`, and `withinAfter` may be hard
- * constraints; `preferTimeOfDay`, `spread`, and `dailyBudget` are preferences only.
+ * constraints; `preferTimeOfDay`, `spread`, and `dailyBudget` are preferences only. `perDayLimit`
+ * is hard-only: it is a cardinality cap over a day, which a soft weight could never enforce.
  */
-export const ruleEffectTypes = ["assignDays", "timeWindow", "preferTimeOfDay", "spread", "dailyBudget", "weatherGate", "withinAfter"] as const;
+export const ruleEffectTypes = ["assignDays", "timeWindow", "preferTimeOfDay", "spread", "dailyBudget", "perDayLimit", "weatherGate", "withinAfter"] as const;
 export type RuleEffectType = (typeof ruleEffectTypes)[number];
 
 /**
@@ -370,13 +364,21 @@ export interface RuleWhen {
   dayOfWeek?: number[];
 }
 
-/** What a rule does. `type` selects the implementation; the remaining keys are parameters. */
+/**
+ * What a rule does. `type` selects the implementation; the remaining keys are parameters.
+ *
+ * A **soft** `assignDays` is a graded preference, not a set: a run placed `d` days from the
+ * nearest preferred date inside its own window earns `weight * (7 - d) / 7`. So with a Sunday
+ * preference, Monday still scores 6/7 of the weight and Tuesday 5/7 — nearer days beat far ones.
+ * A **hard** `assignDays` keeps the old meaning: only those weekdays are eligible.
+ */
 export type RuleEffect =
   | { type: "assignDays"; days: number[]; when?: RuleWhen }
   | { type: "timeWindow"; start: string; end: string; when?: RuleWhen }
   | { type: "preferTimeOfDay"; start: string; end: string; when?: RuleWhen }
   | { type: "spread"; maxPerDayMinutes?: number; minDistinctDays?: number; avoidConsecutive?: boolean; when?: RuleWhen }
   | { type: "dailyBudget"; softMaxPerDay?: number; when?: RuleWhen }
+  | { type: "perDayLimit"; maxPerDay: number; when?: RuleWhen }
   | { type: "withinAfter"; maxMinutes?: number }
   | {
       type: "weatherGate";
@@ -528,11 +530,11 @@ export interface UpsertRecurrenceInput {
   tagIds?: number[];
   frequency: Frequency;
   intervalCount?: number;
-  weekdays?: number[];
+  timesPerPeriod?: number;
   nextOccurrenceDate: string;
   /**
-   * Local hour (`0`-`23`) of the occurrence's day at which its child task decays, so a "wake up"
-   * routine can be gone by 10am. Null/omitted means end of that day.
+   * Local hour (`0`-`23`) on the occurrence's last day at which its child task decays, so a
+   * "wake up" routine can be gone by 10am. Null/omitted means end of that day.
    */
   autoArchiveHour?: number | null;
 }

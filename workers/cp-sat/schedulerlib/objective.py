@@ -7,6 +7,8 @@
 from .rules import (
     day_group_ids,
     day_matches,
+    day_preference_gains,
+    per_day_limits,
     rule_applies,
     rule_strength,
     style_windows,
@@ -105,14 +107,44 @@ def compact(placement, tasks, slots, day_of, eligible_by_task, rules, weather_by
     """Greedy post-pass: pull each block to the earliest slot that keeps every soft choice.
 
     A move is only accepted when the block stays hard-eligible, keeps the same soft time-window
-    membership, stays on the same day for spread groups, and does not start before its
-    dependencies end. This realizes `preferEarlier` without making it part of the objective.
+    membership, does not lower its graded day preference, stays on the same day for spread groups,
+    keeps every hard per-day cap, and does not start before its dependencies end. This realizes
+    `preferEarlier` without making it part of the objective.
     """
     slot_count = len(slots)
     eligible_sets = {task_id: set(slots_) for task_id, slots_ in eligible_by_task.items()}
     windows = style_windows(tasks, rules, slots, weather_by_hour)
     spread_groups = day_group_ids(tasks, rules)
     within_after = within_after_bounds(tasks, rules, slot_minutes)
+    day_gains = {}
+    for task in tasks:
+        gains = day_preference_gains(task, slots, rules)
+        if gains is not None:
+            day_gains[task["id"]] = gains
+    limits = per_day_limits(tasks, rules)
+    day_weekday = {}
+    for slot in slots:
+        day_weekday[day_of[slot["index"]]] = slot["weekday"]
+    limit_days = {limit["key"]: {} for limit in limits}
+    for task_id, runs in placement.items():
+        for limit in limits:
+            if task_id not in limit["task_ids"]:
+                continue
+            for start, _size in runs:
+                limit_days[limit["key"]].setdefault(day_of[start], set()).add(task_id)
+
+    def limit_allows(task_id, candidate):
+        day = day_of[candidate]
+        for limit in limits:
+            if task_id not in limit["task_ids"]:
+                continue
+            if not day_matches(limit["when"], day_weekday[day]):
+                continue
+            present = limit_days[limit["key"]].setdefault(day, set())
+            if task_id not in present and len(present) >= limit["max"]:
+                return False
+        return True
+
     occupied = set()
     for runs in placement.values():
         for start, size in runs:
@@ -133,13 +165,21 @@ def compact(placement, tasks, slots, day_of, eligible_by_task, rules, weather_by
             if placement.get(dependent_id):
                 dependent_start = min(start for start, _size in placement[dependent_id])
                 lower = max(lower, dependent_start - gap_slots - task_size)
+        # Free this task's slot in every per-day cap while we look for a new one.
+        for limit in limits:
+            if task_id not in limit["task_ids"]:
+                continue
+            for start, _size in placement[task_id]:
+                limit_days[limit["key"]].get(day_of[start], set()).discard(task_id)
         kept = []
+        gains = day_gains.get(task_id)
         for start, size in sorted(placement[task_id], key=lambda run: run[0]):
             for slot in range(start, start + size):
                 occupied.discard(slot)
             membership = tuple(start in window for window in windows.get(task_id, []))
             day = day_of[start]
             group = spread_groups.get(task_id)
+            current_gain = gains[start] if gains is not None else 0
             chosen = start
             for candidate in eligible_by_task.get(task_id, []):
                 if candidate < lower:
@@ -151,6 +191,10 @@ def compact(placement, tasks, slots, day_of, eligible_by_task, rules, weather_by
                     continue
                 if tuple(candidate in window for window in windows.get(task_id, [])) != membership:
                     continue
+                if gains is not None and gains[candidate] < current_gain:
+                    continue
+                if not limit_allows(task_id, candidate):
+                    continue
                 if group is not None and day_of[candidate] != day:
                     continue
                 chosen = candidate
@@ -159,14 +203,28 @@ def compact(placement, tasks, slots, day_of, eligible_by_task, rules, weather_by
             for slot in range(chosen, chosen + size):
                 occupied.add(slot)
         placement[task_id] = kept
+        for limit in limits:
+            if task_id not in limit["task_ids"]:
+                continue
+            for start, _size in kept:
+                limit_days[limit["key"]].setdefault(day_of[start], set()).add(task_id)
         task_end[task_id] = max((start + size for start, size in kept), default=0)
     return placement
 
 
 def soft_totals(placement, tasks, rules, slots, slot_minutes, weather_by_hour):
-    """Final style value (window/weather bonuses minus spread/budget penalties) for reporting."""
+    """Final style value (window/weather/day bonuses minus spread/budget penalties) for reporting."""
     total = 0
     date_weekday = {slot["date"]: slot["weekday"] for slot in slots}
+    # Soft day preferences are graded per (task, slot), so they are summed once here rather than
+    # inside the per-rule loop (several rules can contribute to the same slot).
+    day_gains = {task["id"]: day_preference_gains(task, slots, rules) for task in tasks}
+    for task in tasks:
+        gains = day_gains.get(task["id"])
+        if not gains:
+            continue
+        for start, _size in placement.get(task["id"], []):
+            total += gains[start]
     for rule in rules:
         kind, weight = rule_strength(rule)
         if kind != "soft":
@@ -176,11 +234,8 @@ def soft_totals(placement, tasks, rules, slots, slot_minutes, weather_by_hour):
         when = effect.get("when")
         value = int(round(weight))
         if effect_type == "assignDays":
-            inside = {s["index"] for s in slots
-                      if s["weekday"] in set(effect.get("days") or []) and when_matches(when, s)}
-            total += value * sum(1 for task in tasks if rule_applies(rule, task)
-                                 for start, _size in placement.get(task["id"], []) if start in inside)
-        elif effect_type in ("preferTimeOfDay", "timeWindow"):
+            continue
+        if effect_type in ("preferTimeOfDay", "timeWindow"):
             inside = window_slot_indices(slots, effect.get("start", "00:00"), effect.get("end", "23:59"), when)
             total += value * sum(1 for task in tasks if rule_applies(rule, task)
                                  for start, _size in placement.get(task["id"], []) if start in inside)
@@ -210,12 +265,13 @@ def soft_totals(placement, tasks, rules, slots, slot_minutes, weather_by_hour):
             group = [task for task in tasks if rule_applies(rule, task)]
             if not group:
                 continue
-            totals = {}
+            # Count occurrences, not half-hours: "one outing a day" must not mean "30 minutes".
+            active = {}
             for task in group:
-                for start, size in placement.get(task["id"], []):
-                    totals[slots[start]["date"]] = totals.get(slots[start]["date"], 0) + size
+                for start, _size in placement.get(task["id"], []):
+                    active.setdefault(slots[start]["date"], set()).add(task["id"])
             soft_max = max(1, int(effect.get("softMaxPerDay", 1)))
-            matching = [count for date, count in totals.items() if day_matches(when, date_weekday[date])]
-            total += value * sum(1 for count in matching if count > 0)
-            total -= value * sum(max(0, count - soft_max) for count in matching)
+            matching = [ids for date, ids in active.items() if day_matches(when, date_weekday[date])]
+            total += value * sum(1 for ids in matching if ids)
+            total -= value * sum(max(0, len(ids) - soft_max) for ids in matching)
     return total

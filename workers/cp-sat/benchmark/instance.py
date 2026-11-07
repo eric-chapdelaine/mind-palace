@@ -18,6 +18,7 @@ if str(_ROOT) not in sys.path:
 
 from schedulerlib.config import DEFAULT_CONFIG  # noqa: E402
 from schedulerlib.objective import decision_weights, soft_totals  # noqa: E402
+from schedulerlib.rules import date_range  # noqa: E402
 from schedulerlib.rules import (  # noqa: E402
     day_matches,
     eligible_slots,
@@ -205,14 +206,19 @@ class Problem:
             when = effect.get("when")
             applies = [task for task in self.tasks if rule_applies(rule, task)]
             if etype == "assignDays":
-                inside = {
-                    s["index"]
-                    for s in self.slots
-                    if s["weekday"] in set(effect.get("days") or []) and when_matches(when, s)
-                }
-                total = value * sum(
-                    1 for task in applies for start, _size in placement.get(task["id"], []) if start in inside
-                )
+                # Graded by distance from the nearest preferred date inside the task's window.
+                total = 0
+                weekdays = set(effect.get("days") or [])
+                for task in applies:
+                    window_start = task.get("windowStartDate") or self.slots[0]["date"]
+                    window_end = task.get("windowEndDate") or self.slots[-1]["date"]
+                    ideals = [day for day in date_range(window_start, window_end) if day.weekday() in weekdays]
+                    if not ideals:
+                        continue
+                    for start, _size in placement.get(task["id"], []):
+                        placed = _parse(self.slots[start]["date"]).date()
+                        distance = min(abs((placed - ideal).days) for ideal in ideals)
+                        total += int(round(value * max(0, 7 - distance) / 7))
             elif etype in ("preferTimeOfDay", "timeWindow"):
                 inside = window_slot_indices(self.slots, effect.get("start", "00:00"), effect.get("end", "23:59"), when)
                 total = value * sum(
@@ -228,36 +234,41 @@ class Problem:
                 total = value * sum(
                     1 for task in applies for start, _size in placement.get(task["id"], []) if start in inside
                 )
-            elif etype in ("spread", "dailyBudget"):
+            elif etype == "spread":
                 counts = {}
                 for task in applies:
                     for start, size in placement.get(task["id"], []):
                         date = self.slots[start]["date"]
                         counts[date] = counts.get(date, 0) + size
                 total = 0
-                if etype == "spread":
-                    if len(applies) >= 2:
-                        max_slots = max(1, int(effect.get("maxPerDayMinutes", 120)) // self.slot_minutes)
-                        total -= value * sum(
-                            max(0, count - max_slots)
-                            for date, count in counts.items()
-                            if day_matches(when, _weekday_of(self.slots, date))
-                        )
-                        if effect.get("minDistinctDays"):
-                            active = sorted(counts)
-                            total += value * len(active)
-                            if effect.get("avoidConsecutive"):
-                                from schedulerlib.timegrid import next_day
+                if len(applies) >= 2:
+                    max_slots = max(1, int(effect.get("maxPerDayMinutes", 120)) // self.slot_minutes)
+                    total -= value * sum(
+                        max(0, count - max_slots)
+                        for date, count in counts.items()
+                        if day_matches(when, _weekday_of(self.slots, date))
+                    )
+                    if effect.get("minDistinctDays"):
+                        active = sorted(counts)
+                        total += value * len(active)
+                        if effect.get("avoidConsecutive"):
+                            from schedulerlib.timegrid import next_day
 
-                                total -= value * sum(
-                                    1 for i in range(len(active) - 1) if next_day(active[i]) == active[i + 1]
-                                )
-                else:
-                    if applies:
-                        soft_max = max(1, int(effect.get("softMaxPerDay", 1)))
-                        matching = [count for date, count in counts.items() if day_matches(when, _weekday_of(self.slots, date))]
-                        total += value * sum(1 for count in matching if count > 0)
-                        total -= value * sum(max(0, count - soft_max) for count in matching)
+                            total -= value * sum(
+                                1 for i in range(len(active) - 1) if next_day(active[i]) == active[i + 1]
+                            )
+            elif etype == "dailyBudget":
+                # Occurrences per day, not half-hours: a parent task counts once.
+                active = {}
+                for task in applies:
+                    for start, _size in placement.get(task["id"], []):
+                        active.setdefault(self.slots[start]["date"], set()).add(task["id"])
+                total = 0
+                if applies:
+                    soft_max = max(1, int(effect.get("softMaxPerDay", 1)))
+                    matching = [ids for date, ids in active.items() if day_matches(when, _weekday_of(self.slots, date))]
+                    total += value * sum(1 for ids in matching if ids)
+                    total -= value * sum(max(0, len(ids) - soft_max) for ids in matching)
             else:
                 continue
             out.append({"title": rule.get("title", rule.get("id")), "type": etype, "value": total})

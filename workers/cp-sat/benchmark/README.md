@@ -45,9 +45,9 @@ uv run --project workers/cp-sat python -u workers/cp-sat/benchmark/budgets.py
 * **Same objective.** Scores come from the worker's own `decision_weights` and `soft_totals`, so
   the "style" number is exactly what CP-SAT reports. Decision strictly dominates style by
   construction, so placements are compared lexicographically `(weightedDecision, style)`.
-* **Greedy's internal scorer is exact.** `SoftModel` counts window/weather/assignDays gains once
-  per run (at its start) and accumulates `spread`/`dailyBudget` day counts in slot units, matching
-  `soft_totals`. On every scenario `running_style == soft_totals` (difference 0), so the search is
+* **Greedy's internal scorer is exact.** `SoftModel` counts window/weather gains once per run (at
+  its start), graded `assignDays` gains per slot, and accumulates `spread` minutes and
+  `dailyBudget` occurrences per day, matching `soft_totals`. On every scenario `running_style == soft_totals` (difference 0), so the search is
   optimising exactly the metric it is judged on.
 * **Same model, including splittable tasks.** `instance.expand_splittable` replaces every
   splittable task with `ceil(minutes / slot)` independent 30-minute unit tasks (same tags,

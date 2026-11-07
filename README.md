@@ -84,9 +84,11 @@ Source is imported directly (no build step between packages), so an edit is live
 - **Splitting.** A splittable task is broken into independent half-hour units, so partial
   progress still gets real time on the calendar. A non-splittable one stays whole.
 - **Rules.** Tags plus an `applies` condition select tasks; effects become either hard
-  eligibility (`assignDays`, `timeWindow`, `weatherGate`, `withinAfter`) or weighted
-  preferences (`preferTimeOfDay`, `spread`, `dailyBudget`). Seven weekday pins ship seeded,
-  and all of them are ordinary editable rows.
+  constraints (`assignDays`, `timeWindow`, `perDayLimit`, `weatherGate`, `withinAfter`) or
+  weighted preferences (`preferTimeOfDay`, `spread`, `dailyBudget`). A soft `assignDays` is a
+  graded day preference: the preferred day scores full weight, each day away loses a seventh.
+  There are no seeded day pins — a day/time anchor is a rule on a class tag, so it is always
+  evaluated against the current week.
 - **Two solvers.** The default is a deterministic greedy constructor with relocate/insert/swap
   local search: sub-second, never returns an empty week, ~46× faster than the alternative. An
   OR-Tools CP-SAT model scores a little better on soft preferences when you switch
@@ -153,8 +155,15 @@ and *Accept schedule*.
 **Tags** (`/tags`) is the tag graph — nest, rename, describe in Markdown, archive — and a tag
 page lists every task that carries it, including through a child tag.
 
-**Recurrence** (`/recurrence`) authors routines as rules: daily or every N days/weeks, chosen
-weekdays, and the duration, priority, tags and decay hour each occurrence inherits.
+**Recurrence** (`/recurrence`) answers "how often should a new task appear": daily or every N
+days/weeks, and how many times per period (1 = once this week, any day; 3 = three times this
+week). The period length is what makes it a **cadence** or a **quota**. A cadence is one
+occurrence per period, with that period as its window: "every 2 weeks" keeps one card in each
+14-day window. A quota is N interchangeable occurrences sharing the period as their window:
+"twice in 4 weeks" lets both land on the best days the rules allow, even in the same week. The
+yearly rate can match (`2 weeks × 1` and `4 weeks × 2` are both ~26 cards a year) but the
+freedom is different. Each occurrence inherits the duration, priority, tags and decay hour.
+Where it lands is the Rules page's job — prefer Sunday, keep mornings free, at most one per day.
 
 **Rules** (`/rules`) edits the scheduling rules: add, retune the weight, toggle off.
 

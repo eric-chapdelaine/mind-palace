@@ -1,5 +1,4 @@
 import {
-  weekdayTagPublicIds,
   type HealthActivity,
   type IntegrationSummary,
   type Schedule,
@@ -7,7 +6,6 @@ import {
   type Tag,
   type TaskSummary,
   type TimeBlock,
-  type UpdateTaskInput,
   type WeatherForecast,
 } from "@mind-palace/shared";
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from "react";
@@ -40,11 +38,6 @@ function sameDay(left: Date, right: Date): boolean {
 
 // ---- Week-task helpers (pure, so tests stay possible) ----
 
-/** Direct + derived tag public ids. */
-function effectiveTagIds(task: TaskSummary): string[] {
-  return [...task.tags, ...task.derivedTags].map((tag) => tag.publicId);
-}
-
 /**
  * The tasks this page proposes for the week: open, not archived, and actually schedulable. The list
  * is derived so it cannot become a second, hand-maintained to-do list that disagrees with the
@@ -75,24 +68,6 @@ function schedulabilityReason(task: TaskSummary): { label: string; detail: strin
     };
   }
   return null;
-}
-
-/**
- * Index into `weekdayTagPublicIds` (0 = Sunday .. 6 = Saturday, matching `Date#getDay()`)
- * of the day the task is pinned to, or -1 when it has no day tag.
- */
-function dayTagIndex(task: TaskSummary): number {
-  const ids = new Set(effectiveTagIds(task));
-  return weekdayTagPublicIds.findIndex((publicId) => ids.has(publicId));
-}
-
-function directTagIds(task: TaskSummary): number[] {
-  return task.tags.map((tag) => tag.id);
-}
-
-function sameIds(left: number[], right: number[]): boolean {
-  const sort = (ids: number[]) => [...ids].sort((a, b) => a - b).join(",");
-  return sort(left) === sort(right);
 }
 
 /**
@@ -172,76 +147,24 @@ function HealthEvent({ kind, startAt, endAt, href, title, subtitle, day, dayEnd,
   );
 }
 
-function WeekTaskRow({ task, scheduled, onDragStart, onDragEnd, onCardDrop, dragOver, onDragEnter, onDragLeave }: {
+function WeekTaskRow({ task, scheduled, onDragStart, onDragEnd }: {
   task: TaskSummary;
   scheduled: boolean;
   onDragStart: (event: DragEvent<HTMLDivElement>, taskId: number) => void;
   onDragEnd: () => void;
-  onCardDrop?: (event: DragEvent<HTMLDivElement>) => void;
-  dragOver?: boolean;
-  onDragEnter?: () => void;
-  onDragLeave?: () => void;
 }) {
   const reason = schedulabilityReason(task);
   return (
     <div
-      className={`week-task-row${scheduled ? " week-task-row-scheduled" : ""}${dragOver ? " drag-over" : ""}`}
+      className={`week-task-row${scheduled ? " week-task-row-scheduled" : ""}`}
       draggable
       onDragStart={(event) => onDragStart(event, task.id)}
       onDragEnd={onDragEnd}
-      onDragOver={onCardDrop ? (event) => event.preventDefault() : undefined}
-      onDragEnter={() => onDragEnter?.()}
-      onDragLeave={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onDragLeave?.();
-      }}
-      onDrop={onCardDrop}
     >
       <Link to={`/tasks/${task.id}`} draggable={false}>{task.title}</Link>
       {scheduled && <span className="week-task-ok" title="Fully scheduled this week">✓</span>}
       {task.durationMinutesRemaining !== null && <span className="week-task-duration">{task.durationMinutesRemaining}m</span>}
       {reason !== null && <span className="week-task-ineligible" title={reason.detail}>{reason.label}</span>}
-    </div>
-  );
-}
-
-// Compact chip shown at the top of a calendar day column (sticky, like Google
-// Calendar's all-day strip) for tasks pinned to that day.
-function DayTaskChip({ task, scheduled, removeLabel, onRemove, onDragStart, onDragEnd, onDrop, dragOver, onDragEnter, onDragLeave }: {
-  task: TaskSummary;
-  scheduled: boolean;
-  removeLabel: string;
-  onRemove: (taskId: number) => void;
-  onDragStart: (event: DragEvent<HTMLDivElement>, taskId: number) => void;
-  onDragEnd: () => void;
-  onDrop?: (event: DragEvent<HTMLDivElement>) => void;
-  dragOver?: boolean;
-  onDragEnter?: () => void;
-  onDragLeave?: () => void;
-}) {
-  const reason = schedulabilityReason(task);
-  return (
-    <div
-      className={`day-task-chip${scheduled ? " day-task-chip-scheduled" : ""}${dragOver ? " drag-over" : ""}`}
-      draggable
-      onDragStart={(event) => onDragStart(event, task.id)}
-      onDragEnd={onDragEnd}
-      onDragOver={onDrop ? (event) => event.preventDefault() : undefined}
-      onDragEnter={() => onDragEnter?.()}
-      onDragLeave={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onDragLeave?.();
-      }}
-      onDrop={onDrop}
-    >
-      <Link to={`/tasks/${task.id}`} draggable={false} title={task.title}>{task.title}</Link>
-      {scheduled && <span className="week-task-ok" title="Fully scheduled this week">✓</span>}
-      {reason !== null && <span className="day-task-chip-ineligible" title={reason.detail}>!</span>}
-      <button
-        type="button"
-        className="week-task-remove"
-        aria-label={removeLabel}
-        title={removeLabel}
-        onClick={() => onRemove(task.id)}
-      >×</button>
     </div>
   );
 }
@@ -258,8 +181,6 @@ export function SchedulePage() {
   const [busy, setBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
-  const [dragOverRow, setDragOverRow] = useState<number | null>(null);
   const [draggingBlockId, setDraggingBlockId] = useState<number | null>(null);
   const [draggingTaskId, setDraggingTaskId] = useState<number | null>(null);
   const [dragOverDay, setDragOverDay] = useState<string | null>(null);
@@ -417,82 +338,6 @@ export function SchedulePage() {
   }
 
   const taskById = new Map(tasks.map((task) => [task.id, task]));
-  const tagIdByPublicId = new Map(tags.map((tag) => [tag.publicId, tag.id]));
-  const dayTagIdSet = new Set(
-    weekdayTagPublicIds
-      .map((publicId) => tagIdByPublicId.get(publicId))
-      .filter((id): id is number => id !== undefined),
-  );
-
-  // ---- Tag mutations behind the lists ----
-
-  /** Tag ids that put a task in a list: strips other day tags, adds the day if given. */
-  function listTags(task: TaskSummary, dayPublicId: string | null): number[] {
-    const ids = new Set(directTagIds(task).filter((id) => !dayTagIdSet.has(id)));
-    const dayId = dayPublicId === null ? undefined : tagIdByPublicId.get(dayPublicId);
-    if (dayId !== undefined) ids.add(dayId);
-    return [...ids];
-  }
-
-  async function applyTags(taskId: number, tagIds: number[]) {
-    try {
-      await api.updateTask(taskId, { tagIds });
-      await load();
-    } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : String(actionError));
-    }
-  }
-
-  async function assignDay(taskId: number, dayPublicId: string) {
-    const task = taskById.get(taskId);
-    const dayId = tagIdByPublicId.get(dayPublicId);
-    if (!task || dayId === undefined) return;
-    const next = listTags(task, dayPublicId);
-    if (sameIds(directTagIds(task), next)) return;
-    await applyTags(taskId, next);
-  }
-
-  async function clearDay(taskId: number) {
-    const task = taskById.get(taskId);
-    if (!task) return;
-    const next = listTags(task, null);
-    if (sameIds(directTagIds(task), next)) return;
-    await applyTags(taskId, next);
-  }
-
-  /**
-   * Drop a card onto another: put the dragged task above the target and re-rank the whole
-   * destination list (same pattern as the kanban board's moveTask). `dayPublicId` is the list
-   * the drop happened in — null for the This week list; the dragged task is moved into that
-   * list via its tags when it wasn't already there.
-   */
-  async function reorderInList(event: DragEvent<HTMLDivElement>, listTasks: TaskSummary[], beforeTaskId: number, dayPublicId: string | null) {
-    event.preventDefault();
-    event.stopPropagation();
-    const taskId = Number(event.dataTransfer.getData("taskId"));
-    if (!Number.isInteger(taskId) || taskId === beforeTaskId) return;
-    const task = taskById.get(taskId);
-    if (!task) return;
-    const destination = [...listTasks].sort((a, b) => b.rank - a.rank).filter((item) => item.id !== taskId);
-    const beforeIndex = destination.findIndex((item) => item.id === beforeTaskId);
-    if (beforeIndex === -1) return;
-    destination.splice(beforeIndex, 0, task);
-    try {
-      await Promise.all(destination.map(async (item, index) => {
-        const input: UpdateTaskInput = {};
-        const rank = destination.length - index;
-        if (item.id === taskId) {
-          const next = listTags(item, dayPublicId);
-          if (!sameIds(directTagIds(item), next)) input.tagIds = next;
-        }
-        if (taskById.get(item.id)!.rank !== rank) input.rank = rank;
-        if (Object.keys(input).length > 0) await api.updateTask(item.id, input);
-      }));
-      await load();
-    } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : String(actionError));
-    }
-  }
 
   // ---- Drag & drop (native HTML5, same pattern as the kanban board) ----
 
@@ -503,30 +348,8 @@ export function SchedulePage() {
   }
 
   function endDrag() {
-    setDragOverColumn(null);
-    setDragOverRow(null);
     setDraggingTaskId(null);
     setDragOverDay(null);
-  }
-
-  function leaveColumn(event: DragEvent<HTMLElement>) {
-    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragOverColumn(null);
-  }
-
-  function dropOnThisWeek(event: DragEvent<HTMLElement>) {
-    event.preventDefault();
-    setDragOverColumn(null);
-    setDragOverRow(null);
-    const taskId = Number(event.dataTransfer.getData("taskId"));
-    if (Number.isInteger(taskId)) void clearDay(taskId);
-  }
-
-  function dropOnDay(event: DragEvent<HTMLElement>, dayPublicId: string) {
-    event.preventDefault();
-    setDragOverColumn(null);
-    setDragOverRow(null);
-    const taskId = Number(event.dataTransfer.getData("taskId"));
-    if (Number.isInteger(taskId)) void assignDay(taskId, dayPublicId);
   }
 
   // ---- Drag & drop: move a proposed time block to a new day/time ----
@@ -593,8 +416,9 @@ export function SchedulePage() {
   const now = new Date();
   const days = Array.from({ length: 7 }, (_, index) => addDays(rangeStart, index));
   const rangeEnd = addDays(rangeStart, 7);
-  const committed = tasks.filter(isProposed);
-  const proposedTasks = committed.filter((task) => dayTagIndex(task) === -1).sort((a, b) => b.rank - a.rank);
+  // Every open task with time remaining is what the scheduler will place. There is no day pin to
+  // filter out any more: placement is the scheduler's decision, a manual block is a one-off.
+  const proposedTasks = tasks.filter(isProposed).sort((a, b) => b.rank - a.rank);
 
   // Minutes of non-superseded, non-missed blocks per task; calendar events are real blocks too,
   // so a task is fully scheduled when its blocks cover its remaining estimate (creating and
@@ -716,43 +540,6 @@ export function SchedulePage() {
                     </div>
                   </details>}
                 </header>
-              );
-            })}
-            <div className="calendar-chip-gutter" aria-hidden="true" />
-            {days.map((day) => {
-              const dayIndex = day.getDay();
-              // getDay() is 0..6 and weekdayTagPublicIds has one entry per weekday.
-              const dayPublicId = weekdayTagPublicIds[dayIndex]!;
-              const columnKey = day.toISOString();
-              const columnTasks = committed
-                .filter((task) => dayTagIndex(task) === dayIndex)
-                .sort((a, b) => b.rank - a.rank);
-              return (
-                <section
-                  key={columnKey}
-                  className={`calendar-chip-cell${dragOverColumn === columnKey ? " drag-over" : ""}`}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDragEnter={() => setDragOverColumn(columnKey)}
-                  onDragLeave={leaveColumn}
-                  onDrop={(event) => dropOnDay(event, dayPublicId)}
-                >
-                  {columnTasks.map((task) => (
-                    <DayTaskChip
-                      key={task.id}
-                      task={task}
-                      scheduled={isFullyScheduled(task)}
-                      removeLabel={`Unpin from ${day.toLocaleDateString(undefined, { weekday: "long" })}`}
-                      onRemove={(taskId) => void clearDay(taskId)}
-                      onDragStart={startDrag}
-                      onDragEnd={endDrag}
-                      onDrop={(event) => void reorderInList(event, columnTasks, task.id, dayPublicId)}
-                      dragOver={dragOverRow === task.id}
-                      onDragEnter={() => setDragOverRow(task.id)}
-                      onDragLeave={() => setDragOverRow(null)}
-                    />
-                  ))}
-                  {columnTasks.length === 0 && <span className="calendar-chip-empty">Drop a task to pin it</span>}
-                </section>
               );
             })}
           </div>
@@ -893,7 +680,7 @@ export function SchedulePage() {
           <>
             <div className="week-panel-head">
               <span className="eyebrow">Ready to schedule</span>
-              <span className="week-picks-count">{committed.length}</span>
+              <span className="week-picks-count">{proposedTasks.length}</span>
               <button
                 className="panel-toggle"
                 onClick={() => setSidebarCollapsed(true)}
@@ -902,18 +689,12 @@ export function SchedulePage() {
               >−</button>
             </div>
             <p className="muted">
-              Every open task with time remaining, which is what the scheduler will place. Drag one onto a day header
-              to pin it there, or into the calendar to schedule it at that time; drag one onto another task to reorder
-              it — ✓ marks tasks already fully scheduled. Drag a placed block to a new time to move it, accepted ones
-              included; accepted blocks stay put when you regenerate. <em>Accept all</em> commits the whole week at once.
+              Every open task with time remaining, which is what the scheduler will place. Drag one into the calendar
+              to schedule it yourself at that time — ✓ marks tasks already fully scheduled. Drag a placed block to a
+              new time to move it, accepted ones included; accepted blocks stay put when you regenerate.
+              <em>Accept all</em> commits the whole week at once.
             </p>
-            <div
-              className={`week-picks${dragOverColumn === "proposed" ? " drag-over" : ""}`}
-              onDragOver={(event) => event.preventDefault()}
-              onDragEnter={() => setDragOverColumn("proposed")}
-              onDragLeave={leaveColumn}
-              onDrop={dropOnThisWeek}
-            >
+            <div className="week-picks">
               {proposedTasks.map((task) => (
                 <WeekTaskRow
                   key={task.id}
@@ -921,10 +702,6 @@ export function SchedulePage() {
                   scheduled={isFullyScheduled(task)}
                   onDragStart={startDrag}
                   onDragEnd={endDrag}
-                  onCardDrop={(event) => void reorderInList(event, proposedTasks, task.id, null)}
-                  dragOver={dragOverRow === task.id}
-                  onDragEnter={() => setDragOverRow(task.id)}
-                  onDragLeave={() => setDragOverRow(null)}
                 />
               ))}
               {proposedTasks.length === 0 && <p className="week-task-empty">Nothing to schedule — every open task is either finished, archived, or has no time estimate.</p>}

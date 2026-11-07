@@ -39,7 +39,15 @@ import random
 import time
 
 from .objective import soft_totals
-from .rules import day_matches, rule_applies, rule_strength, when_matches, window_slot_indices
+from .rules import (
+    day_matches,
+    day_preference_gains,
+    per_day_limits,
+    rule_applies,
+    rule_strength,
+    when_matches,
+    window_slot_indices,
+)
 from .timegrid import next_day
 from .weather import slot_weather, weather_is_nice
 
@@ -106,6 +114,19 @@ class _SoftModel:
     def _build(self, units):
         ctx = self.ctx
         slots = ctx["slots"]
+        # Soft day preferences are graded per task and several rules can contribute to one slot, so
+        # they are summed once per parent task instead of inside the per-rule loop.
+        graded_by_task = {}
+        for unit in units:
+            task = ctx["task_by_id"][unit["parent"]]
+            if task["id"] not in graded_by_task:
+                graded_by_task[task["id"]] = day_preference_gains(task, slots, ctx["rules"])
+            graded = graded_by_task[task["id"]]
+            if not graded:
+                continue
+            gains = self.slot_gain[unit["id"]]
+            for index, gain in enumerate(graded):
+                gains[index] += gain
         for rule in ctx["rules"]:
             kind, weight = rule_strength(rule)
             if kind != "soft":
@@ -116,17 +137,12 @@ class _SoftModel:
             when = effect.get("when")
             applies = [unit for unit in units if rule_applies(rule, unit)]
 
-            if etype in ("assignDays", "preferTimeOfDay", "timeWindow"):
-                if etype == "assignDays":
-                    inside = {
-                        slot["index"]
-                        for slot in slots
-                        if slot["weekday"] in set(effect.get("days") or []) and when_matches(when, slot)
-                    }
-                else:
-                    inside = window_slot_indices(
-                        slots, effect.get("start", "00:00"), effect.get("end", "23:59"), when
-                    )
+            if etype == "assignDays":
+                continue
+            if etype in ("preferTimeOfDay", "timeWindow"):
+                inside = window_slot_indices(
+                    slots, effect.get("start", "00:00"), effect.get("end", "23:59"), when
+                )
                 for unit in applies:
                     gains = self.slot_gain[unit["id"]]
                     for index in inside:
@@ -138,7 +154,6 @@ class _SoftModel:
                             self.slot_gain[unit["id"]][slot["index"]] += value
             elif etype in ("spread", "dailyBudget"):
                 key = (etype, rule["id"])
-                self.counts[key] = [0] * ctx["day_count"]
                 spec = {
                     "kind": etype,
                     "key": key,
@@ -147,10 +162,15 @@ class _SoftModel:
                     "days": {d for d in range(ctx["day_count"]) if day_matches(when, ctx["day_weekday"][d])},
                 }
                 if etype == "spread":
+                    # Minutes per day, so the count is slot-weighted.
+                    self.counts[key] = [0] * ctx["day_count"]
                     spec["max_slots"] = max(1, int(effect.get("maxPerDayMinutes", 120)) // ctx["slot_minutes"])
                     spec["min_distinct"] = bool(effect.get("minDistinctDays"))
                     spec["avoid_consecutive"] = bool(effect.get("avoidConsecutive"))
                 else:
+                    # Occurrences per day: a parent task counts once however many runs it has.
+                    self.counts[key] = {}
+                    spec["parents"] = {unit["id"]: unit["parent"] for unit in applies}
                     spec["soft_max"] = max(1, int(effect.get("softMaxPerDay", 1)))
                 self.group_specs.append(spec)
 
@@ -174,9 +194,10 @@ class _SoftModel:
             return 0
         total = 0
         for day in spec["days"]:
-            if counts[day] > 0:
+            present = len(counts.get(day, {}))
+            if present > 0:
                 total += value
-            total -= value * max(0, counts[day] - spec["soft_max"])
+            total -= value * max(0, present - spec["soft_max"])
         return total
 
     def delta(self, unit_id, runs, sign: int) -> int:
@@ -188,25 +209,34 @@ class _SoftModel:
         for spec in self.group_specs:
             if unit_id not in spec["task_ids"]:
                 continue
-            counts = self.counts[spec["key"]]
             before = self.contribution(spec)
-            for day, size in day_units:
-                counts[day] += sign * size
+            self._apply_spec(spec, unit_id, day_units, sign)
             after = self.contribution(spec)
-            for day, size in day_units:
-                counts[day] -= sign * size
+            self._apply_spec(spec, unit_id, day_units, -sign)
             total += after - before
         return total
 
     def apply(self, unit_id, runs, sign: int) -> None:
         if not self.group_specs:
             return
+        day_units = [(self.ctx["day_of"][start], size) for start, size in runs]
         for spec in self.group_specs:
             if unit_id not in spec["task_ids"]:
                 continue
-            counts = self.counts[spec["key"]]
-            for start, size in runs:
-                counts[self.ctx["day_of"][start]] += sign * size
+            self._apply_spec(spec, unit_id, day_units, sign)
+
+    def _apply_spec(self, spec, unit_id, day_units, sign: int) -> None:
+        counts = self.counts[spec["key"]]
+        if spec["kind"] == "spread":
+            for day, size in day_units:
+                counts[day] += sign * size
+            return
+        parent = spec["parents"][unit_id]
+        for day, _size in day_units:
+            bucket = counts.setdefault(day, {})
+            bucket[parent] = bucket.get(parent, 0) + sign
+            if bucket[parent] <= 0:
+                bucket.pop(parent, None)
 
 
 class _Scheduler:
@@ -240,6 +270,9 @@ class _Scheduler:
                 if rule_applies(rule, unit):
                     current = self.within_after.get(unit["id"])
                     self.within_after[unit["id"]] = gap if current is None else min(current, gap)
+        self.limits = per_day_limits(ctx["tasks"], ctx["rules"])
+        # day -> {parent task id: number of committed runs}, so a cap counts a task once per day.
+        self.limit_counts = {limit["key"]: {} for limit in self.limits}
         self.placement = {}
         self.occupied = set()
         self.soft = _SoftModel(ctx, units)
@@ -259,6 +292,7 @@ class _Scheduler:
         for start, size in runs:
             self.occupied.update(range(start, start + size))
         self.soft.apply(unit["id"], runs, +1)
+        self._count_limit(unit, runs, +1)
 
     def _uncommit(self, unit_id):
         runs = self.placement.pop(unit_id)
@@ -267,7 +301,36 @@ class _Scheduler:
             for slot in range(start, start + size):
                 self.occupied.discard(slot)
         self.soft.apply(unit_id, runs, -1)
+        self._count_limit(self.unit_by_id[unit_id], runs, -1)
         return runs
+
+    def _count_limit(self, unit, runs, sign: int) -> None:
+        for limit in self.limits:
+            if unit["parent"] not in limit["task_ids"]:
+                continue
+            counts = self.limit_counts[limit["key"]]
+            for start, _size in runs:
+                day = self.ctx["day_of"][start]
+                bucket = counts.setdefault(day, {})
+                bucket[unit["parent"]] = bucket.get(unit["parent"], 0) + sign
+                if bucket[unit["parent"]] <= 0:
+                    bucket.pop(unit["parent"], None)
+
+    def _limit_allows(self, unit, start) -> bool:
+        """Would placing this unit at `start` break a hard per-day cap?"""
+        day = self.ctx["day_of"][start]
+        weekday = self.ctx["day_weekday"][day]
+        for limit in self.limits:
+            if unit["parent"] not in limit["task_ids"]:
+                continue
+            if not day_matches(limit["when"], weekday):
+                continue
+            bucket = self.limit_counts[limit["key"]].get(day, {})
+            if unit["parent"] in bucket:
+                continue
+            if len(bucket) >= limit["max"]:
+                return False
+        return True
 
     def _priority_order(self, units):
         weights = self.ctx["weights"]
@@ -319,6 +382,8 @@ class _Scheduler:
                 break
             if any(slot not in eligible_set or slot in self.occupied for slot in range(start, start + size)):
                 continue
+            if not self._limit_allows(unit, start):
+                continue
             score = self.soft.delta(unit["id"], [(start, size)], +1)
             if self.explore:
                 score += self.rng.random() * self.explore
@@ -328,6 +393,12 @@ class _Scheduler:
         return [(best_start, size)] if best_start is not None else None
 
     def _feasible(self) -> bool:
+        for limit in self.limits:
+            for day, bucket in self.limit_counts[limit["key"]].items():
+                if not day_matches(limit["when"], self.ctx["day_weekday"][day]):
+                    continue
+                if len(bucket) > limit["max"]:
+                    return False
         for unit_id, placed in self.placement.items():
             deps = self.deps.get(unit_id, [])
             if not all(self.placement.get(dep) for dep in deps):

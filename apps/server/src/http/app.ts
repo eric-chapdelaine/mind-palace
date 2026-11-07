@@ -52,12 +52,15 @@ export interface IntegrationRegistration {
 function recurrenceTemplateInput(body: Record<string, unknown>): UpsertRecurrenceInput {
   const frequency = body.frequency;
   if (frequency !== "daily" && frequency !== "weekly") throw new Error("frequency must be daily or weekly");
-  // Weekday indices are `Date#getDay()` values; anything else silently selects no day at all.
-  const weekdays = Array.isArray(body.weekdays) ? body.weekdays.map(Number) : [];
-  if (weekdays.some((day) => !Number.isInteger(day) || day < 0 || day > 6)) {
-    throw new Error("weekdays must be whole numbers 0-6 (0 = Sunday)");
+  // How many interchangeable occurrences each period gets. A daily period is one day, so it can
+  // only hold one; "twice a day" would need a sub-day period that does not exist yet.
+  const timesPerPeriod = body.timesPerPeriod === undefined ? 1 : Number(body.timesPerPeriod);
+  if (!Number.isInteger(timesPerPeriod) || timesPerPeriod < 1) {
+    throw new Error("timesPerPeriod must be a whole number of at least 1");
   }
-  if (frequency === "weekly" && weekdays.length === 0) throw new Error("A weekly recurrence needs at least one weekday");
+  if (frequency === "daily" && timesPerPeriod !== 1) {
+    throw new Error("A daily recurrence is one occurrence per day; use weekly for a quota");
+  }
   const autoArchiveHour = body.autoArchiveHour === null || body.autoArchiveHour === undefined
     ? null
     : Number(body.autoArchiveHour);
@@ -76,7 +79,7 @@ function recurrenceTemplateInput(body: Record<string, unknown>): UpsertRecurrenc
     title: requiredString(body.title, "title"),
     durationMinutes,
     frequency,
-    weekdays,
+    timesPerPeriod,
     autoArchiveHour,
     intervalCount,
     nextOccurrenceDate,
@@ -363,8 +366,8 @@ export function createHttpApp({ tasks, schedule, weather, calendar, garmin, inte
   });
 
   app.post("/api/schedule/generate", async (context) => context.json(await schedule.generate()));
-  // Materialize the recurrence window on demand. Reports what it did — a recurrence whose weekdays all
-  // fall outside the window legitimately creates nothing, and saying so beats a silent 200.
+  // Materialize the recurrence window on demand. Reports what it did — a recurrence whose period
+  // falls outside the window legitimately creates nothing, and saying so beats a silent 200.
   app.post("/api/recurrences/materialize", async (context) => {
     const body = (await context.req.json()) as Record<string, unknown>;
     return context.json(

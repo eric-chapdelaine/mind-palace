@@ -118,11 +118,16 @@ function mapSchedulerRule(value: Row): SchedulerRule {
 }
 
 /** Effects that can be hard constraints; the rest are preferences only. */
-const hardRuleEffects = new Set(["assignDays", "timeWindow", "weatherGate", "withinAfter"]);
+const hardRuleEffects = new Set(["assignDays", "timeWindow", "perDayLimit", "weatherGate", "withinAfter"]);
+/** Effects that only make sense as hard constraints (a soft cap could never enforce anything). */
+const hardOnlyRuleEffects = new Set(["perDayLimit"]);
 
 function assertRuleStrengthMatchesEffect(effect: RuleEffect, strength: RuleStrength): void {
   if (strength.kind === "hard" && !hardRuleEffects.has(effect.type)) {
     throw new Error(`Effect '${effect.type}' cannot be hard`);
+  }
+  if (strength.kind === "soft" && hardOnlyRuleEffects.has(effect.type)) {
+    throw new Error(`Effect '${effect.type}' must be hard`);
   }
 }
 
@@ -935,12 +940,13 @@ export class TaskRepository {
   createRecurrenceTemplate(input: UpsertRecurrenceInput): RecurrenceTemplate {
     const timestamp = now();
     this.database.connection.exec("BEGIN IMMEDIATE");
+    let rowId: number;
     try {
       const result = this.database.connection
         .prepare(
           `INSERT INTO recurrence_templates
             (public_id, title, description, priority, duration_minutes, splittable, min_chunk_minutes,
-             max_chunk_minutes, frequency, interval_count, weekdays_json,
+             max_chunk_minutes, frequency, interval_count, times_per_period,
              next_occurrence_date, auto_archive_hour, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
@@ -948,17 +954,24 @@ export class TaskRepository {
           randomUUID(), input.title.trim(), input.description ?? null, input.priority ?? 0,
           input.durationMinutes, input.splittable ? 1 : 0, input.minChunkMinutes ?? 30,
           input.maxChunkMinutes ?? 180, input.frequency, input.intervalCount ?? 1,
-          JSON.stringify(input.weekdays ?? []), input.nextOccurrenceDate,
+          input.timesPerPeriod ?? 1, input.nextOccurrenceDate,
           input.autoArchiveHour ?? null, timestamp, timestamp,
         );
-      const rowId = insertedId(result);
+      rowId = insertedId(result);
       this.setRecurrenceTemplateTags(rowId, input.tagIds ?? []);
       this.database.connection.exec("COMMIT");
-      return this.requireRecurrenceTemplate(rowId);
     } catch (error) {
       this.database.connection.exec("ROLLBACK");
       throw error;
     }
+    // The routine's tag is what a day/time rule selects, so it has to exist before the first
+    // occurrence does. Creating it after the commit means the Rules page can target a new routine
+    // immediately. `ensureTemplateTag` opens its own transaction, so it cannot run inside ours.
+    this.ensureTemplateTag(rowId, {
+      title: input.title,
+      description: `Recurring occurrences of “${input.title.trim()}”.`,
+    });
+    return this.requireRecurrenceTemplate(rowId);
   }
 
   updateRecurrenceTemplate(id: number, input: UpsertRecurrenceInput): RecurrenceTemplate {
@@ -969,14 +982,14 @@ export class TaskRepository {
         .prepare(
           `UPDATE recurrence_templates SET title = ?, description = ?, priority = ?, duration_minutes = ?,
              splittable = ?, min_chunk_minutes = ?, max_chunk_minutes = ?, frequency = ?, interval_count = ?,
-             weekdays_json = ?, next_occurrence_date = ?, auto_archive_hour = ?,
+             times_per_period = ?, next_occurrence_date = ?, auto_archive_hour = ?,
              updated_at = ?
            WHERE id = ?`,
         )
         .run(
           input.title.trim(), input.description ?? null, input.priority ?? 0, input.durationMinutes,
           input.splittable ? 1 : 0, input.minChunkMinutes ?? 30, input.maxChunkMinutes ?? 180,
-          input.frequency, input.intervalCount ?? 1, JSON.stringify(input.weekdays ?? []),
+          input.frequency, input.intervalCount ?? 1, input.timesPerPeriod ?? 1,
           input.nextOccurrenceDate, input.autoArchiveHour ?? null,
           timestamp, id,
         );
@@ -1034,7 +1047,7 @@ export class TaskRepository {
       maxChunkMinutes: item.max_chunk_minutes === null ? 180 : integer(item.max_chunk_minutes),
       frequency: text(item.frequency) as RecurrenceTemplate["frequency"],
       intervalCount: integer(item.interval_count),
-      weekdays: item.weekdays_json ? json<number[]>(item.weekdays_json, []) : [],
+      timesPerPeriod: item.times_per_period === null ? 1 : integer(item.times_per_period),
       nextOccurrenceDate: text(item.next_occurrence_date),
       autoArchiveHour: item.auto_archive_hour === null ? null : integer(item.auto_archive_hour),
       routineTagId: item.routine_tag_id === null ? null : integer(item.routine_tag_id),
@@ -1049,34 +1062,41 @@ export class TaskRepository {
   }
 
   /**
-   * Whether this routine already produced a live task for `date`. The occurrence ledger is a record
-   * of what was generated, not a lock: a child that was deleted or finished is regenerated, because
-   * the point of a routine is that today's row exists today.
+   * Whether this routine still has a live child for one slot of its period. A daily occurrence is
+   * regenerated when its child is deleted (a completed card keeps its row, so it stays done).
    */
-  /**
-   * Whether this recurrence has already produced a card for this date — whatever became of it. The
-   * card is the day's record, so completing it must not cause another; re-creating it would put a
-   * duplicate beside the finished one. (There is no delete route, so a row cannot be freed this way.)
-   */
-  recurrenceOccurrenceIsLive(templateId: number, date: string): boolean {
+  recurrenceOccurrenceIsLive(templateId: number, periodStart: string, sequence: number): boolean {
     return Boolean(this.database.connection
       .prepare(
         `SELECT 1 FROM recurrence_occurrences occurrence
            JOIN tasks child ON child.id = occurrence.child_task_id
-          WHERE occurrence.template_id = ? AND occurrence.occurrence_date = ?`,
+          WHERE occurrence.template_id = ? AND occurrence.period_start = ? AND occurrence.sequence = ?`,
       )
-      .get(templateId, date));
+      .get(templateId, periodStart, sequence));
   }
 
-  /** Record that a template produced a child for a date, replacing any earlier child for it. */
-  recordRecurrenceOccurrence(templateId: number, date: string, childTaskId: number): void {
+  /**
+   * Whether this period slot was ever filled. A quota occurrence is *not* regenerated after its
+   * child is completed or deleted: "once this week" stays once, or completing Monday's groceries
+   * would mint a second card for the same week.
+   */
+  recurrenceOccurrenceExists(templateId: number, periodStart: string, sequence: number): boolean {
+    return Boolean(this.database.connection
+      .prepare(
+        "SELECT 1 FROM recurrence_occurrences WHERE template_id = ? AND period_start = ? AND sequence = ?",
+      )
+      .get(templateId, periodStart, sequence));
+  }
+
+  /** Record that a template produced a child for one slot, replacing any earlier child for it. */
+  recordRecurrenceOccurrence(templateId: number, periodStart: string, sequence: number, childTaskId: number): void {
     this.database.connection
       .prepare(
-        `INSERT INTO recurrence_occurrences (template_id, occurrence_date, child_task_id, created_at)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(template_id, occurrence_date) DO UPDATE SET child_task_id = excluded.child_task_id`,
+        `INSERT INTO recurrence_occurrences (template_id, period_start, sequence, child_task_id, created_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(template_id, period_start, sequence) DO UPDATE SET child_task_id = excluded.child_task_id`,
       )
-      .run(templateId, date, childTaskId, now());
+      .run(templateId, periodStart, sequence, childTaskId, now());
   }
 
   listSchedulableTasks(): SchedulableTask[] {

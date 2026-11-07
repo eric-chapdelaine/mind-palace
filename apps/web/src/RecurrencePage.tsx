@@ -1,12 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { weekdayLabels, type MaterializeResult, type RecurrenceTemplate, type Tag, type UpsertRecurrenceInput } from "@mind-palace/shared";
+import { type MaterializeResult, type RecurrenceTemplate, type Tag, type UpsertRecurrenceInput } from "@mind-palace/shared";
 import { api } from "./api";
 import { todayLocalDate } from "./lib/datetime";
 import { TagPicker } from "./components/TagPicker";
-
-/** Monday first, because that is how a week is read on this page. */
-const WEEKDAY_CHOICES = [1, 2, 3, 4, 5, 6, 0].map((value) => ({ value, label: weekdayLabels[value]! }));
 
 /** Hours are stored 0-23; they are always *spoken* in 12-hour time, on the hour. */
 function formatHour(hour: number): string {
@@ -18,14 +15,14 @@ function formatHour(hour: number): string {
 /** 0-23 in the order a day is read, labelled the way it is said. */
 const HOUR_CHOICES = Array.from({ length: 24 }, (_, hour) => ({ value: hour, label: formatHour(hour) }));
 
-/** "every day", "every 3 days", "every Monday, Wednesday", "every 2 weeks on Sunday". */
+/** "every day", "every 3 days", "1 time per week", "3 times every 2 weeks". */
 function summarize(template: RecurrenceTemplate): string {
-  const names = template.weekdays.map((day) => WEEKDAY_CHOICES.find((choice) => choice.value === day)?.label ?? "");
-  const days = names.length > 0 ? ` on ${names.join(", ")}` : "";
-  if (template.frequency === "weekly") {
-    return `every ${template.intervalCount === 1 ? "week" : `${template.intervalCount} weeks`}${days}`;
-  }
-  return `every ${template.intervalCount === 1 ? "day" : `${template.intervalCount} days`}`;
+  const period = template.frequency === "weekly"
+    ? (template.intervalCount === 1 ? "week" : `${template.intervalCount} weeks`)
+    : (template.intervalCount === 1 ? "day" : `${template.intervalCount} days`);
+  if (template.frequency === "daily") return `every ${period}`;
+  const times = template.timesPerPeriod === 1 ? "1 time" : `${template.timesPerPeriod} times`;
+  return `${times} per ${period}`;
 }
 
 interface Draft {
@@ -34,7 +31,7 @@ interface Draft {
   durationMinutes: string;
   frequency: "daily" | "weekly";
   intervalCount: string;
-  weekdays: number[];
+  timesPerPeriod: string;
   nextOccurrenceDate: string;
   autoArchiveHour: string;
   tagIds: number[];
@@ -47,7 +44,7 @@ function emptyDraft(): Draft {
     durationMinutes: "30",
     frequency: "daily",
     intervalCount: "1",
-    weekdays: [],
+    timesPerPeriod: "1",
     nextOccurrenceDate: todayLocalDate(),
     autoArchiveHour: "",
     tagIds: [],
@@ -61,7 +58,7 @@ function draftFrom(template: RecurrenceTemplate): Draft {
     durationMinutes: String(template.durationMinutes),
     frequency: template.frequency,
     intervalCount: String(template.intervalCount),
-    weekdays: template.weekdays,
+    timesPerPeriod: String(template.timesPerPeriod),
     nextOccurrenceDate: template.nextOccurrenceDate,
     autoArchiveHour: template.autoArchiveHour === null ? "" : String(template.autoArchiveHour),
     tagIds: template.tagIds,
@@ -93,7 +90,7 @@ function RecurrenceEditor({ draft, tags, onCancel, onSave }: {
         durationMinutes: Number(form.durationMinutes) || 30,
         frequency: form.frequency,
         intervalCount: Number(form.intervalCount) || 1,
-        weekdays: form.weekdays,
+        timesPerPeriod: form.frequency === "daily" ? 1 : Number(form.timesPerPeriod) || 1,
         nextOccurrenceDate: form.nextOccurrenceDate,
         autoArchiveHour: form.autoArchiveHour === "" ? null : Number(form.autoArchiveHour),
         tagIds: form.tagIds,
@@ -141,36 +138,37 @@ function RecurrenceEditor({ draft, tags, onCancel, onSave }: {
           />
         </label>
       </div>
-      {form.frequency === "weekly" && (
-        <label>On these days
-          <span className="weekday-choices">
-            {WEEKDAY_CHOICES.map((choice) => (
-              <label key={choice.value} className="checkbox-field">
-                <input
-                  type="checkbox"
-                  checked={form.weekdays.includes(choice.value)}
-                  onChange={(event) => setForm({
-                    ...form,
-                    weekdays: event.target.checked
-                      ? [...form.weekdays, choice.value]
-                      : form.weekdays.filter((day) => day !== choice.value),
-                  })}
-                />
-                <span>{choice.label}</span>
-              </label>
-            ))}
-          </span>
-        </label>
+      {form.frequency === "weekly" ? (
+        <>
+          <label>How many times per period
+            <input
+              type="number"
+              min="1"
+              value={form.timesPerPeriod}
+              onChange={(event) => setForm({ ...form, timesPerPeriod: event.target.value })}
+            />
+          </label>
+          <p className="form-hint muted">
+            1 is a cadence — one card in each period. More than 1 is a quota — interchangeable
+            cards that can land on any day of the period. “One every 2 weeks” is 2 weeks with 1;
+            “twice in 4 weeks, any day” is 4 weeks with 2.
+          </p>
+        </>
+      ) : (
+        <p className="form-hint muted">
+          A daily recurrence creates exactly one card per day, dated to that day. For anything
+          measured in weeks — “once this week, any day” — choose Weekly.
+        </p>
       )}
       <div className="form-pair">
-        <label>First occurrence
+        <label>First period starts
           <input
             type="date"
             value={form.nextOccurrenceDate}
             onChange={(event) => setForm({ ...form, nextOccurrenceDate: event.target.value })}
           />
         </label>
-        <label>Vanishes at
+        <label>Vanishes at (last day of the period)
           <select
             value={form.autoArchiveHour}
             onChange={(event) => setForm({ ...form, autoArchiveHour: event.target.value })}
@@ -189,9 +187,12 @@ function RecurrenceEditor({ draft, tags, onCancel, onSave }: {
         onChange={(tagIds) => setForm({ ...form, tagIds })}
       />
       <p className="form-hint muted">
-        Occurrences that go unticked vanish on their own, so a missed recurrence does not pile up. Set
-        the time to end a recurrence with its day (10:00 AM for “wake up”); leave it blank to keep the
-        whole day. Editing a recurrence only affects the tasks it creates from now on.
+        A recurrence answers “how often should a new task appear”, not “which day”. Weekly tasks
+        live for their whole period, so the Rules page decides where they land — prefer Sunday, keep
+        mornings free, at most one per day. Occurrences that go unticked vanish on their own: set
+        the hour to end a daily card with its day (10:00 AM for “wake up”), leave it blank to keep
+        the whole day, or use the period's last day for a weekly quota. Editing a recurrence only
+        affects the tasks it creates from now on.
       </p>
       <div className="button-row">
         <button className="primary-button" disabled={busy}>
@@ -232,7 +233,7 @@ export function RecurrencePage() {
   function reportMaterialization(result: MaterializeResult): void {
     const parts = [`created ${result.created.length}`];
     if (result.alreadyPresent > 0) parts.push(`${result.alreadyPresent} already on the board`);
-    if (result.idleTemplates.length > 0) parts.push(`no firing date this week for ${result.idleTemplates.join(", ")}`);
+    if (result.idleTemplates.length > 0) parts.push(`no period in this window for ${result.idleTemplates.join(", ")}`);
     setStatus(parts.join(" · "));
   }
 
@@ -270,8 +271,9 @@ export function RecurrencePage() {
         <div>
           <h1>Recurrence</h1>
           <p className="muted">
-            A recurrence is a rule, not a task: it creates an ordinary task on each of its days, and
-            that task decays on its own if it goes unticked.
+            How often a new task should appear. A recurrence is a rule, not a task: it creates
+            ordinary tasks, each with a window (a day, or a whole week for a quota), and they decay
+            on their own if they go unticked. Where they land in the week is the Rules page's job.
           </p>
         </div>
         <div className="detail-actions">

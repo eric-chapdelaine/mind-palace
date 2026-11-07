@@ -111,7 +111,7 @@ Top to bottom, one letter page (0.36in margins, 8.2pt):
      attention list from the default layout (see above). Re-check page count after changing it.
 5. **Do today** — full-width cards, two columns, with priority pill, remaining time, tags, due label,
    and the Markdown-flattened description clipped to ~220 chars. Which tasks appear here is a server
-   decision: anything with a block today, anything pinned by weekday tag, anything in progress; then
+   decision: anything with a block today, anything due or released today, anything in progress; then
    one row per distinct title (recurrence leaves `[LIFE] Sleep` x7, which reads as a stutter).
 6. **The week ahead** — 7 columns: weekday, date, high/low/rain, a 5pt day-density strip drawn from
    the same block data as the big ribbon, the first few blocks as lines, "+N more".
