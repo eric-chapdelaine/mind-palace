@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { type MaterializeResult, type RecurrenceTemplate, type Tag, type UpsertRecurrenceInput } from "@mind-palace/shared";
+import { type MaterializeResult, type RecurrenceTemplate, type Tag, type TaskSummary, type UpsertRecurrenceInput } from "@mind-palace/shared";
 import { api } from "./api";
 import { todayLocalDate } from "./lib/datetime";
 import { TagPicker } from "./components/TagPicker";
@@ -189,7 +189,8 @@ function RecurrenceEditor({ draft, tags, onCancel, onSave }: {
       <p className="form-hint muted">
         A recurrence answers “how often should a new task appear”, not “which day”. Weekly tasks
         live for their whole period, so the Rules page decides where they land — prefer Sunday, keep
-        mornings free, at most one per day. Occurrences that go unticked vanish on their own: set
+        mornings free, at most one per day. A rule targets a tag, so attach one above if you want it
+        to shape when this routine lands. Occurrences that go unticked vanish on their own: set
         the hour to end a daily card with its day (10:00 AM for “wake up”), leave it blank to keep
         the whole day, or use the period's last day for a weekly quota. Editing a recurrence only
         affects the tasks it creates from now on.
@@ -210,6 +211,7 @@ export function RecurrencePage() {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [history, setHistory] = useState<{ templateId: number; tasks: TaskSummary[] } | null>(null);
 
   async function load() {
     try {
@@ -255,10 +257,24 @@ export function RecurrencePage() {
     }
   }
 
+  /** A routine's history is the tasks its ledger points at, so it needs no tag of its own. */
+  async function toggleHistory(template: RecurrenceTemplate): Promise<void> {
+    if (history?.templateId === template.id) {
+      setHistory(null);
+      return;
+    }
+    try {
+      setHistory({ templateId: template.id, tasks: await api.recurrenceTasks(template.id) });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    }
+  }
+
   /** Deleting stops future occurrences; ones already on the board are ordinary tasks and stay. */
   async function remove(template: RecurrenceTemplate): Promise<void> {
     try {
       await api.deleteRecurrenceTemplate(template.id);
+      if (history?.templateId === template.id) setHistory(null);
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -307,14 +323,25 @@ export function RecurrencePage() {
                     {" "}{summarize(template)} · {template.durationMinutes} min ·{" "}
                     {template.autoArchiveHour === null ? "keeps the whole day" : `gone at ${formatHour(template.autoArchiveHour)}`}
                   </span>
-                  {template.routineTagId !== null && (
-                    <span className="muted">
-                      {" "}·{" "}
-                      <Link to={`/tags/${template.routineTagId}`}>history</Link>
-                    </span>
+                  {history?.templateId === template.id && (
+                    history.tasks.length === 0
+                      ? <p className="muted">No tasks yet.</p>
+                      : (
+                        <ul className="tag-relationship-list">
+                          {history.tasks.map((task) => (
+                            <li key={task.id}>
+                              <Link to={`/tasks/${task.id}`}>{task.title}</Link>
+                              <span>{task.kanbanStatus.replace("_", " ")}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )
                   )}
                 </div>
                 <div className="detail-actions">
+                  <button onClick={() => void toggleHistory(template)}>
+                    {history?.templateId === template.id ? "Hide history" : "History"}
+                  </button>
                   <button onClick={() => setDraft(draftFrom(template))}>Edit</button>
                   <button onClick={() => void remove(template)}>Delete</button>
                 </div>

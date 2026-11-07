@@ -136,12 +136,10 @@ export class RecurrenceService {
     const periods = this.livePeriods(template, today, endDate);
     if (periods.length === 0) return { created, alreadyPresent, fired: 0 };
 
-    // Every occurrence carries a tag that names its recurrence, so /tags/:id lists its whole
-    // history. Templates created after this change already have one; the fallback covers old rows.
-    const ownTagId = template.routineTagId ?? this.tasks.ensureTemplateTag(template.id, {
-      title: template.title,
-      description: `Recurring occurrences of “${template.title}”.`,
-    }).id;
+    // A routine used to get a tag of its own, auto-created from its title. That tag is no longer
+    // created: the ledger records a routine's history, and rules target whichever tag you attach.
+    // A template that already has one keeps it, so its existing rules and history still work.
+    const ownTagId = template.routineTagId;
     const routineTagId = this.tasks.tagId(reservedTagIds.routine);
     const daily = this.periodDays(template) === 1;
     const timesPerPeriod = daily ? 1 : Math.max(1, template.timesPerPeriod);
@@ -189,7 +187,7 @@ export class RecurrenceService {
           origin: "recurrence",
         });
         this.tasks.setTaskTags(child.id, [
-          ...new Set([...template.tagIds, routineTagId, ownTagId]),
+          ...new Set([...template.tagIds, routineTagId, ...(ownTagId === null ? [] : [ownTagId])]),
         ]);
         this.tasks.recordRecurrenceOccurrence(template.id, period.start, sequence, child.id);
         created.push(child.id);

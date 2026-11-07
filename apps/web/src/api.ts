@@ -77,6 +77,8 @@ export const api = {
     }),
   deleteRecurrenceTemplate: (id: number) =>
     request<{ ok: true }>(`/api/recurrence-templates/${id}`, { method: "DELETE" }),
+  recurrenceTasks: (id: number) =>
+    request<TaskSummary[]>(`/api/recurrence-templates/${id}/tasks`),
   materializeRecurrences: () =>
     request<MaterializeResult>("/api/recurrences/materialize", { method: "POST", body: JSON.stringify({}) }),
   timeBlock: (id: number) => request<TimeBlock>(`/api/time-blocks/${id}`),
