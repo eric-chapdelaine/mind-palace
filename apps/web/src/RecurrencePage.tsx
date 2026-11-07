@@ -139,18 +139,25 @@ function RecurrenceEditor({ draft, tags, onCancel, onSave }: {
         </label>
       </div>
       {form.frequency === "weekly" ? (
-        <label>How many times per period
-          <input
-            type="number"
-            min="1"
-            value={form.timesPerPeriod}
-            onChange={(event) => setForm({ ...form, timesPerPeriod: event.target.value })}
-          />
-        </label>
+        <>
+          <label>How many times per period
+            <input
+              type="number"
+              min="1"
+              value={form.timesPerPeriod}
+              onChange={(event) => setForm({ ...form, timesPerPeriod: event.target.value })}
+            />
+          </label>
+          <p className="form-hint muted">
+            1 is a cadence — one card in each period. More than 1 is a quota — interchangeable
+            cards that can land on any day of the period. “One every 2 weeks” is 2 weeks with 1;
+            “twice in 4 weeks, any day” is 4 weeks with 2.
+          </p>
+        </>
       ) : (
         <p className="form-hint muted">
-          A daily recurrence creates exactly one card per day. For a quota — “once this week, any
-          day” — choose Weekly.
+          A daily recurrence creates exactly one card per day, dated to that day. For anything
+          measured in weeks — “once this week, any day” — choose Weekly.
         </p>
       )}
       <div className="form-pair">

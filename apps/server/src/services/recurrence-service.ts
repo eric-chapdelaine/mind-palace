@@ -21,6 +21,11 @@ import { localInstant, startOfLocalDay, addDays, daysBetween, localDate } from "
  * - a weekly period gets N, each with the whole week as its window, so "groceries, once this week"
  *   floats until rules place it.
  *
+ * One occurrence per period is a **cadence**: it stays inside its own window. Several are a
+ * **quota**: they are interchangeable, so they can all land on the period's best days. `every
+ * 2 weeks, 1` is a cadence; `every 4 weeks, 2` is a quota. Both average the same rate; the quota
+ * is freer.
+ *
  * Periods are counted from the template's anchor date, never from the day the job happened to run,
  * so "every 3 days" does not drift when the window slides forward.
  */

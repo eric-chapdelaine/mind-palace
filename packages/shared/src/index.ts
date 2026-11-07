@@ -158,6 +158,8 @@ export interface RecurrenceTemplate {
    * How many interchangeable occurrences each period gets. A `daily` period is one day, so this is
    * always 1. A `weekly` period is a week, so 1 means "once this week, any day" and 3 means
    * "three times this week". The period's span is the occurrence's window: rules decide the day.
+   * One occurrence is a **cadence** (it stays inside its period); more than one is a **quota**
+   * (they are interchangeable and can all land on the period's best days).
    */
   timesPerPeriod: number;
   /** The first period's start date. Periods are counted from here, never from the run date. */
