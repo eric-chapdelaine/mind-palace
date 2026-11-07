@@ -16,7 +16,7 @@ const EFFECT_TYPES = [
   { value: "timeWindow", label: "Time window" },
   { value: "preferTimeOfDay", label: "Prefer time of day" },
   { value: "spread", label: "Spread across days" },
-  { value: "dailyBudget", label: "Min/max occurrences per day" },
+  { value: "dailyBudget", label: "Soft max occurrences per day" },
   { value: "perDayLimit", label: "At most N per day (hard)" },
   { value: "weatherGate", label: "Weather conditions" },
   { value: "withinAfter", label: "Within X of prerequisite" },
