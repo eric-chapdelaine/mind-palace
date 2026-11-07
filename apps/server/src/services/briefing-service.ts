@@ -164,7 +164,7 @@ function partsOf(instant: Date): LocalParts {
  * cell that reads "7:08a-5:49p", and it would move the graph's night band by the same hour. NWS
  * publishes no sunrise/sunset field, so computing it is the only way to get the minute. The
  * approximation is good to ~2 minutes at this latitude and needs no network and no extra column.
- * (`is_daytime` is still collected and still read by the scheduler's `requireDaytime` rule.)
+ * (`is_daytime` is still collected and still read by the scheduler's `daytime` weather metric.)
  */
 function daylightMinutes(date: string): { sunrise: number; sunset: number } {
   const [year, month, day] = date.split("-").map(Number);

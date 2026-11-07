@@ -49,7 +49,7 @@ from .rules import (
     window_slot_indices,
 )
 from .timegrid import next_day
-from .weather import slot_weather, weather_is_nice
+from .weather import slot_weather, weather_comfort
 
 # Canonical priority order, then a per-restart tie-break permutation. `duration` and `rank` are
 # negated so an ascending sort means longest-first / highest-rank-first.
@@ -149,9 +149,13 @@ class _SoftModel:
                         gains[index] += value
             elif etype == "weatherGate":
                 for slot in slots:
-                    if when_matches(when, slot) and weather_is_nice(slot_weather(slot, ctx["weather_hours"]), effect) is True:
-                        for unit in applies:
-                            self.slot_gain[unit["id"]][slot["index"]] += value
+                    if not when_matches(when, slot):
+                        continue
+                    comfort = weather_comfort(slot_weather(slot, ctx["weather_hours"]), effect)
+                    if comfort is None:
+                        continue
+                    for unit in applies:
+                        self.slot_gain[unit["id"]][slot["index"]] += value * comfort
             elif etype in ("spread", "dailyBudget"):
                 key = (etype, rule["id"])
                 spec = {

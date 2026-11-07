@@ -16,13 +16,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import scheduler as S  # noqa: E402
 
-# Explicit bounds: the worker has no built-in "nice weather", so tests must supply them.
+# Explicit metrics: the worker has no built-in "nice weather", so tests must supply them.
 NICE_WEATHER = {
-    "minTemperatureF": 50,
-    "maxTemperatureF": 80,
-    "maxPrecipitationProbability": 20,
-    "maxWindMph": 15,
-    "requireDaytime": True,
+    "metrics": {
+        "temperatureF": {"ideal": 65, "min": 50, "max": 80},
+        "precipitationProbability": {"ideal": 0, "max": 20},
+        "windMph": {"ideal": 0, "max": 15},
+        "daytime": {"ideal": True},
+    },
 }
 
 
@@ -429,13 +430,74 @@ class WindowAndGapTest(unittest.TestCase):
                                  rules=rules, weather=weather_hours({17})))
         self.assertEqual(result["unscheduledTaskIds"], [1])
 
-    def test_weather_gate_bounds_are_user_defined(self):
+    def test_weather_metrics_are_user_defined(self):
         entry = {"temperatureF": 70, "precipitationProbability": 0, "windMph": 5, "isDaytime": True}
-        # No bounds at all: unknown, never a silent default.
-        self.assertIsNone(S.weather_is_nice(entry, {"type": "weatherGate"}))
+        # No metrics at all: nothing measured, never a silent default.
+        self.assertIsNone(S.weather_comfort(entry, {"type": "weatherGate", "metrics": {}}))
+        self.assertIsNone(S.weather_within_limits(entry, {"type": "weatherGate", "metrics": {}}))
         # Only the dimensions a rule sets are evaluated.
-        self.assertTrue(S.weather_is_nice(entry, {"type": "weatherGate", "maxWindMph": 10}))
-        self.assertFalse(S.weather_is_nice(entry, {"type": "weatherGate", "minTemperatureF": 80}))
+        self.assertEqual(S.weather_comfort(entry, {"type": "weatherGate", "metrics": {"windMph": {"ideal": 5, "max": 10}}}), 1.0)
+        self.assertFalse(S.weather_within_limits(
+            entry, {"type": "weatherGate", "metrics": {"temperatureF": {"ideal": 70, "min": 80}}}))
+
+    def test_metric_satisfaction_peaks_at_the_ideal_and_ends_at_the_limit(self):
+        temperature = {"ideal": 62, "min": 50, "max": 80}
+        self.assertEqual(S.metric_satisfaction(62, temperature), 1.0)
+        self.assertEqual(S.metric_satisfaction(50, temperature), 0.0)
+        self.assertEqual(S.metric_satisfaction(80, temperature), 0.0)
+        # 52 is 10 of the 12 degrees between the ideal and the low limit.
+        self.assertAlmostEqual(S.metric_satisfaction(52, temperature), 1 - 10 / 12)
+        # Outside a limit is not "low credit", it is no credit.
+        self.assertIsNone(S.metric_satisfaction(49, temperature))
+        self.assertIsNone(S.metric_satisfaction(81, temperature))
+
+    def test_weather_comfort_is_the_weighted_average_of_the_metrics(self):
+        effect = {"type": "weatherGate", "metrics": {
+            "precipitationProbability": {"ideal": 0, "max": 20, "weight": 3},
+            "temperatureF": {"ideal": 62, "min": 50, "max": 80, "weight": 1},
+        }}
+        dry_and_cold = {"temperatureF": 50, "precipitationProbability": 0, "windMph": 5, "isDaytime": True}
+        mild_and_damp = {"temperatureF": 62, "precipitationProbability": 20, "windMph": 5, "isDaytime": True}
+        self.assertAlmostEqual(S.weather_comfort(dry_and_cold, effect), (3 * 1.0 + 1 * 0.0) / 4)
+        self.assertAlmostEqual(S.weather_comfort(mild_and_damp, effect), (3 * 0.0 + 1 * 1.0) / 4)
+        # Rain is the heavier metric, so the dry day wins despite being at its temperature limit.
+        self.assertGreater(S.weather_comfort(dry_and_cold, effect),
+                           S.weather_comfort(mild_and_damp, effect))
+
+    def test_one_sided_bound_is_a_plateau(self):
+        # "At least 50F": the ideal sits on the limit, so every warmer hour is equally good.
+        effect = {"type": "weatherGate", "metrics": {"temperatureF": {"ideal": 50, "min": 50}}}
+        self.assertEqual(S.weather_comfort({"temperatureF": 50, "isDaytime": True}, effect), 1.0)
+        self.assertEqual(S.weather_comfort({"temperatureF": 90, "isDaytime": True}, effect), 1.0)
+        self.assertEqual(S.weather_comfort({"temperatureF": 40, "isDaytime": True}, effect), 0.0)
+
+    def test_daytime_metric_scores_night_as_no_credit(self):
+        effect = {"type": "weatherGate", "metrics": {"daytime": {"ideal": True}}}
+        self.assertEqual(S.weather_comfort({"isDaytime": True}, effect), 1.0)
+        self.assertEqual(S.weather_comfort({"isDaytime": False}, effect), 0.0)
+
+    def test_soft_weather_gate_places_the_task_on_the_better_day(self):
+        # Saturday is damp, Sunday is dry; both are inside the limits. The graded rule must not
+        # settle for the earlier slot the way a pass/fail gate would.
+        effect = {"type": "weatherGate", "metrics": {
+            "precipitationProbability": {"ideal": 0, "max": 20, "weight": 3},
+        }}
+        weather = []
+        cursor = NOW.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        for offset in range(7 * 24):
+            at = cursor + timedelta(hours=offset)
+            weekend = at.astimezone(LOCAL).weekday() in (5, 6)
+            weather.append({
+                "forecastAt": at.isoformat().replace("+00:00", "Z"),
+                "temperatureF": 60,
+                "precipitationProbability": 20 if at.astimezone(LOCAL).weekday() == 5 else (0 if weekend else 40),
+                "windMph": 5,
+                "isDaytime": True,
+            })
+        rules = [rule("dry", {**effect, "when": {"dayOfWeek": [5, 6]}}, {"kind": "soft", "weight": 30})]
+        result = S.solve(payload([task(1)], rules=rules, weather=weather))
+        start = S.parse_datetime(result["assignments"][0]["startAt"]).astimezone(LOCAL)
+        self.assertEqual(start.weekday(), 6)
 
 
 if __name__ == "__main__":

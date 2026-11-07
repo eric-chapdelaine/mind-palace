@@ -1,8 +1,8 @@
 """Model constants and the default solver configuration."""
 
 # Reported per solve so a stored `schedule_runs` row says which algorithm produced it.
-MODEL_VERSION = "cp-sat-v9"
-GREEDY_MODEL_VERSION = "greedy-v2"
+MODEL_VERSION = "cp-sat-v10"
+GREEDY_MODEL_VERSION = "greedy-v3"
 
 # Slot grid / horizon defaults. Overridable per run through the payload `config`.
 # The grid is the full day so sleep, wake, and meals can be real scheduled blocks; tasks may

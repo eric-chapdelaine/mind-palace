@@ -369,12 +369,48 @@ export interface RuleWhen {
 }
 
 /**
+ * One measured dimension of the weather, e.g. temperature or rain.
+ *
+ * `ideal` is full marks and `min`/`max` is the hard limit, where credit reaches zero: distance
+ * from the ideal is what a soft `weatherGate` grades, so a slot at its limit is worth nothing
+ * even when `strength` is soft. Past the limit the slot either earns no weather credit (soft) or
+ * stops being eligible (hard). `weight` is the dimension's share of the average, so rain can
+ * matter more than wind without changing the rule's own weight.
+ */
+export interface WeatherMetric {
+  ideal: number;
+  min?: number;
+  max?: number;
+  weight?: number;
+}
+
+/**
+ * One dimension of the weather, addressed by its forecast field.
+ *
+ * These are keys of a forecast hour, so a new metric needs no new effect type: `daytime` is a
+ * metric whose ideal is `true`, and the limit is therefore night.
+ */
+export type WeatherMetrics = {
+  /** Degrees Fahrenheit. Both limits are optional; an unbounded side never deviates. */
+  temperatureF?: WeatherMetric;
+  /** Percent chance of precipitation. */
+  precipitationProbability?: WeatherMetric;
+  windMph?: WeatherMetric;
+  /** Binary, so its only limit is the other value: night scores zero. */
+  daytime?: { ideal: boolean; weight?: number };
+};
+
+/**
  * What a rule does. `type` selects the implementation; the remaining keys are parameters.
  *
  * A **soft** `assignDays` is a graded preference, not a set: a run placed `d` days from the
  * nearest preferred date inside its own window earns `weight * (7 - d) / 7`. So with a Sunday
  * preference, Monday still scores 6/7 of the weight and Tuesday 5/7 — nearer days beat far ones.
  * A **hard** `assignDays` keeps the old meaning: only those weekdays are eligible.
+ *
+ * A **soft** `weatherGate` is likewise graded: each metric scores 1 at its ideal and falls
+ * linearly to 0 at the limit, and the rule's weight is multiplied by the metrics' weighted
+ * average. A hard `weatherGate` ignores the ideals and only enforces the limits.
  */
 export type RuleEffect =
   | { type: "assignDays"; days: number[]; when?: RuleWhen }
@@ -384,15 +420,7 @@ export type RuleEffect =
   | { type: "dailyBudget"; softMaxPerDay?: number; when?: RuleWhen }
   | { type: "perDayLimit"; maxPerDay: number; when?: RuleWhen }
   | { type: "withinAfter"; maxMinutes?: number }
-  | {
-      type: "weatherGate";
-      minTemperatureF?: number;
-      maxTemperatureF?: number;
-      maxPrecipitationProbability?: number;
-      maxWindMph?: number;
-      requireDaytime?: boolean;
-      when?: RuleWhen;
-    };
+  | { type: "weatherGate"; metrics: WeatherMetrics; when?: RuleWhen };
 
 /** Hard rules constrain feasibility; soft rules add a weighted term to the single objective. */
 export type RuleStrength = { kind: "hard" } | { kind: "soft"; weight: number };

@@ -11,7 +11,7 @@ The two competitors are the real implementations, not re-writes:
   `Problem.context()` builds.
 
 Nothing here is imported by the app. It lives next to the worker so both competitors re-use the
-worker's own helpers (`eligible_slots`, `soft_totals`, `decision_weights`, `weather_is_nice`, the
+worker's own helpers (`eligible_slots`, `soft_totals`, `decision_weights`, `weather_comfort`, the
 rule/when matchers) and therefore cannot drift from the real model.
 
 ## Files

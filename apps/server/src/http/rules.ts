@@ -33,6 +33,10 @@ function parseRuleEffect(value: unknown): RuleEffect {
   if (!ruleEffectTypes.includes(type as (typeof ruleEffectTypes)[number])) {
     throw new Error(`Unknown rule effect '${type}'`);
   }
+  const metrics = (value as { metrics?: unknown }).metrics;
+  if (type === "weatherGate" && (!metrics || typeof metrics !== "object" || Object.keys(metrics).length === 0)) {
+    throw new Error("weatherGate effects need at least one metric");
+  }
   return value as RuleEffect;
 }
 

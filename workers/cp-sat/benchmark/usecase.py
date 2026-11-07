@@ -27,11 +27,12 @@ WEEKEND = [5, 6]
 GROCERY_DAYS = WFH_DAYS + WEEKEND
 
 NICE = {
-    "minTemperatureF": 50,
-    "maxTemperatureF": 80,
-    "maxPrecipitationProbability": 20,
-    "maxWindMph": 15,
-    "requireDaytime": True,
+    "metrics": {
+        "temperatureF": {"ideal": 65, "min": 50, "max": 80, "weight": 1},
+        "precipitationProbability": {"ideal": 0, "max": 20, "weight": 1},
+        "windMph": {"ideal": 0, "max": 15, "weight": 1},
+        "daytime": {"ideal": True, "weight": 1},
+    },
 }
 
 T = {

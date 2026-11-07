@@ -6,6 +6,7 @@ import {
   type SchedulerRule,
   type SchedulerRuleInput,
   type Tag,
+  type WeatherMetric,
   weekdayLabels,
 } from "@mind-palace/shared";
 import { useEffect, useState } from "react";
@@ -32,6 +33,44 @@ function numberText(value: number | undefined): string {
   return value === undefined ? "" : String(value);
 }
 
+/** A blank input means "not set" for every metric field: no limit, or no weight override. */
+function optionalNumber(value: string): number | undefined {
+  return value.trim() === "" ? undefined : Number(value);
+}
+
+/** The four text inputs behind one weather metric. */
+interface MetricDraft {
+  ideal: string;
+  min: string;
+  max: string;
+  weight: string;
+}
+
+function metricDraft(metric: WeatherMetric | undefined, defaults: MetricDraft): MetricDraft {
+  if (!metric) return defaults;
+  return {
+    ideal: numberText(metric.ideal),
+    min: numberText(metric.min),
+    max: numberText(metric.max),
+    weight: numberText(metric.weight ?? 1),
+  };
+}
+
+/** A metric the worker will grade, or undefined when the ideal is blank — then it is not measured. */
+function buildMetric(draft: MetricDraft): WeatherMetric | undefined {
+  const ideal = optionalNumber(draft.ideal);
+  if (ideal === undefined) return undefined;
+  const min = optionalNumber(draft.min);
+  const max = optionalNumber(draft.max);
+  const weight = optionalNumber(draft.weight);
+  return {
+    ideal,
+    ...(min !== undefined ? { min } : {}),
+    ...(max !== undefined ? { max } : {}),
+    ...(weight !== undefined ? { weight } : {}),
+  };
+}
+
 function strengthLabel(strength: RuleStrength): string {
   return strength.kind === "hard" ? "hard" : `weight ${strength.weight}`;
 }
@@ -51,14 +90,15 @@ function describeEffect(effect: RuleEffect): string {
     case "perDayLimit":
       return `≤ ${effect.maxPerDay} occurrence/day`;
     case "weatherGate": {
+      const { temperatureF, precipitationProbability, windMph, daytime } = effect.metrics;
       const parts: string[] = [];
-      if (effect.minTemperatureF !== undefined || effect.maxTemperatureF !== undefined) {
-        parts.push(`${effect.minTemperatureF ?? "–"}–${effect.maxTemperatureF ?? "–"}°F`);
+      if (temperatureF) {
+        parts.push(`temp ${temperatureF.min ?? "–"}–${temperatureF.ideal}–${temperatureF.max ?? "–"}°F ×${temperatureF.weight ?? 1}`);
       }
-      if (effect.maxPrecipitationProbability !== undefined) parts.push(`rain ≤${effect.maxPrecipitationProbability}%`);
-      if (effect.maxWindMph !== undefined) parts.push(`wind ≤${effect.maxWindMph} mph`);
-      if (effect.requireDaytime) parts.push("daytime");
-      return parts.length > 0 ? `weather: ${parts.join(", ")}` : "weather (no bounds set)";
+      if (precipitationProbability) parts.push(`rain ${precipitationProbability.ideal}→${precipitationProbability.max ?? "–"}% ×${precipitationProbability.weight ?? 1}`);
+      if (windMph) parts.push(`wind ${windMph.ideal}→${windMph.max ?? "–"}mph ×${windMph.weight ?? 1}`);
+      if (daytime) parts.push(`daytime ×${daytime.weight ?? 1}`);
+      return parts.length > 0 ? `weather: ${parts.join(", ")}` : "weather (no metrics set)";
     }
     case "withinAfter":
       return `within ${effect.maxMinutes ?? 30} min of prerequisite`;
@@ -145,15 +185,22 @@ function RuleForm({ tags, initial, onSubmit, onCancel }: {
   const [avoidConsecutive, setAvoidConsecutive] = useState(effect?.type === "spread" ? effect.avoidConsecutive ?? false : false);
   const [budgetMax, setBudgetMax] = useState(effect?.type === "dailyBudget" ? effect.softMaxPerDay ?? 1 : 1);
   const [perDayMax, setPerDayMax] = useState(effect?.type === "perDayLimit" ? effect.maxPerDay : 1);
-  const [minTemp, setMinTemp] = useState(effect?.type === "weatherGate" ? numberText(effect.minTemperatureF) : "50");
-  const [maxTemp, setMaxTemp] = useState(effect?.type === "weatherGate" ? numberText(effect.maxTemperatureF) : "80");
-  const [maxPrecip, setMaxPrecip] = useState(effect?.type === "weatherGate" ? numberText(effect.maxPrecipitationProbability) : "20");
-  const [maxWind, setMaxWind] = useState(effect?.type === "weatherGate" ? numberText(effect.maxWindMph) : "15");
-  const [requireDaytime, setRequireDaytime] = useState(effect?.type === "weatherGate" ? effect.requireDaytime ?? false : true);
+  const weatherMetrics = effect?.type === "weatherGate" ? effect.metrics : undefined;
+  const [temps, setTemps] = useState(() => metricDraft(weatherMetrics?.temperatureF, { ideal: "65", min: "50", max: "80", weight: "2" }));
+  const [rain, setRain] = useState(() => metricDraft(weatherMetrics?.precipitationProbability, { ideal: "0", min: "", max: "20", weight: "3" }));
+  const [wind, setWind] = useState(() => metricDraft(weatherMetrics?.windMph, { ideal: "0", min: "", max: "15", weight: "1" }));
+  const [daytime, setDaytime] = useState(weatherMetrics?.daytime !== undefined);
+  const [daytimeWeight, setDaytimeWeight] = useState(numberText(weatherMetrics?.daytime?.weight ?? 1));
   const [withinMinutes, setWithinMinutes] = useState(effect?.type === "withinAfter" ? effect.maxMinutes ?? 30 : 30);
   const [hard, setHard] = useState(initial?.strength.kind === "hard");
   const [weight, setWeight] = useState(initial?.strength.kind === "soft" ? initial.strength.weight : 3);
   const [reason, setReason] = useState(initial?.reason ?? "");
+
+  const weatherRows = [
+    { key: "temperatureF", label: "Temp °F", draft: temps, set: setTemps },
+    { key: "precipitationProbability", label: "Rain %", draft: rain, set: setRain },
+    { key: "windMph", label: "Wind mph", draft: wind, set: setWind },
+  ];
 
   // Day rules, time windows, per-day caps, weather gates, and prerequisite gaps can be hard.
   const hardCapable = effectType === "assignDays" || effectType === "timeWindow"
@@ -178,19 +225,18 @@ function RuleForm({ tags, initial, onSubmit, onCancel }: {
       case "dailyBudget": return { type: "dailyBudget", softMaxPerDay: budgetMax, ...when };
       case "perDayLimit": return { type: "perDayLimit", maxPerDay: Math.max(1, perDayMax), ...when };
       case "weatherGate": {
-        // Blank inputs mean "no bound on this dimension" — the worker applies only what you set.
-        const optionalNumber = (value: string): number | undefined => value.trim() === "" ? undefined : Number(value);
-        const min = optionalNumber(minTemp);
-        const max = optionalNumber(maxTemp);
-        const precipitation = optionalNumber(maxPrecip);
-        const wind = optionalNumber(maxWind);
+        const temperature = buildMetric(temps);
+        const precipitation = buildMetric(rain);
+        const windSpeed = buildMetric(wind);
+        const daytimeWeightValue = optionalNumber(daytimeWeight);
         return {
           type: "weatherGate",
-          ...(min !== undefined ? { minTemperatureF: min } : {}),
-          ...(max !== undefined ? { maxTemperatureF: max } : {}),
-          ...(precipitation !== undefined ? { maxPrecipitationProbability: precipitation } : {}),
-          ...(wind !== undefined ? { maxWindMph: wind } : {}),
-          ...(requireDaytime ? { requireDaytime: true } : {}),
+          metrics: {
+            ...(temperature ? { temperatureF: temperature } : {}),
+            ...(precipitation ? { precipitationProbability: precipitation } : {}),
+            ...(windSpeed ? { windMph: windSpeed } : {}),
+            ...(daytime ? { daytime: { ideal: true, ...(daytimeWeightValue !== undefined ? { weight: daytimeWeightValue } : {}) } } : {}),
+          },
           ...when,
         };
       }
@@ -279,16 +325,46 @@ function RuleForm({ tags, initial, onSubmit, onCancel }: {
         {effectType === "perDayLimit" && (
           <label>Max occurrences per day<input type="number" min={1} value={perDayMax} onChange={(event) => setPerDayMax(Number(event.target.value))} /></label>
         )}
-        {effectType === "weatherGate" && <>
-          <label>Min temp °F<input type="number" value={minTemp} onChange={(event) => setMinTemp(event.target.value)} placeholder="any" /></label>
-          <label>Max temp °F<input type="number" value={maxTemp} onChange={(event) => setMaxTemp(event.target.value)} placeholder="any" /></label>
-          <label>Max rain %<input type="number" min={0} max={100} value={maxPrecip} onChange={(event) => setMaxPrecip(event.target.value)} placeholder="any" /></label>
-          <label>Max wind mph<input type="number" min={0} value={maxWind} onChange={(event) => setMaxWind(event.target.value)} placeholder="any" /></label>
-          <label>
-            <input type="checkbox" checked={requireDaytime} onChange={(event) => setRequireDaytime(event.target.checked)} />
-            Daytime only
-          </label>
-        </>}
+        {effectType === "weatherGate" && (
+          <div className="weather-metrics">
+            <p className="section-label">
+              Soft rules score each metric from its ideal (full marks) down to its limit (none).
+              Weight is that metric's share of the score; a blank ideal stops measuring it.
+            </p>
+            <table>
+              <thead>
+                <tr><th></th><th>Ideal</th><th>Min</th><th>Max</th><th>Weight</th></tr>
+              </thead>
+              <tbody>
+                {weatherRows.map(({ key, label, draft, set }) => (
+                  <tr key={key}>
+                    <th>{label}</th>
+                    {(["ideal", "min", "max", "weight"] as const).map((field) => (
+                      <td key={field}>
+                        <input
+                          type="number"
+                          value={draft[field]}
+                          placeholder="—"
+                          onChange={(event) => set({ ...draft, [field]: event.target.value })}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+                <tr>
+                  <th>Daytime</th>
+                  <td>
+                    <input type="checkbox" checked={daytime} onChange={(event) => setDaytime(event.target.checked)} />
+                  </td>
+                  <td colSpan={2} />
+                  <td>
+                    <input type="number" min={1} value={daytimeWeight} onChange={(event) => setDaytimeWeight(event.target.value)} />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
         {effectType === "withinAfter" && (
           <label>Max minutes after<input type="number" min={0} step={15} value={withinMinutes} onChange={(event) => setWithinMinutes(Number(event.target.value))} /></label>
         )}

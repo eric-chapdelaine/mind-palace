@@ -28,7 +28,7 @@ from schedulerlib.rules import (  # noqa: E402
     window_slot_indices,
 )
 from schedulerlib.timegrid import build_slots  # noqa: E402
-from schedulerlib.weather import slot_weather, weather_by_hour, weather_is_nice  # noqa: E402
+from schedulerlib.weather import slot_weather, weather_by_hour, weather_comfort  # noqa: E402
 
 
 def expand_splittable(payload: dict) -> dict:
@@ -225,15 +225,15 @@ class Problem:
                     1 for task in applies for start, _size in placement.get(task["id"], []) if start in inside
                 )
             elif etype == "weatherGate":
-                inside = {
-                    s["index"]
-                    for s in self.slots
-                    if when_matches(when, s)
-                    and weather_is_nice(slot_weather(s, self.weather_hours), effect) is True
-                }
-                total = value * sum(
-                    1 for task in applies for start, _size in placement.get(task["id"], []) if start in inside
-                )
+                comforts = [
+                    comfort
+                    for task in applies
+                    for start, _size in placement.get(task["id"], [])
+                    if when_matches(when, self.slots[start])
+                    for comfort in [weather_comfort(slot_weather(self.slots[start], self.weather_hours), effect)]
+                    if comfort is not None
+                ]
+                total = value * sum(comforts)
             elif etype == "spread":
                 counts = {}
                 for task in applies:
