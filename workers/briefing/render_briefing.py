@@ -735,7 +735,7 @@ def section_today_schedule(payload: dict[str, Any], options: dict[str, Any], pap
 def section_today_tasks(payload: dict[str, Any], options: dict[str, Any], paper: dict[str, str]) -> str:
     tasks = payload["facts"].get("todayTasks") or []
     if not tasks:
-        return section_shell("today-tasks", '<p class="muted small">Nothing pinned to today.</p>')
+        return section_shell("today-tasks", '<p class="muted small">Nothing scheduled for today.</p>')
     limit = options.get("descriptionChars", 220)
     max_desc_lines = options.get("descriptionLines", 4)
     cards: list[str] = []

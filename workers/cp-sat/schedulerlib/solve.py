@@ -25,7 +25,7 @@ from zoneinfo import ZoneInfo
 from . import cp_sat, greedy
 from .config import DEFAULT_CONFIG, GREEDY_MODEL_VERSION, MODEL_VERSION
 from .objective import decision_weights, soft_totals
-from .rules import eligible_slots
+from .rules import eligible_slots, rule_applies, rule_strength
 from .timegrid import build_slots, overlaps, parse_datetime
 from .weather import weather_by_hour
 
@@ -61,6 +61,21 @@ def _prepare(payload):
     for slot in slots:
         day_weekday[day_of[slot["index"]]] = slot["weekday"]
 
+    # Each task's own window: its recurrence period for a routine occurrence, else the horizon.
+    # A graded day preference measures distance from a preferred date *inside this window*, so
+    # "prefer Saturday" on a Sunday-to-Saturday week means Friday (a day early), not Sunday.
+    horizon_start_date = dates[0] if dates else None
+    horizon_end_date = dates[-1] if dates else None
+    for task in tasks:
+        start = task.get("earliestStart")
+        end = task.get("deadlineAt")
+        task["windowStartDate"] = (
+            parse_datetime(start).astimezone(tz).date().isoformat() if start else horizon_start_date
+        )
+        task["windowEndDate"] = (
+            parse_datetime(end).astimezone(tz).date().isoformat() if end else horizon_end_date
+        )
+
     eligible_by_task = {}
     required_by_task = {}
     hard_reasons_by_task = {}
@@ -68,6 +83,15 @@ def _prepare(payload):
         task_id = task["id"]
         required_by_task[task_id] = math.ceil(task["durationMinutesRemaining"] / slot_minutes)
         eligible, applied_hard = eligible_slots(task, slots, busy_indices, rules, weather_hours)
+        # A per-day cap is not slot eligibility, but it is still a hard reason worth reporting when
+        # a task cannot be placed.
+        for rule in rules:
+            if rule_strength(rule)[0] != "hard":
+                continue
+            if (rule.get("effect") or {}).get("type") != "perDayLimit":
+                continue
+            if rule_applies(rule, task):
+                applied_hard.append(rule.get("reason") or rule.get("id"))
         eligible_by_task[task_id] = eligible
         hard_reasons_by_task[task_id] = applied_hard
 

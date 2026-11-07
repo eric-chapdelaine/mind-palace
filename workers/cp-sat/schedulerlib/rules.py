@@ -6,9 +6,15 @@ in `objective.py` consume the placement sets produced here.
 """
 
 import math
+from datetime import date, timedelta
 
 from .timegrid import minutes_of_day, parse_datetime
 from .weather import slot_weather, weather_is_nice
+
+# How fast a soft day preference fades. A run on the preferred date earns its full weight; each day
+# away costs one seventh, and a week away costs all of it. One week because that is the scheduling
+# horizon: "grocery on Sunday" makes Monday 6/7 and Tuesday 5/7 of a nudge, never a hard rule.
+DAY_PREFERENCE_SPAN_DAYS = 7
 
 
 def condition_matches(condition, task):
@@ -50,6 +56,99 @@ def day_matches(when, weekday):
         return True
     days = when.get("dayOfWeek")
     return days is None or weekday in set(days)
+
+
+def date_range(start, end):
+    """Every ISO date from `start` to `end` inclusive. Both are `YYYY-MM-DD` strings."""
+    cursor = date.fromisoformat(start)
+    last = date.fromisoformat(end)
+    while cursor <= last:
+        yield cursor
+        cursor += timedelta(days=1)
+
+
+def shift_date(value, days):
+    """Shift a `YYYY-MM-DD` date by whole days."""
+    return (date.fromisoformat(value) + timedelta(days=days)).isoformat()
+
+
+def day_preference_gains(task, slots, rules):
+    """Graded gain per slot for the task's soft `assignDays` rules, or None if it has none.
+
+    The preferred dates are the rule's weekdays *inside the task's own window* (its recurrence
+    period, or the horizon for a plain task). A run earns `weight * (7 - distance) / 7`, where
+    `distance` is whole days from the nearest preferred date: on the day is full weight, Monday is
+    6/7 for a Sunday preference, Tuesday 5/7, and so on. The window matters — "prefer Saturday" on
+    a Sunday-to-Saturday week means Friday (one day early), not the Sunday a week before it.
+    """
+    # `_prepare` stamps the window on every task; fall back to the horizon so the helper also works
+    # for callers that build a problem directly (the benchmark harness).
+    window_start = task.get("windowStartDate") or (slots[0]["date"] if slots else None)
+    window_end = task.get("windowEndDate") or (slots[-1]["date"] if slots else None)
+    if not window_start or not window_end:
+        return None
+    preferences = []
+    for rule in rules:
+        kind, weight = rule_strength(rule)
+        if kind != "soft":
+            continue
+        effect = rule.get("effect") or {}
+        if effect.get("type") != "assignDays":
+            continue
+        if not rule_applies(rule, task):
+            continue
+        weekdays = set(effect.get("days") or [])
+        if not weekdays:
+            continue
+        # Only dates within a week of the horizon can earn anything (the ramp is seven days), so a
+        # task with a year-long window does not make this walk a year of dates.
+        search_start = max(window_start, shift_date(slots[0]["date"], -DAY_PREFERENCE_SPAN_DAYS))
+        search_end = min(window_end, shift_date(slots[-1]["date"], DAY_PREFERENCE_SPAN_DAYS))
+        if search_start > search_end:
+            continue
+        ideals = [day for day in date_range(search_start, search_end) if day.weekday() in weekdays]
+        if not ideals:
+            continue
+        preferences.append((ideals, int(round(weight)), effect.get("when")))
+    if not preferences:
+        return None
+    gains = [0] * (max((slot["index"] for slot in slots), default=-1) + 1)
+    for slot in slots:
+        placed = date.fromisoformat(slot["date"])
+        for ideals, weight, when in preferences:
+            if not when_matches(when, slot):
+                continue
+            distance = min(abs((placed - ideal).days) for ideal in ideals)
+            gains[slot["index"]] += int(round(weight * max(0, DAY_PREFERENCE_SPAN_DAYS - distance)
+                                              / DAY_PREFERENCE_SPAN_DAYS))
+    return gains
+
+
+def per_day_limits(tasks, rules):
+    """Hard `perDayLimit` rules, as {task ids, max occurrences per day, day filter}.
+
+    A cap is a cardinality constraint over a day, so it is not slot eligibility: both solvers keep
+    their own per-day count. A task present on a day counts once however many runs it has there,
+    because the point of the rule is "one wake-up", not "one half-hour of wake-up".
+    """
+    limits = []
+    for rule in rules:
+        kind, _weight = rule_strength(rule)
+        if kind != "hard":
+            continue
+        effect = rule.get("effect") or {}
+        if effect.get("type") != "perDayLimit":
+            continue
+        task_ids = {task["id"] for task in tasks if rule_applies(rule, task)}
+        if not task_ids:
+            continue
+        limits.append({
+            "key": rule.get("id") or rule.get("reason") or "per-day",
+            "task_ids": task_ids,
+            "max": max(0, int(effect.get("maxPerDay", 1))),
+            "when": effect.get("when"),
+        })
+    return limits
 
 
 def when_matches(when, slot):
@@ -127,8 +226,9 @@ def style_windows(tasks, rules, slots, weather_by_hour):
         effect_type = effect.get("type")
         when = effect.get("when")
         if effect_type == "assignDays":
-            inside = {s["index"] for s in slots
-                      if s["weekday"] in set(effect.get("days") or []) and when_matches(when, s)}
+            # Soft day preferences are graded by distance, so they are not a membership set; the
+            # compaction pass preserves them through `day_preference_gains` instead.
+            continue
         elif effect_type in ("preferTimeOfDay", "timeWindow"):
             inside = window_slot_indices(slots, effect.get("start", "00:00"), effect.get("end", "23:59"), when)
         elif effect_type == "weatherGate":

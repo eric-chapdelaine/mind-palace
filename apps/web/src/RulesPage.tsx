@@ -12,11 +12,12 @@ import { useEffect, useState } from "react";
 import { api } from "./api";
 
 const EFFECT_TYPES = [
-  { value: "assignDays", label: "Assign days" },
+  { value: "assignDays", label: "Days (soft: prefer, hard: only)" },
   { value: "timeWindow", label: "Time window" },
   { value: "preferTimeOfDay", label: "Prefer time of day" },
   { value: "spread", label: "Spread across days" },
-  { value: "dailyBudget", label: "Min/max per day" },
+  { value: "dailyBudget", label: "Min/max occurrences per day" },
+  { value: "perDayLimit", label: "At most N per day (hard)" },
   { value: "weatherGate", label: "Weather conditions" },
   { value: "withinAfter", label: "Within X of prerequisite" },
 ] as const;
@@ -46,7 +47,9 @@ function describeEffect(effect: RuleEffect): string {
     case "spread":
       return `≤ ${effect.maxPerDayMinutes ?? 120} min/day${effect.minDistinctDays ? ` · ≥${effect.minDistinctDays} days` : ""}`;
     case "dailyBudget":
-      return `≤ ${effect.softMaxPerDay ?? 1}/day`;
+      return `≤ ${effect.softMaxPerDay ?? 1} occurrence/day`;
+    case "perDayLimit":
+      return `≤ ${effect.maxPerDay} occurrence/day`;
     case "weatherGate": {
       const parts: string[] = [];
       if (effect.minTemperatureF !== undefined || effect.maxTemperatureF !== undefined) {
@@ -141,6 +144,7 @@ function RuleForm({ tags, initial, onSubmit, onCancel }: {
   const [minDays, setMinDays] = useState(effect?.type === "spread" ? effect.minDistinctDays ?? 0 : 0);
   const [avoidConsecutive, setAvoidConsecutive] = useState(effect?.type === "spread" ? effect.avoidConsecutive ?? false : false);
   const [budgetMax, setBudgetMax] = useState(effect?.type === "dailyBudget" ? effect.softMaxPerDay ?? 1 : 1);
+  const [perDayMax, setPerDayMax] = useState(effect?.type === "perDayLimit" ? effect.maxPerDay : 1);
   const [minTemp, setMinTemp] = useState(effect?.type === "weatherGate" ? numberText(effect.minTemperatureF) : "50");
   const [maxTemp, setMaxTemp] = useState(effect?.type === "weatherGate" ? numberText(effect.maxTemperatureF) : "80");
   const [maxPrecip, setMaxPrecip] = useState(effect?.type === "weatherGate" ? numberText(effect.maxPrecipitationProbability) : "20");
@@ -151,9 +155,9 @@ function RuleForm({ tags, initial, onSubmit, onCancel }: {
   const [weight, setWeight] = useState(initial?.strength.kind === "soft" ? initial.strength.weight : 3);
   const [reason, setReason] = useState(initial?.reason ?? "");
 
-  // Day pins, time windows, weather gates, and prerequisite gaps can be hard constraints.
+  // Day rules, time windows, per-day caps, weather gates, and prerequisite gaps can be hard.
   const hardCapable = effectType === "assignDays" || effectType === "timeWindow"
-    || effectType === "weatherGate" || effectType === "withinAfter";
+    || effectType === "perDayLimit" || effectType === "weatherGate" || effectType === "withinAfter";
 
   // Preserve a placement-scoped `when` when the effect type is unchanged; the form does not edit it.
   const preserveWhen = effect && effect.type === effectType && "when" in effect ? effect.when : undefined;
@@ -172,6 +176,7 @@ function RuleForm({ tags, initial, onSubmit, onCancel }: {
         ...when,
       };
       case "dailyBudget": return { type: "dailyBudget", softMaxPerDay: budgetMax, ...when };
+      case "perDayLimit": return { type: "perDayLimit", maxPerDay: Math.max(1, perDayMax), ...when };
       case "weatherGate": {
         // Blank inputs mean "no bound on this dimension" — the worker applies only what you set.
         const optionalNumber = (value: string): number | undefined => value.trim() === "" ? undefined : Number(value);
@@ -194,7 +199,10 @@ function RuleForm({ tags, initial, onSubmit, onCancel }: {
   }
 
   function submit() {
-    const strength: RuleStrength = hard ? { kind: "hard" } : { kind: "soft", weight };
+    // A per-day cap is a cardinality constraint; a soft weight could never enforce it.
+    const strength: RuleStrength = effectType === "perDayLimit"
+      ? { kind: "hard" }
+      : hard ? { kind: "hard" } : { kind: "soft", weight };
     const applies: RuleCondition = tag === ""
       ? { always: true }
       : tag === KEEP_CONDITION
@@ -232,7 +240,9 @@ function RuleForm({ tags, initial, onSubmit, onCancel }: {
           <select value={effectType} onChange={(event) => {
             const next = event.target.value as RuleEffectType;
             setEffectType(next);
-            if (next !== "assignDays" && next !== "timeWindow" && next !== "weatherGate" && next !== "withinAfter") setHard(false);
+            if (next === "perDayLimit") setHard(true);
+            else if (next !== "assignDays" && next !== "timeWindow"
+              && next !== "weatherGate" && next !== "withinAfter") setHard(false);
           }}>
             {EFFECT_TYPES.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}
           </select>
@@ -264,7 +274,10 @@ function RuleForm({ tags, initial, onSubmit, onCancel }: {
           </label>
         </>}
         {effectType === "dailyBudget" && (
-          <label>Max per day<input type="number" min={1} value={budgetMax} onChange={(event) => setBudgetMax(Number(event.target.value))} /></label>
+          <label>Max occurrences per day<input type="number" min={1} value={budgetMax} onChange={(event) => setBudgetMax(Number(event.target.value))} /></label>
+        )}
+        {effectType === "perDayLimit" && (
+          <label>Max occurrences per day<input type="number" min={1} value={perDayMax} onChange={(event) => setPerDayMax(Number(event.target.value))} /></label>
         )}
         {effectType === "weatherGate" && <>
           <label>Min temp °F<input type="number" value={minTemp} onChange={(event) => setMinTemp(event.target.value)} placeholder="any" /></label>
@@ -281,11 +294,11 @@ function RuleForm({ tags, initial, onSubmit, onCancel }: {
         )}
         <label>Strength
           <select
-            value={hard ? "hard" : "soft"}
-            disabled={!hardCapable}
+            value={effectType === "perDayLimit" || hard ? "hard" : "soft"}
+            disabled={!hardCapable || effectType === "perDayLimit"}
             onChange={(event) => setHard(event.target.value === "hard")}
           >
-            <option value="soft">soft</option>
+            {effectType !== "perDayLimit" && <option value="soft">soft</option>}
             {hardCapable && <option value="hard">hard</option>}
           </select>
         </label>
@@ -368,9 +381,10 @@ export function RulesPage() {
           <div className="task-card-topline"><span className="task-type">scheduler</span></div>
           <h1>Rules</h1>
           <p className="muted">
-            Rules are data. Each enabled rule becomes a hard constraint or a weighted soft
-            preference, and the scheduler optimizes one objective across all of them. Tags are
-            selectors: a rule can reference any tag, seeded or your own.
+            How work should live in the schedule. Rules are data: each enabled rule becomes a hard
+            constraint or a weighted soft preference, and the scheduler optimizes one objective
+            across all of them. Tags are selectors, so a rule on a routine's own tag shapes every
+            occurrence of it — that is where “prefer Sunday” or “only on Mondays at 2pm” belongs.
           </p>
         </div>
       </header>

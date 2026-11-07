@@ -19,7 +19,15 @@ import time
 from ortools.sat.python import cp_model
 
 from .objective import compact, group_day_counts, run_capacity
-from .rules import day_matches, rule_applies, rule_strength, when_matches, window_slot_indices
+from .rules import (
+    day_matches,
+    day_preference_gains,
+    per_day_limits,
+    rule_applies,
+    rule_strength,
+    when_matches,
+    window_slot_indices,
+)
 from .weather import slot_weather, weather_is_nice
 
 
@@ -109,6 +117,41 @@ def solve(ctx):
                         model.add(dependent["start"] <= prerequisite["start"] + prerequisite["size"] + gap_slots) \
                             .only_enforce_if([prerequisite["present"], dependent["present"]])
 
+    def task_day_present(task, day, prefix):
+        """Bool var: does `task` appear on `day`? A task counts once per day, however many runs."""
+        task_id = task["id"]
+        runs = task_runs.get(task_id, [])
+        if not runs:
+            return model.new_constant(0)
+        on_day = []
+        for index, run in enumerate(runs):
+            var = model.new_bool_var(f"{prefix}_on_{task_id}_{index}_{day}")
+            model.add_allowed_assignments(
+                [run["start"], var],
+                [[slot, int(day_of[slot] == day)] for slot in range(slot_count)],
+            )
+            on_day.append(var)
+        # `present` is `scheduled AND any run on this day`. An unscheduled task's start is still a
+        # value, so it must not look present and consume a hard cap it never uses.
+        present = model.new_bool_var(f"{prefix}_present_{task_id}_{day}")
+        for var in on_day:
+            model.add(present >= var + scheduled[task_id] - 1)
+        model.add(present <= sum(on_day))
+        model.add(present <= scheduled[task_id])
+        return present
+
+    # `perDayLimit` is a hard cardinality cap over a day: at most N tasks from the group appear
+    # there. It cannot be slot eligibility, because it is about the count across the whole day.
+    for limit in per_day_limits(tasks, rules):
+        group = [task for task in tasks if task["id"] in limit["task_ids"] and task_runs.get(task["id"])]
+        if not group:
+            continue
+        for day in range(day_count):
+            if not day_matches(limit["when"], day_weekday[day]):
+                continue
+            present = [task_day_present(task, day, f"cap{limit['key']}") for task in group]
+            model.add(sum(present) <= limit["max"])
+
     # ---- Objective: one weighted expression; decision scaled above all soft terms ----
     weights = ctx["weights"]
     decision_terms = [weights[task["priority"]] * scheduled[task["id"]] for task in tasks]
@@ -120,6 +163,19 @@ def solve(ctx):
         soft_terms.append(term)
         soft_bound += bound
 
+    # Soft day preferences are graded by distance, so each run's gain depends on the day it lands
+    # on. Summed once per task: several soft `assignDays` rules can contribute to the same slot.
+    for task in tasks:
+        graded = day_preference_gains(task, slots, rules)
+        if not graded or max(graded) <= 0:
+            continue
+        top = max(graded)
+        for index, run in enumerate(task_runs.get(task["id"], [])):
+            gain = model.new_int_var(0, top, f"daygain_{task['id']}_{index}")
+            model.add_element(run["start"], graded, gain)
+            model.add(gain == 0).only_enforce_if(scheduled[task["id"]].Not())
+            add_soft(gain, top)
+
     for rule in rules:
         kind, weight = rule_strength(rule)
         if kind != "soft":
@@ -128,12 +184,8 @@ def solve(ctx):
         effect_type = effect.get("type")
         when = effect.get("when")
         value = int(round(weight))
-        if effect_type in ("preferTimeOfDay", "timeWindow", "assignDays"):
-            if effect_type == "assignDays":
-                inside = {s["index"] for s in slots
-                          if s["weekday"] in set(effect.get("days") or []) and when_matches(when, s)}
-            else:
-                inside = window_slot_indices(slots, effect.get("start", "00:00"), effect.get("end", "23:59"), when)
+        if effect_type in ("preferTimeOfDay", "timeWindow"):
+            inside = window_slot_indices(slots, effect.get("start", "00:00"), effect.get("end", "23:59"), when)
             for task in tasks:
                 if not rule_applies(rule, task):
                     continue
@@ -185,18 +237,19 @@ def solve(ctx):
             group = [task for task in tasks if rule_applies(rule, task) and task_runs.get(task["id"])]
             if not group:
                 continue
-            totals, span = group_day_counts(model, f"db_{rule['id']}", group, task_runs, day_of, day_count)
             soft_max = max(1, int(effect.get("softMaxPerDay", 1)))
             for day in range(day_count):
                 if not day_matches(when, day_weekday[day]):
                     continue
+                present = [task_day_present(task, day, f"db{rule['id']}") for task in group]
+                count = sum(present)
                 is_active = model.new_bool_var(f"dbact_{rule['id']}_{day}")
-                model.add(totals[day] >= 1).only_enforce_if(is_active)
-                model.add(totals[day] == 0).only_enforce_if(is_active.Not())
+                model.add(count >= 1).only_enforce_if(is_active)
+                model.add(count == 0).only_enforce_if(is_active.Not())
                 add_soft(value * is_active, value)
-                excess = model.new_int_var(0, span, f"dbex_{rule['id']}_{day}")
-                model.add(excess >= totals[day] - soft_max)
-                add_soft(-value * excess, value * span)
+                excess = model.new_int_var(0, len(group), f"dbex_{rule['id']}_{day}")
+                model.add(excess >= count - soft_max)
+                add_soft(-value * excess, value * len(group))
 
     model.maximize((2 * soft_bound + 1) * sum(decision_terms) + sum(soft_terms))
     built_at = time.perf_counter()
