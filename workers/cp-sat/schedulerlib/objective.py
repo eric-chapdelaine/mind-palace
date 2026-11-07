@@ -17,7 +17,7 @@ from .rules import (
     within_after_bounds,
 )
 from .timegrid import next_day
-from .weather import slot_weather, weather_is_nice
+from .weather import slot_weather, weather_comfort
 
 
 def decision_weights(tasks, mode):
@@ -113,7 +113,7 @@ def compact(placement, tasks, slots, day_of, eligible_by_task, rules, weather_by
     """
     slot_count = len(slots)
     eligible_sets = {task_id: set(slots_) for task_id, slots_ in eligible_by_task.items()}
-    windows = style_windows(tasks, rules, slots, weather_by_hour)
+    windows = style_windows(tasks, rules, slots)
     spread_groups = day_group_ids(tasks, rules)
     within_after = within_after_bounds(tasks, rules, slot_minutes)
     day_gains = {}
@@ -121,6 +121,34 @@ def compact(placement, tasks, slots, day_of, eligible_by_task, rules, weather_by
         gains = day_preference_gains(task, slots, rules)
         if gains is not None:
             day_gains[task["id"]] = gains
+    # A soft weather rule is graded, so it is not a membership set either: a move may not lower
+    # the run's weather credit, the same way it may not lower its graded day preference.
+    weather_gains = {}
+    for rule in rules:
+        kind, weight = rule_strength(rule)
+        if kind != "soft" or (rule.get("effect") or {}).get("type") != "weatherGate":
+            continue
+        effect = rule.get("effect") or {}
+        when = effect.get("when")
+        per_slot = [0.0] * len(slots)
+        graded = False
+        for slot in slots:
+            if not when_matches(when, slot):
+                continue
+            comfort = weather_comfort(slot_weather(slot, weather_by_hour), effect)
+            if comfort is None:
+                continue
+            per_slot[slot["index"]] += weight * comfort
+            graded = True
+        if not graded:
+            continue
+        for task in tasks:
+            if not rule_applies(rule, task):
+                continue
+            existing = weather_gains.setdefault(task["id"], [0.0] * len(slots))
+            for index, gain in enumerate(per_slot):
+                existing[index] += gain
+
     limits = per_day_limits(tasks, rules)
     day_weekday = {}
     for slot in slots:
@@ -173,6 +201,7 @@ def compact(placement, tasks, slots, day_of, eligible_by_task, rules, weather_by
                 limit_days[limit["key"]].get(day_of[start], set()).discard(task_id)
         kept = []
         gains = day_gains.get(task_id)
+        weather = weather_gains.get(task_id)
         for start, size in sorted(placement[task_id], key=lambda run: run[0]):
             for slot in range(start, start + size):
                 occupied.discard(slot)
@@ -180,6 +209,7 @@ def compact(placement, tasks, slots, day_of, eligible_by_task, rules, weather_by
             day = day_of[start]
             group = spread_groups.get(task_id)
             current_gain = gains[start] if gains is not None else 0
+            current_weather = weather[start] if weather is not None else 0
             chosen = start
             for candidate in eligible_by_task.get(task_id, []):
                 if candidate < lower:
@@ -192,6 +222,8 @@ def compact(placement, tasks, slots, day_of, eligible_by_task, rules, weather_by
                 if tuple(candidate in window for window in windows.get(task_id, [])) != membership:
                     continue
                 if gains is not None and gains[candidate] < current_gain:
+                    continue
+                if weather is not None and weather[candidate] < current_weather:
                     continue
                 if not limit_allows(task_id, candidate):
                     continue
@@ -240,10 +272,11 @@ def soft_totals(placement, tasks, rules, slots, slot_minutes, weather_by_hour):
             total += value * sum(1 for task in tasks if rule_applies(rule, task)
                                  for start, _size in placement.get(task["id"], []) if start in inside)
         elif effect_type == "weatherGate":
-            total += value * sum(1 for task in tasks if rule_applies(rule, task)
-                                 for start, _size in placement.get(task["id"], [])
-                                 if when_matches(when, slots[start])
-                                 and weather_is_nice(slot_weather(slots[start], weather_by_hour), effect) is True)
+            scored = [weather_comfort(slot_weather(slots[start], weather_by_hour), effect)
+                      for task in tasks if rule_applies(rule, task)
+                      for start, _size in placement.get(task["id"], [])
+                      if when_matches(when, slots[start])]
+            total += round(value * sum(score for score in scored if score is not None))
         elif effect_type == "spread":
             group = [task for task in tasks if rule_applies(rule, task)]
             if len(group) < 2:

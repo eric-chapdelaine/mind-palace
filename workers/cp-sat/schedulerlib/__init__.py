@@ -5,7 +5,7 @@ single file has to hold the whole model. Imports are grouped by responsibility:
 
   * `config`    — model versions and the default configuration (including the solver choice).
   * `timegrid`  — slot-grid construction and time parsing.
-  * `weather`   — forecast indexing and the rule-defined weather gate.
+  * `weather`   — forecast indexing and the rule-defined weather score.
   * `rules`     — task/effect evaluation and hard eligibility.
   * `objective` — weighted-objective helpers and the compaction post-pass.
   * `greedy`    — the default greedy + local-search scheduler.
@@ -23,7 +23,7 @@ from .objective import decision_weights
 from .rules import condition_matches, day_matches, rule_strength, window_slot_indices
 from .solve import solve
 from .timegrid import ZoneInfo, build_slots, parse_datetime
-from .weather import weather_is_nice
+from .weather import metric_satisfaction, weather_comfort, weather_within_limits
 
 __all__ = [
     "DEFAULT_CONFIG",
@@ -39,6 +39,8 @@ __all__ = [
     "parse_datetime",
     "rule_strength",
     "solve",
-    "weather_is_nice",
+    "metric_satisfaction",
+    "weather_comfort",
+    "weather_within_limits",
     "window_slot_indices",
 ]

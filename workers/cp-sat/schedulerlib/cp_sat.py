@@ -28,7 +28,7 @@ from .rules import (
     when_matches,
     window_slot_indices,
 )
-from .weather import slot_weather, weather_is_nice
+from .weather import slot_weather, weather_comfort
 
 
 def solve(ctx):
@@ -158,10 +158,15 @@ def solve(ctx):
     soft_terms = []
     soft_bound = 0
 
+    # A graded weather score is fractional and CP-SAT needs integer coefficients. Scaling every
+    # soft term and bound by the same factor keeps each rule's weight relative to the others, and
+    # keeps the decision term dominant through `2 * soft_bound + 1`.
+    SOFT_SCALE = 100
+
     def add_soft(term, bound):
         nonlocal soft_bound
-        soft_terms.append(term)
-        soft_bound += bound
+        soft_terms.append(SOFT_SCALE * term)
+        soft_bound += SOFT_SCALE * bound
 
     # Soft day preferences are graded by distance, so each run's gain depends on the day it lands
     # on. Summed once per task: several soft `assignDays` rules can contribute to the same slot.
@@ -195,18 +200,20 @@ def solve(ctx):
                                                   [[slot, int(slot in inside)] for slot in range(slot_count)])
                     add_soft(value * in_window, abs(value))
         elif effect_type == "weatherGate":
+            # Hundredths of a point per slot, so a graded comfort keeps its resolution.
+            per_run = max(1, abs(value) * 100)
+            comfort_table = []
+            for slot in range(slot_count):
+                comfort = (weather_comfort(slot_weather(slots[slot], weather_hours), effect)
+                           if when_matches(when, slots[slot]) else None)
+                comfort_table.append(0 if comfort is None else int(round(value * comfort * 100)))
             for task in tasks:
                 if not rule_applies(rule, task):
                     continue
                 for index, run in enumerate(task_runs.get(task["id"], [])):
-                    in_nice = model.new_bool_var(f"nice_{rule['id']}_{task['id']}_{index}")
-                    model.add_allowed_assignments(
-                        [run["start"], in_nice],
-                        [[slot, int(when_matches(when, slots[slot])
-                                    and weather_is_nice(slot_weather(slots[slot], weather_hours), effect) is True)]
-                         for slot in range(slot_count)],
-                    )
-                    add_soft(value * in_nice, abs(value))
+                    gain = model.new_int_var(-per_run, per_run, f"nice_{rule['id']}_{task['id']}_{index}")
+                    model.add_element(run["start"], comfort_table, gain)
+                    add_soft(gain, per_run)
         elif effect_type == "spread":
             group = [task for task in tasks if rule_applies(rule, task) and task_runs.get(task["id"])]
             if len(group) < 2:

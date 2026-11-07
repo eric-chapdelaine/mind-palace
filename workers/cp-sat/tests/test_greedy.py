@@ -41,7 +41,7 @@ def task(task_id, **overrides):
     return base
 
 
-def payload(tasks, rules=None, config=None, horizon_days=2):
+def payload(tasks, rules=None, config=None, horizon_days=2, weather=None):
     """No `solver` key: the worker's default must be the greedy scheduler."""
     return {
         "now": NOW.isoformat(),
@@ -49,7 +49,7 @@ def payload(tasks, rules=None, config=None, horizon_days=2):
         "config": config or {},
         "tasks": tasks,
         "timeBlocks": [],
-        "weather": [],
+        "weather": weather or [],
         "rules": rules or [],
     }
 
@@ -169,6 +169,45 @@ class RankingTest(unittest.TestCase):
         ]
         result = S.solve(payload(tasks, rules=rules, horizon_days=1))
         self.assertEqual([task_id for task_id, _start, _end in intervals(result)], [1])
+
+
+class GradedWeatherTest(unittest.TestCase):
+    """The production solver must also prefer the nicer of two acceptable days."""
+
+    def _weekend_weather(self, saturday, sunday):
+        """A week of hourly forecast: Saturday and Sunday carry the given rain, weekdays are wet."""
+        weather = []
+        cursor = NOW.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        for offset in range(7 * 24):
+            at = cursor + timedelta(hours=offset)
+            weekday = at.astimezone(LOCAL).weekday()
+            weather.append({
+                "forecastAt": at.isoformat().replace("+00:00", "Z"),
+                "temperatureF": 60,
+                "precipitationProbability": saturday if weekday == 5 else sunday,
+                "windMph": 5,
+                "isDaytime": True,
+            })
+        return weather
+
+    def test_soft_weather_gate_places_the_task_on_the_drier_day(self):
+        # Saturday is inside the limit but wet, Sunday is dry. A pass/fail gate would accept
+        # Saturday's earlier slot; grading must not.
+        rules = [{
+            "id": "dry",
+            "title": "dry",
+            "enabled": True,
+            "applies": {"always": True},
+            "effect": {"type": "weatherGate", "when": {"dayOfWeek": [5, 6]}, "metrics": {
+                "precipitationProbability": {"ideal": 0, "max": 20, "weight": 3},
+            }},
+            "strength": {"kind": "soft", "weight": 30},
+            "reason": "dry",
+        }]
+        result = S.solve(payload([task(1)], rules=rules,
+                                 weather=self._weekend_weather(saturday=20, sunday=0), horizon_days=7))
+        start = S.parse_datetime(result["assignments"][0]["startAt"]).astimezone(LOCAL)
+        self.assertEqual(start.weekday(), 6)
 
 
 if __name__ == "__main__":

@@ -34,7 +34,9 @@ from schedulerlib import (  # noqa: F401 - re-exported for the tests
     parse_datetime,
     rule_strength,
     solve,
-    weather_is_nice,
+    metric_satisfaction,
+    weather_comfort,
+    weather_within_limits,
     window_slot_indices,
 )
 from schedulerlib.main import main

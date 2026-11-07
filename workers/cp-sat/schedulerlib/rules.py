@@ -9,7 +9,7 @@ import math
 from datetime import date, timedelta
 
 from .timegrid import minutes_of_day, parse_datetime
-from .weather import slot_weather, weather_is_nice
+from .weather import slot_weather, weather_within_limits
 
 # How fast a soft day preference fades. A run on the preferred date earns its full weight; each day
 # away costs one seventh, and a week away costs all of it. One week because that is the scheduling
@@ -203,7 +203,7 @@ def eligible_slots(task, slots, busy_indices, rules, weather_by_hour):
         elif effect_type == "weatherGate":
             eligible = [index for index in eligible
                         if when_matches(when, slots[index])
-                        and weather_is_nice(slot_weather(slots[index], weather_by_hour), effect) is not False]
+                        and weather_within_limits(slot_weather(slots[index], weather_by_hour), effect) is not False]
             applied_hard.append(rule.get("reason") or rule.get("id"))
 
     if task.get("earliestStart"):
@@ -215,7 +215,7 @@ def eligible_slots(task, slots, busy_indices, rules, weather_by_hour):
     return eligible, applied_hard
 
 
-def style_windows(tasks, rules, slots, weather_by_hour):
+def style_windows(tasks, rules, slots):
     """Soft placement sets per task, used to keep the compaction pass from undoing style."""
     windows = {}
     for rule in rules:
@@ -231,10 +231,9 @@ def style_windows(tasks, rules, slots, weather_by_hour):
             continue
         elif effect_type in ("preferTimeOfDay", "timeWindow"):
             inside = window_slot_indices(slots, effect.get("start", "00:00"), effect.get("end", "23:59"), when)
-        elif effect_type == "weatherGate":
-            inside = {s["index"] for s in slots
-                      if when_matches(when, s) and weather_is_nice(slot_weather(s, weather_by_hour), effect) is True}
         else:
+            # A soft `weatherGate` is graded, not a membership set either; the compaction pass
+            # preserves it by score alongside the day preference.
             continue
         for task in tasks:
             if rule_applies(rule, task):
